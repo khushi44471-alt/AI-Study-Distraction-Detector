@@ -389,10 +389,8 @@ async function playSound() {
 
 button.addEventListener("click", playSound);
 
-// Attempt automatic playback when this component loads.
-window.addEventListener("load", () => {
-  setTimeout(playSound, 300);
-});
+// Attempt automatic playback when this component is created.
+setTimeout(playSound, 300);
 </script>
 """
 
