@@ -306,8 +306,7 @@ def show_phone_alert(preview=False):
       <span id="soundStatus" style="margin-left:8px;"></span>
     </div>
 
-    <script>
-    
+ 
 <script>
 const config = CONFIG_PLACEHOLDER;
 const button = document.getElementById("playPreview");
