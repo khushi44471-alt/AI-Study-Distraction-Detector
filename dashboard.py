@@ -155,72 +155,84 @@ if alert_choice == "5. Custom MP3/WAV File":
 
 
 def speak_phone_warning(volume=0.70):
-    """Speak the phone warning using the browser's speech engine."""
-
+    """Attempt automatic browser speech and keep a manual fallback."""
     try:
+        safe_volume = max(0.0, min(1.0, float(volume)))
+
         speech_html = f"""
-        <div style="font-family: Arial, sans-serif;">
+        <div style="font-family:Arial,sans-serif;">
             <button id="speakWarning"
-                style="padding: 10px 16px; cursor: pointer;">
+                style="padding:10px 16px;cursor:pointer;">
                 🔊 Play Female Spoken Warning
             </button>
-            <span id="speechStatus" style="margin-left: 8px;"></span>
+            <span id="speechStatus" style="margin-left:8px;"></span>
         </div>
 
         <script>
-        const button = document.getElementById("speakWarning");
-        const status = document.getElementById("speechStatus");
+        (function() {{
+            const button = document.getElementById("speakWarning");
+            const status = document.getElementById("speechStatus");
 
-        button.addEventListener("click", function() {{
-            if (!("speechSynthesis" in window)) {{
-                status.textContent = "Speech is not supported by this browser.";
-                return;
+            function speakWarning() {{
+                if (!("speechSynthesis" in window)) {{
+                    status.textContent = "Speech is not supported.";
+                    return;
+                }}
+
+                window.speechSynthesis.cancel();
+
+                const message = new SpeechSynthesisUtterance(
+                    "Attention! Attention! Phone detected! " +
+                    "Please put your phone away and focus on studying!"
+                );
+
+                message.volume = {safe_volume};
+                message.rate = 0.95;
+                message.pitch = 1.15;
+
+                const voices = window.speechSynthesis.getVoices();
+                const femaleVoice = voices.find(voice =>
+                    /female|zira|samantha|aria|jenny|hazel/i.test(
+                        voice.name + " " + voice.voiceURI
+                    )
+                );
+
+                if (femaleVoice) {{
+                    message.voice = femaleVoice;
+                }}
+
+                message.onstart = () => {{
+                    status.textContent = "Speaking...";
+                }};
+
+                message.onend = () => {{
+                    status.textContent = "Warning finished.";
+                }};
+
+                message.onerror = (event) => {{
+                    status.textContent = "Speech failed: " + event.error;
+                }};
+
+                window.speechSynthesis.resume();
+                window.speechSynthesis.speak(message);
             }}
 
-            window.speechSynthesis.cancel();
+            button.addEventListener("click", speakWarning);
 
-            const message = new SpeechSynthesisUtterance(
-                "Attention! Attention! Phone detected! Please put your phone away and focus on studying!"
-            );
-
-            message.volume = {max(0.0, min(1.0, volume))};
-            message.rate = 0.95;
-            message.pitch = 1.15;
-
-            const voices = window.speechSynthesis.getVoices();
-            const femaleVoice = voices.find(voice =>
-                /female|zira|samantha|aria|jenny|hazel/i.test(
-                    voice.name + " " + voice.voiceURI
-                )
-            );
-
-            if (femaleVoice) {{
-                message.voice = femaleVoice;
-            }}
-
-            message.onstart = () => {{
-                status.textContent = "Speaking...";
-            }};
-
-            message.onend = () => {{
-                status.textContent = "Warning finished.";
-            }};
-
-            message.onerror = (event) => {{
-                status.textContent = "Speech failed: " + event.error;
-            }};
-
-           window.speechSynthesis.resume();
-window.speechSynthesis.speak(message);
-status.textContent = "Attempting to speak the warning...";
-            status.textContent = femaleVoice
-                ? "Female voice selected."
-                : "Using the browser's default voice.";
-        }});
+            // Try automatic playback when this component appears.
+            // The browser may require a prior user interaction.
+            window.addEventListener("load", () => {{
+                setTimeout(speakWarning, 300);
+            }});
+        }})();
         </script>
         """
 
         components.html(speech_html, height=65)
+
+    except Exception as error:
+        st.error(f"Speech warning could not start: {error}")
+
 
     except Exception as error:
         st.error(f"Speech warning could not start: {error}")
