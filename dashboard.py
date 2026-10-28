@@ -1464,35 +1464,34 @@ from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 
 @st.cache_resource(show_spinner=False)
 def load_webcam_model():
-    """Load and cache the YOLO model once for live webcam detection."""
-    possible_paths = [
-        MODEL_FILE,
-        BASE_DIR.parent / "yolo11n.pt",
-    ]
-
+    """Load and cache the YOLO model used for webcam detection."""
+    possible_paths = [MODEL_FILE, BASE_DIR.parent / "yolo11n.pt"]
     for model_path in possible_paths:
         if model_path.exists():
             return load_yolo_model(str(model_path))
-
     raise FileNotFoundError(
-        "Could not find yolo11n.pt beside dashboard.py "
-        "or in the repository's parent folder."
+        "Could not find yolo11n.pt beside dashboard.py or in the repository's parent folder."
     )
 
 
 class LivePhoneDetector(VideoProcessorBase):
+    """Detect phones continuously and draw an immediate warning on the live feed."""
+
     def __init__(self):
         self.model = load_webcam_model()
         self.frame_count = 0
         self.last_detections = []
+        self.consecutive_phone_frames = 0
+        self.phone_warning = False
+        self.last_inference_error = None
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
         self.frame_count += 1
 
-        # Run AI on every second frame to reduce cloud CPU load.
-        # Keep the most recent boxes visible on skipped frames.
-        if self.frame_count % 2 == 1:
+        # Run detection on every frame at a smaller input size for lower latency.
+        # If cloud CPU is slow, changing imgsz from 320 to 256 can improve speed.
+        try:
             result = self.model.predict(
                 source=image,
                 imgsz=320,
@@ -1500,7 +1499,6 @@ class LivePhoneDetector(VideoProcessorBase):
                 verbose=False,
                 device="cpu",
             )[0]
-
             detections = []
             if result.boxes is not None:
                 for box in result.boxes:
@@ -1518,16 +1516,51 @@ class LivePhoneDetector(VideoProcessorBase):
                     detections.append((x1, y1, x2, y2, confidence))
 
             self.last_detections = detections
+            self.phone_warning = bool(detections)
+            self.consecutive_phone_frames = self.consecutive_phone_frames + 1 if detections else 0
+            self.last_inference_error = None
+        except Exception as error:
+            # Keep the stream alive if one inference fails; report details in server logs.
+            self.last_inference_error = str(error)
+            print(f"Live webcam inference error: {error}")
 
         for x1, y1, x2, y2, confidence in self.last_detections:
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 210, 0), 3)
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
             cv2.putText(
                 image,
-                f"Phone {confidence:.0%}",
+                f"PHONE {confidence:.0%}",
                 (x1, max(25, y1 - 10)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
-                (0, 210, 0),
+                (0, 0, 255),
+                2,
+                cv2.LINE_AA,
+            )
+
+        # Draw a clear live warning directly on the returned webcam frame.
+        height, width = image.shape[:2]
+        if self.phone_warning:
+            banner = "PHONE DETECTED - PLEASE CHECK YOUR PHONE USE"
+            cv2.rectangle(image, (0, 0), (width, 52), (0, 0, 210), -1)
+            cv2.putText(
+                image,
+                banner,
+                (12, 34),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                max(0.45, min(0.75, width / 1000)),
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+        else:
+            cv2.rectangle(image, (0, 0), (width, 42), (25, 110, 25), -1)
+            cv2.putText(
+                image,
+                "LIVE DETECTION ACTIVE - NO PHONE DETECTED",
+                (12, 28),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                max(0.4, min(0.7, width / 1100)),
+                (255, 255, 255),
                 2,
                 cv2.LINE_AA,
             )
@@ -1538,17 +1571,17 @@ class LivePhoneDetector(VideoProcessorBase):
 st.divider()
 st.header("📷 Live Webcam Detection")
 st.write(
-    "Use the webcam of the computer opening this website. "
-    "Allow camera access when your browser asks."
+    "Start the webcam stream below and allow camera access when your browser asks. "
+    "The AI checks frames as they arrive and overlays a warning on the live video when a phone is detected."
 )
 st.caption(
-    "For a cloud-hosted app, webcam processing runs on the server and may be slower. "
-    "This detects visible phones, not attention or distraction."
+    "Cloud processing speed and network conditions affect response time. This is a live visual warning; "
+    "it does not currently trigger your selected alert sound automatically. Phone visibility is not proof of distraction."
 )
 
 try:
     webrtc_streamer(
-        key="study-phone-webcam",
+        key="study-phone-webcam-live-warning",
         video_processor_factory=LivePhoneDetector,
         media_stream_constraints={"video": True, "audio": False},
         rtc_configuration={
@@ -1592,6 +1625,7 @@ st.warning(
     "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
 
 
 
