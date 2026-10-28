@@ -225,6 +225,7 @@ status.textContent = "Attempting to speak the warning...";
     except Exception as error:
         st.error(f"Speech warning could not start: {error}")
 
+
 def show_phone_alert(preview=False):
     """Display a warning and play the selected alert."""
 
@@ -234,25 +235,16 @@ def show_phone_alert(preview=False):
             "Please check whether you need your phone for studying."
         )
 
-    # Option 1: Spoken warning.
-   if alert_choice == "1. Female Spoken Warning":
-    st.warning(
-        "📱 Phone detected repeatedly! "
-        "Please put your phone away and focus on studying."
-    )
-
-    speak_phone_warning(volume_level)
-
-    if preview:
-        st.info("Female spoken warning requested.")
-
-    return
+    # Option 1: Spoken warning
+    if alert_choice == "1. Female Spoken Warning":
+        speak_phone_warning(volume_level)
 
         if preview:
-            st.info("Female spoken warning preview started.")
+            st.info("Female spoken warning requested.")
+
         return
 
-    # Option 5: Uploaded MP3 or WAV.
+    # Option 5: Uploaded MP3 or WAV
     if alert_choice == "5. Custom MP3/WAV File":
         if not custom_audio:
             st.info(
@@ -280,7 +272,7 @@ def show_phone_alert(preview=False):
         components.html(audio_html, height=75)
         return
 
-    # Options 2–4: browser-generated sounds.
+    # Options 2–4: Browser-generated sounds
     if alert_choice == "2. Gentle Notification Chime":
         mode = "chime"
     elif alert_choice == "3. Rising Emergency Siren":
@@ -403,12 +395,8 @@ def show_phone_alert(preview=False):
     )
     components.html(sound_html, height=55)
 
-
-# Test the currently selected alert without analyzing a video.
 if st.button("🔊 Test Selected Sound", key="test_phone_alert"):
     show_phone_alert(preview=True)
-
-
 
 
 
