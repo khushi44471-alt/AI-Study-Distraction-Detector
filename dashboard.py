@@ -233,12 +233,18 @@ def show_phone_alert(preview=False):
         )
 
     # Option 1: Spoken warning.
-    if alert_choice == "1. Female Spoken Warning":
-        threading.Thread(
-            target=speak_phone_warning,
-            args=(volume_level,),
-            daemon=True,
-        ).start()
+   if alert_choice == "1. Female Spoken Warning":
+    st.warning(
+        "📱 Phone detected repeatedly! "
+        "Please put your phone away and focus on studying."
+    )
+
+    speak_phone_warning(volume_level)
+
+    if preview:
+        st.info("Female spoken warning requested.")
+
+    return
 
         if preview:
             st.info("Female spoken warning preview started.")
