@@ -12,6 +12,42 @@ st.set_page_config(
     layout="wide",
 )
 
+
+# ============================================================
+# PROFESSIONAL DASHBOARD THEME
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+    :root { --brand: #2563eb; --brand-dark: #1e3a8a; --surface: #ffffff; }
+    .stApp { background: linear-gradient(180deg, #f7faff 0%, #f4f7fb 42%, #ffffff 100%); }
+    [data-testid="stHeader"] { background: rgba(247,250,255,.88); }
+    [data-testid="stSidebar"] { background: #101c35; }
+    [data-testid="stSidebar"] * { color: #eef4ff; }
+    [data-testid="stSidebar"] hr { border-color: #344361; }
+    [data-testid="stMetric"] { background: #ffffff; border: 1px solid #e4eaf4; padding: 16px 18px; border-radius: 15px; box-shadow: 0 5px 18px rgba(26, 47, 82, .06); }
+    [data-testid="stMetricLabel"] { color: #53627a; font-weight: 600; }
+    [data-testid="stMetricValue"] { color: #14213d; }
+    div.stButton > button, div.stDownloadButton > button { border-radius: 10px; font-weight: 650; border: 1px solid #d7e2f2; transition: transform .15s ease, box-shadow .15s ease; }
+    div.stButton > button:hover, div.stDownloadButton > button:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(37,99,235,.14); border-color: #8eb4f8; }
+    [data-testid="stFileUploader"] { border: 1px dashed #9db6da; border-radius: 14px; padding: 8px; background: rgba(255,255,255,.72); }
+    [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 12px; overflow: hidden; }
+    h1, h2, h3 { letter-spacing: -0.025em; }
+    .hero-panel { padding: 28px 30px; border-radius: 22px; background: linear-gradient(120deg, #122344 0%, #1d4ed8 62%, #38bdf8 125%); color: white; margin: 4px 0 22px 0; box-shadow: 0 14px 32px rgba(30,64,175,.18); }
+    .hero-panel h1 { color: white; font-size: clamp(1.75rem, 4vw, 2.55rem); margin: 0 0 8px 0; line-height: 1.15; }
+    .hero-panel p { color: #e2edff; margin: 0; font-size: 1rem; max-width: 850px; }
+    .hero-chip { display: inline-block; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); border-radius: 999px; padding: 5px 11px; margin-bottom: 13px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .section-note { color: #64748b; font-size: .92rem; margin-top: -7px; }
+    .info-card { background: white; border: 1px solid #e3eaf5; border-radius: 15px; padding: 16px 18px; height: 100%; box-shadow: 0 4px 14px rgba(26,47,82,.04); }
+    .info-card h3 { margin-top: 0; color: #1e3a8a; font-size: 1.02rem; }
+    .info-card p { margin-bottom: 0; color: #53627a; font-size: .92rem; }
+    @media (max-width: 640px) { .hero-panel { padding: 22px 19px; border-radius: 16px; } [data-testid="stMetric"] { padding: 12px; } }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 import time
 
 # =====================================
@@ -342,16 +378,40 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert"):
 # ============================================================
 
 
-st.title("📱 AI Study Distraction Detector")
-
-st.write(
-    "AI-powered phone-visibility monitoring during recorded study sessions."
+st.markdown(
+    """
+    <div class="hero-panel">
+      <span class="hero-chip">Class 12 Artificial Intelligence Project</span>
+      <h1>📱 AI Study Distraction Detector</h1>
+      <p>Computer vision for analysing phone visibility in study-session videos, with live camera detection, session insights, and downloadable reports.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-st.caption(
-    "Phone visibility is only an indicator, not proof of distraction. "
-    "A phone may be used for studying, and the detector may make mistakes."
+st.markdown(
+    '<p class="section-note">Phone visibility is an indicator only—not proof of distraction, attention, or study quality. Phones may also be used for learning.</p>',
+    unsafe_allow_html=True,
 )
+
+# Sidebar navigation shortcuts and project information.
+with st.sidebar:
+    st.markdown("## 📱 Study Detector")
+    st.caption("AI project workspace")
+    st.markdown("---")
+    st.markdown("### Quick navigation")
+    st.markdown("[📊 Session dashboard](#study-session-dashboard)")
+    st.markdown("[🎬 Video analysis](#ai-video-analysis)")
+    st.markdown("[📈 Latest results](#detection-results)")
+    st.markdown("[⏱️ Study timer](#study-session-timer)")
+    st.markdown("[📍 Detection timeline](#distraction-timeline)")
+    st.markdown("[📷 Live webcam](#live-webcam-detection)")
+    st.markdown("---")
+    with st.expander("ℹ️ About this project", expanded=False):
+        st.write("**Objective:** identify visible phone appearances in sampled study-video frames.")
+        st.write("**Technology:** Python, Streamlit, OpenCV, and the YOLO object-detection model.")
+        st.write("**Output:** phone-detection metrics, charts, a session history, and a PDF report.")
+        st.caption("This prototype does not measure attention and may miss or misidentify phones.")
 
 
 # ============================================================
@@ -860,6 +920,7 @@ def analyze_video(uploaded_file):
 
 st.divider()
 st.subheader("📊 Study Session Dashboard")
+st.caption("A quick overview of completed video analyses and saved session history.")
 
 report_df = load_report()
 
@@ -966,7 +1027,8 @@ st.caption(
 # ============================================================
 
 st.divider()
-st.subheader("AI Video Analysis")
+st.subheader("🎬 AI Video Analysis")
+st.caption("Upload a recorded study session to analyse sampled frames for visible phones.")
 
 st.write(
     "Upload a recorded study-session video (MP4, MOV, or AVI), "
@@ -1174,6 +1236,7 @@ if "last_analysis" in st.session_state:
 
 st.divider()
 st.subheader("⏱️ Study Session Timer")
+st.caption("Use a simple timer to structure a focused study block.")
 
 duration_options = [25, 45, 60]
 
@@ -1497,3 +1560,37 @@ webrtc_streamer(
     },
     async_processing=True,
 )
+
+# ============================================================
+# ABOUT PROJECT PAGE
+# ============================================================
+
+st.divider()
+st.header("ℹ️ About the Project")
+st.markdown("Learn what the prototype does, how it works, and how to interpret its results.")
+about1, about2, about3 = st.columns(3)
+with about1:
+    st.markdown(
+        '<div class="info-card"><h3>🎯 Project objective</h3><p>Identify visible mobile phones in study-session videos and present the detections in a readable report.</p></div>',
+        unsafe_allow_html=True,
+    )
+with about2:
+    st.markdown(
+        '<div class="info-card"><h3>🧠 AI workflow</h3><p>OpenCV reads video frames, YOLO predicts objects, and the app summarizes sampled frames where a phone is detected.</p></div>',
+        unsafe_allow_html=True,
+    )
+with about3:
+    st.markdown(
+        '<div class="info-card"><h3>📊 Results and reports</h3><p>Session metrics, charts, a detection timeline, CSV history, and a downloadable PDF help review the analysis.</p></div>',
+        unsafe_allow_html=True,
+    )
+
+st.markdown("#### Technology stack")
+st.write("Python · Streamlit · Ultralytics YOLO · OpenCV · Pandas · Matplotlib · ReportLab · WebRTC")
+st.markdown("#### Important limitations")
+st.warning(
+    "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. "
+    "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
+)
+st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
