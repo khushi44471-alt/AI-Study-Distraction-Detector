@@ -20,28 +20,33 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root { --brand: #2563eb; --brand-dark: #1e3a8a; --surface: #ffffff; }
-    .stApp { background: linear-gradient(180deg, #f7faff 0%, #f4f7fb 42%, #ffffff 100%); }
-    [data-testid="stHeader"] { background: rgba(247,250,255,.88); }
-    [data-testid="stSidebar"] { background: #101c35; }
-    [data-testid="stSidebar"] * { color: #eef4ff; }
-    [data-testid="stSidebar"] hr { border-color: #344361; }
-    [data-testid="stMetric"] { background: #ffffff; border: 1px solid #e4eaf4; padding: 16px 18px; border-radius: 15px; box-shadow: 0 5px 18px rgba(26, 47, 82, .06); }
-    [data-testid="stMetricLabel"] { color: #53627a; font-weight: 600; }
-    [data-testid="stMetricValue"] { color: #14213d; }
-    div.stButton > button, div.stDownloadButton > button { border-radius: 10px; font-weight: 650; border: 1px solid #d7e2f2; transition: transform .15s ease, box-shadow .15s ease; }
-    div.stButton > button:hover, div.stDownloadButton > button:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(37,99,235,.14); border-color: #8eb4f8; }
-    [data-testid="stFileUploader"] { border: 1px dashed #9db6da; border-radius: 14px; padding: 8px; background: rgba(255,255,255,.72); }
+    :root { --brand: #8b5cf6; --brand-dark: #6d28d9; --surface: #171923; }
+    .stApp { background: linear-gradient(180deg, #0b0d12 0%, #11141c 48%, #0b0d12 100%); color: #edf0f7; }
+    [data-testid="stHeader"] { background: rgba(11,13,18,.92); }
+    [data-testid="stSidebar"] { background: #11131b; border-right: 1px solid #292d3a; }
+    [data-testid="stSidebar"] * { color: #edf0f7; }
+    [data-testid="stSidebar"] hr { border-color: #343848; }
+    [data-testid="stMarkdownContainer"], [data-testid="stText"], label, p, li { color: #d7dbea; }
+    h1, h2, h3, h4 { color: #f7f8fc; letter-spacing: -0.025em; }
+    [data-testid="stMetric"] { background: #171a24; border: 1px solid #2b3040; padding: 16px 18px; border-radius: 15px; box-shadow: 0 5px 18px rgba(0,0,0,.22); }
+    [data-testid="stMetricLabel"] { color: #aab2c5; font-weight: 600; }
+    [data-testid="stMetricValue"] { color: #f5f6fb; }
+    div.stButton > button, div.stDownloadButton > button { border-radius: 10px; font-weight: 650; border: 1px solid #383e51; background: #202433; color: #f4f5fb; transition: transform .15s ease, box-shadow .15s ease; }
+    div.stButton > button:hover, div.stDownloadButton > button:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(139,92,246,.18); border-color: #8b5cf6; color: white; }
+    [data-testid="stFileUploader"] { border: 1px dashed #555d75; border-radius: 14px; padding: 8px; background: rgba(25,28,39,.8); }
     [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 12px; overflow: hidden; }
-    h1, h2, h3 { letter-spacing: -0.025em; }
-    .hero-panel { padding: 28px 30px; border-radius: 22px; background: linear-gradient(120deg, #122344 0%, #1d4ed8 62%, #38bdf8 125%); color: white; margin: 4px 0 22px 0; box-shadow: 0 14px 32px rgba(30,64,175,.18); }
+    [data-baseweb="select"] > div, [data-baseweb="input"] > div, [data-baseweb="textarea"] > div { background: #1b1f2b; border-color: #3a4053; color: #f4f5fb; }
+    input, textarea { color: #f4f5fb !important; }
+    [data-testid="stAlert"] { background: #1b1f2b; border-color: #393f52; }
+    .hero-panel { padding: 28px 30px; border-radius: 22px; background: linear-gradient(120deg, #21143f 0%, #4c1d95 62%, #7c3aed 125%); color: white; margin: 4px 0 22px 0; border: 1px solid #5937a1; box-shadow: 0 14px 32px rgba(0,0,0,.28); }
     .hero-panel h1 { color: white; font-size: clamp(1.75rem, 4vw, 2.55rem); margin: 0 0 8px 0; line-height: 1.15; }
-    .hero-panel p { color: #e2edff; margin: 0; font-size: 1rem; max-width: 850px; }
+    .hero-panel p { color: #e9ddff; margin: 0; font-size: 1rem; max-width: 850px; }
     .hero-chip { display: inline-block; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); border-radius: 999px; padding: 5px 11px; margin-bottom: 13px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-    .section-note { color: #64748b; font-size: .92rem; margin-top: -7px; }
-    .info-card { background: white; border: 1px solid #e3eaf5; border-radius: 15px; padding: 16px 18px; height: 100%; box-shadow: 0 4px 14px rgba(26,47,82,.04); }
-    .info-card h3 { margin-top: 0; color: #1e3a8a; font-size: 1.02rem; }
-    .info-card p { margin-bottom: 0; color: #53627a; font-size: .92rem; }
+    .section-note { color: #aab2c5; font-size: .92rem; margin-top: -7px; }
+    .info-card { background: #171a24; border: 1px solid #2b3040; border-radius: 15px; padding: 16px 18px; height: 100%; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+    .info-card h3 { margin-top: 0; color: #c4b5fd; font-size: 1.02rem; }
+    .info-card p { margin-bottom: 0; color: #c1c7d6; font-size: .92rem; }
+    [data-testid="stProgressBar"] > div > div { background: #8b5cf6; }
     @media (max-width: 640px) { .hero-panel { padding: 22px 19px; border-radius: 16px; } [data-testid="stMetric"] { padding: 12px; } }
     </style>
     """,
@@ -1593,4 +1598,5 @@ st.warning(
     "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
 
