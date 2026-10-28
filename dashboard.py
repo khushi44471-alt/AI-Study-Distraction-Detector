@@ -1386,3 +1386,114 @@ else:
         "This indicates phone visibility only; it does not measure "
         "actual concentration or study quality."
     )
+# ============================================================
+# LIVE WEBCAM PHONE DETECTION
+# ============================================================
+
+import av
+from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
+
+
+@st.cache_resource(show_spinner=False)
+def load_webcam_model():
+    """Reuse the existing YOLO model file."""
+    possible_paths = [
+        MODEL_FILE,
+        BASE_DIR.parent / "yolo11n.pt",
+    ]
+
+    for model_path in possible_paths:
+        if model_path.exists():
+            return load_yolo_model(str(model_path))
+
+    raise FileNotFoundError(
+        "Could not find yolo11n.pt beside dashboard.py "
+        "or in the repository's parent folder."
+    )
+
+
+class LivePhoneDetector(VideoProcessorBase):
+    def __init__(self):
+        self.model = load_webcam_model()
+
+    def recv(self, frame):
+        image = frame.to_ndarray(format="bgr24")
+
+        # Run YOLO on the browser webcam frame.
+        result = self.model.predict(
+            source=image,
+            imgsz=640,
+            conf=0.25,
+            verbose=False,
+        )[0]
+
+        # Draw boxes only for phone detections.
+        if result.boxes is not None:
+            for box in result.boxes:
+                class_id = int(box.cls[0].item())
+
+                if isinstance(self.model.names, dict):
+                    class_name = self.model.names.get(
+                        class_id, ""
+                    )
+                else:
+                    class_name = self.model.names[class_id]
+
+                if str(class_name).strip().lower() not in (
+                    "cell phone",
+                    "mobile phone",
+                ):
+                    continue
+
+                confidence = float(box.conf[0].item())
+                x1, y1, x2, y2 = [
+                    int(value)
+                    for value in box.xyxy[0].tolist()
+                ]
+
+                cv2.rectangle(
+                    image,
+                    (x1, y1),
+                    (x2, y2),
+                    (0, 210, 0),
+                    3,
+                )
+
+                cv2.putText(
+                    image,
+                    f"Phone {confidence:.0%}",
+                    (x1, max(25, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 210, 0),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+        return av.VideoFrame.from_ndarray(
+            image,
+            format="bgr24",
+        )
+
+
+st.divider()
+st.header("📷 Live Webcam Detection")
+
+st.write(
+    "Use the webcam of the computer opening this website. "
+    "Allow camera access when your browser asks."
+)
+
+st.caption(
+    "This detects visible phones, not attention or distraction."
+)
+
+webrtc_streamer(
+    key="study-phone-webcam",
+    video_processor_factory=LivePhoneDetector,
+    media_stream_constraints={
+        "video": True,
+        "audio": False,
+    },
+    async_processing=True,
+)
