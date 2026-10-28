@@ -698,12 +698,12 @@ def analyze_video(uploaded_file):
         consecutive_phone_frames = 0
         last_alert_time = 0.0
        frame_index = 0
-timeline = []
+       timeline = []
 
-phone_heatmap = np.zeros((20, 20), dtype=np.float32)
+       phone_heatmap = np.zeros((20, 20), dtype=np.float32)
 
-confidence_values = []
-blur_values = []
+       confidence_values = []
+        blur_values = []
         last_annotated_rgb = None
         best_phone_frame_rgb = None
         best_phone_confidence = -1.0
