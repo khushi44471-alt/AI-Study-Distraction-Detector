@@ -1464,7 +1464,7 @@ from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 
 @st.cache_resource(show_spinner=False)
 def load_webcam_model():
-    """Reuse the existing YOLO model file."""
+    """Load and cache the YOLO model once for live webcam detection."""
     possible_paths = [
         MODEL_FILE,
         BASE_DIR.parent / "yolo11n.pt",
@@ -1483,88 +1483,82 @@ def load_webcam_model():
 class LivePhoneDetector(VideoProcessorBase):
     def __init__(self):
         self.model = load_webcam_model()
+        self.frame_count = 0
+        self.last_detections = []
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
+        self.frame_count += 1
 
-        # Run YOLO on the browser webcam frame.
-        result = self.model.predict(
-            source=image,
-            imgsz=640,
-            conf=0.25,
-            verbose=False,
-        )[0]
+        # Run AI on every second frame to reduce cloud CPU load.
+        # Keep the most recent boxes visible on skipped frames.
+        if self.frame_count % 2 == 1:
+            result = self.model.predict(
+                source=image,
+                imgsz=320,
+                conf=0.25,
+                verbose=False,
+                device="cpu",
+            )[0]
 
-        # Draw boxes only for phone detections.
-        if result.boxes is not None:
-            for box in result.boxes:
-                class_id = int(box.cls[0].item())
+            detections = []
+            if result.boxes is not None:
+                for box in result.boxes:
+                    class_id = int(box.cls[0].item())
+                    if isinstance(self.model.names, dict):
+                        class_name = self.model.names.get(class_id, "")
+                    else:
+                        class_name = self.model.names[class_id]
 
-                if isinstance(self.model.names, dict):
-                    class_name = self.model.names.get(
-                        class_id, ""
-                    )
-                else:
-                    class_name = self.model.names[class_id]
+                    if str(class_name).strip().lower() not in ("cell phone", "mobile phone"):
+                        continue
 
-                if str(class_name).strip().lower() not in (
-                    "cell phone",
-                    "mobile phone",
-                ):
-                    continue
+                    x1, y1, x2, y2 = [int(value) for value in box.xyxy[0].tolist()]
+                    confidence = float(box.conf[0].item())
+                    detections.append((x1, y1, x2, y2, confidence))
 
-                confidence = float(box.conf[0].item())
-                x1, y1, x2, y2 = [
-                    int(value)
-                    for value in box.xyxy[0].tolist()
-                ]
+            self.last_detections = detections
 
-                cv2.rectangle(
-                    image,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 210, 0),
-                    3,
-                )
+        for x1, y1, x2, y2, confidence in self.last_detections:
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 210, 0), 3)
+            cv2.putText(
+                image,
+                f"Phone {confidence:.0%}",
+                (x1, max(25, y1 - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 210, 0),
+                2,
+                cv2.LINE_AA,
+            )
 
-                cv2.putText(
-                    image,
-                    f"Phone {confidence:.0%}",
-                    (x1, max(25, y1 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 210, 0),
-                    2,
-                    cv2.LINE_AA,
-                )
-
-        return av.VideoFrame.from_ndarray(
-            image,
-            format="bgr24",
-        )
+        return av.VideoFrame.from_ndarray(image, format="bgr24")
 
 
 st.divider()
 st.header("📷 Live Webcam Detection")
-
 st.write(
     "Use the webcam of the computer opening this website. "
     "Allow camera access when your browser asks."
 )
-
 st.caption(
+    "For a cloud-hosted app, webcam processing runs on the server and may be slower. "
     "This detects visible phones, not attention or distraction."
 )
 
-webrtc_streamer(
-    key="study-phone-webcam",
-    video_processor_factory=LivePhoneDetector,
-    media_stream_constraints={
-        "video": True,
-        "audio": False,
-    },
-    async_processing=True,
-)
+try:
+    webrtc_streamer(
+        key="study-phone-webcam",
+        video_processor_factory=LivePhoneDetector,
+        media_stream_constraints={"video": True, "audio": False},
+        rtc_configuration={
+            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        },
+        async_processing=True,
+    )
+except Exception as webcam_error:
+    st.error("The webcam stream could not start.")
+    st.caption(f"Details: {webcam_error}")
 
 # ============================================================
 # ABOUT PROJECT PAGE
@@ -1598,5 +1592,6 @@ st.warning(
     "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
 
 
