@@ -155,43 +155,73 @@ if alert_choice == "5. Custom MP3/WAV File":
 
 
 def speak_phone_warning(volume=0.70):
-    """Speak the phone warning using an available voice."""
+    """Speak the phone warning using the browser's speech engine."""
+
     try:
-        import pyttsx3
+        speech_html = f"""
+        <div style="font-family: Arial, sans-serif;">
+            <button id="speakWarning"
+                style="padding: 10px 16px; cursor: pointer;">
+                🔊 Play Female Spoken Warning
+            </button>
+            <span id="speechStatus" style="margin-left: 8px;"></span>
+        </div>
 
-        engine = pyttsx3.init()
-        engine.setProperty("volume", max(0.0, min(1.0, volume)))
+        <script>
+        const button = document.getElementById("speakWarning");
+        const status = document.getElementById("speechStatus");
 
-        voices = engine.getProperty("voices")
-        female_voice = None
+        button.addEventListener("click", function() {{
+            if (!("speechSynthesis" in window)) {{
+                status.textContent = "Speech is not supported by this browser.";
+                return;
+            }}
 
-        for voice in voices:
-            info = (
-                str(voice.name) + " " + str(voice.id)
-            ).lower()
+            window.speechSynthesis.cancel();
 
-            if any(name in info for name in [
-                "female", "zira", "hazel", "susan",
-                "samantha", "aria", "jenny",
-            ]):
-                female_voice = voice
-                break
+            const message = new SpeechSynthesisUtterance(
+                "Attention! Attention! Phone detected! Please put your phone away and focus on studying!"
+            );
 
-        if female_voice is not None:
-            engine.setProperty("voice", female_voice.id)
-        elif voices:
-            engine.setProperty("voice", voices[0].id)
+            message.volume = {max(0.0, min(1.0, volume))};
+            message.rate = 0.95;
+            message.pitch = 1.15;
 
-        engine.say(
-            "Attention! Attention! Phone detected! "
-            "Please put your phone away and focus on studying!"
-        )
-        engine.runAndWait()
-        engine.stop()
+            const voices = window.speechSynthesis.getVoices();
+            const femaleVoice = voices.find(voice =>
+                /female|zira|samantha|aria|jenny|hazel/i.test(
+                    voice.name + " " + voice.voiceURI
+                )
+            );
+
+            if (femaleVoice) {{
+                message.voice = femaleVoice;
+            }}
+
+            message.onstart = () => {{
+                status.textContent = "Speaking...";
+            }};
+
+            message.onend = () => {{
+                status.textContent = "Warning finished.";
+            }};
+
+            message.onerror = (event) => {{
+                status.textContent = "Speech failed: " + event.error;
+            }};
+
+            window.speechSynthesis.speak(message);
+            status.textContent = femaleVoice
+                ? "Female voice selected."
+                : "Using the browser's default voice.";
+        }});
+        </script>
+        """
+
+        components.html(speech_html, height=65)
 
     except Exception as error:
-        print(f"Speech warning could not play: {error}")
-
+        st.error(f"Speech warning could not start: {error}")
 
 def show_phone_alert(preview=False):
     """Display a warning and play the selected alert."""
