@@ -394,7 +394,7 @@ window.addEventListener("load", () => {
   setTimeout(playSound, 300);
 });
 </script>
-
+"""
 
     sound_html = sound_html.replace(
         "CONFIG_PLACEHOLDER", config
