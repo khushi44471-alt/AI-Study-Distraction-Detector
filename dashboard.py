@@ -1455,11 +1455,15 @@ else:
         "actual concentration or study quality."
     )
 # ============================================================
-# LIVE WEBCAM PHONE DETECTION
+# LIVE WEBCAM PHONE DETECTION + CONNECTION TROUBLESHOOTER
 # ============================================================
 
+import logging
 import av
 from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
+
+# Keep useful WebRTC diagnostics in the Streamlit Cloud server logs.
+logging.getLogger("streamlit_webrtc").setLevel(logging.INFO)
 
 
 @st.cache_resource(show_spinner=False)
@@ -1470,27 +1474,25 @@ def load_webcam_model():
         if model_path.exists():
             return load_yolo_model(str(model_path))
     raise FileNotFoundError(
-        "Could not find yolo11n.pt beside dashboard.py or in the repository's parent folder."
+        "Could not find yolo11n.pt beside dashboard.py or in the repository parent folder."
     )
 
 
 class LivePhoneDetector(VideoProcessorBase):
-    """Detect phones continuously and draw an immediate warning on the live feed."""
+    """Detect phones continuously and draw a clear warning on the live feed."""
 
     def __init__(self):
         self.model = load_webcam_model()
-        self.frame_count = 0
         self.last_detections = []
-        self.consecutive_phone_frames = 0
         self.phone_warning = False
         self.last_inference_error = None
+        self.frame_count = 0
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
         self.frame_count += 1
 
-        # Run detection on every frame at a smaller input size for lower latency.
-        # If cloud CPU is slow, changing imgsz from 320 to 256 can improve speed.
+        # Keep the stream alive if one inference fails; details go to server logs.
         try:
             result = self.model.predict(
                 source=image,
@@ -1499,6 +1501,7 @@ class LivePhoneDetector(VideoProcessorBase):
                 verbose=False,
                 device="cpu",
             )[0]
+
             detections = []
             if result.boxes is not None:
                 for box in result.boxes:
@@ -1508,21 +1511,28 @@ class LivePhoneDetector(VideoProcessorBase):
                     else:
                         class_name = self.model.names[class_id]
 
-                    if str(class_name).strip().lower() not in ("cell phone", "mobile phone"):
+                    if str(class_name).strip().lower() not in (
+                        "cell phone",
+                        "mobile phone",
+                    ):
                         continue
 
-                    x1, y1, x2, y2 = [int(value) for value in box.xyxy[0].tolist()]
+                    x1, y1, x2, y2 = [
+                        int(value) for value in box.xyxy[0].tolist()
+                    ]
                     confidence = float(box.conf[0].item())
                     detections.append((x1, y1, x2, y2, confidence))
 
             self.last_detections = detections
             self.phone_warning = bool(detections)
-            self.consecutive_phone_frames = self.consecutive_phone_frames + 1 if detections else 0
             self.last_inference_error = None
+
         except Exception as error:
-            # Keep the stream alive if one inference fails; report details in server logs.
             self.last_inference_error = str(error)
-            print(f"Live webcam inference error: {error}")
+            logging.getLogger("streamlit_webrtc").exception(
+                "Live phone detection failed"
+            )
+            # Do not stop returning frames if a single YOLO prediction fails.
 
         for x1, y1, x2, y2, confidence in self.last_detections:
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
@@ -1537,7 +1547,6 @@ class LivePhoneDetector(VideoProcessorBase):
                 cv2.LINE_AA,
             )
 
-        # Draw a clear live warning directly on the returned webcam frame.
         height, width = image.shape[:2]
         if self.phone_warning:
             banner = "PHONE DETECTED - PLEASE CHECK YOUR PHONE USE"
@@ -1571,27 +1580,85 @@ class LivePhoneDetector(VideoProcessorBase):
 st.divider()
 st.header("📷 Live Webcam Detection")
 st.write(
-    "Start the webcam stream below and allow camera access when your browser asks. "
-    "The AI checks frames as they arrive and overlays a warning on the live video when a phone is detected."
+    "Start the webcam stream below and allow camera access when your mobile browser asks. "
+    "The AI checks incoming frames and draws a visual warning when a phone is detected."
 )
 st.caption(
-    "Cloud processing speed and network conditions affect response time. This is a live visual warning; "
-    "it does not currently trigger your selected alert sound automatically. Phone visibility is not proof of distraction."
+    "The live stream depends on WebRTC networking as well as camera permission. "
+    "The selected sound alert is not played automatically by this live webcam section. "
+    "Phone visibility is not proof of distraction."
 )
 
+# A new key forces the browser to create a fresh WebRTC session after a failed attempt.
+if "webcam_connection_attempt" not in st.session_state:
+    st.session_state.webcam_connection_attempt = 1
+
+reset_col, help_col = st.columns([1, 2])
+with reset_col:
+    if st.button(
+        "🔄 Reset live connection",
+        key="reset_live_webcam_connection",
+        help="Use this only after the live connection fails or gets stuck.",
+    ):
+        st.session_state.webcam_connection_attempt += 1
+        st.rerun()
+with help_col:
+    st.caption(
+        f"Connection attempt: {st.session_state.webcam_connection_attempt}. "
+        "If the stream gets stuck, press Reset once, then press START again."
+    )
+
+# Multiple public STUN endpoints give ICE more than one discovery endpoint to try.
+# STUN does not relay video; TURN may still be required on restricted networks.
+WEBRTC_RTC_CONFIGURATION = {
+    "iceServers": [
+        {
+            "urls": [
+                "stun:stun.l.google.com:19302",
+                "stun:stun1.l.google.com:19302",
+                "stun:stun2.l.google.com:19302",
+                "stun:stun3.l.google.com:19302",
+                "stun:stun4.l.google.com:19302",
+            ]
+        },
+        {"urls": ["stun:stun.cloudflare.com:3478"]},
+    ]
+}
+
 try:
-    webrtc_streamer(
-        key="study-phone-webcam-live-warning",
+    webcam_ctx = webrtc_streamer(
+        key=f"study-phone-webcam-live-warning-{st.session_state.webcam_connection_attempt}",
         video_processor_factory=LivePhoneDetector,
         media_stream_constraints={"video": True, "audio": False},
-        rtc_configuration={
-            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-        },
+        rtc_configuration=WEBRTC_RTC_CONFIGURATION,
         async_processing=True,
     )
+
+    if getattr(webcam_ctx.state, "playing", False):
+        st.success("WebRTC connected. Live phone detection is running.")
+    else:
+        st.info(
+            "Waiting for the live connection. Press START above and allow camera access. "
+            "If the existing 'connection is taking longer than expected' message remains, "
+            "press 'Reset live connection' once and try START again."
+        )
 except Exception as webcam_error:
-    st.error("The webcam stream could not start.")
-    st.caption(f"Details: {webcam_error}")
+    st.error("The webcam component could not start.")
+    st.code(f"{type(webcam_error).__name__}: {webcam_error}")
+    st.info(
+        "If the error mentions missing packages or yolo11n.pt, that is an app/deployment issue. "
+        "If the component starts but keeps reporting a connection timeout, that usually indicates "
+        "a WebRTC network/ICE problem rather than Python syntax."
+    )
+
+st.markdown("#### If the connection still times out")
+st.write(
+    "This version tries several public STUN endpoints and adds a reset button. "
+    "If it still times out, the phone/browser may be allowed to use its camera while the network "
+    "blocks WebRTC media traffic. In that case code alone cannot guarantee a connection; a TURN "
+    "relay or a different network that permits WebRTC may be necessary. The recorded-video analysis "
+    "remains available as a fallback."
+)
 
 # ============================================================
 # ABOUT PROJECT PAGE
