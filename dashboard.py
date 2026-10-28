@@ -210,7 +210,9 @@ def speak_phone_warning(volume=0.70):
                 status.textContent = "Speech failed: " + event.error;
             }};
 
-            window.speechSynthesis.speak(message);
+           window.speechSynthesis.resume();
+window.speechSynthesis.speak(message);
+status.textContent = "Attempting to speak the warning...";
             status.textContent = femaleVoice
                 ? "Female voice selected."
                 : "Using the browser's default voice.";
