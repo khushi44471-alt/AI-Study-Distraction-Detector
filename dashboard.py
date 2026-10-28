@@ -72,8 +72,7 @@ if "study_timer_elapsed_before_pause" not in st.session_state:
     st.session_state.study_timer_elapsed_before_pause = 0.0
 
 if "study_timer_finished" not in st.session_state:
-    st.session_state.study_timer_finished = Falsetimeline = []
-
+    st.session_state.study_timer_finished = False
 from ultralytics import YOLO
 import threading
 import pyttsx3
