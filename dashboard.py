@@ -777,20 +777,22 @@ def analyze_video(uploaded_file):
                             confidence_values.append(confidence)
                             phones_in_frame += 1
                             total_detections += 1
+                          
                             # Record the detected phone's centre in a 20x20 heatmap.
-center_x = (x1 + x2) // 2
-center_y = (y1 + y2) // 2
+                            center_x = (x1 + x2) // 2
+                            center_y = (y1 + y2) // 2
 
-grid_x = min(
-    19,
-    max(0, int(center_x / width * 20))
-)
-grid_y = min(
-    19,
-    max(0, int(center_y / height * 20))
-)
+                            grid_x = min(
+                                19,
+                                max(0, int(center_x / width * 20))
+                            )
+                            grid_y = min(
+                                19,
+                                max(0, int(center_y / height * 20))
+                            )
 
-phone_heatmap[grid_y, grid_x] += 1
+                            phone_heatmap[grid_y, grid_x] += 1
+
                          
                             frame_best_confidence = max(
                                 frame_best_confidence,
