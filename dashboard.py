@@ -72,14 +72,14 @@ if "study_timer_elapsed_before_pause" not in st.session_state:
     st.session_state.study_timer_elapsed_before_pause = 0.0
 
 if "study_timer_finished" not in st.session_state:
-    st.session_state.study_timer_finished = False
+    st.session_state.study_timer_finished = Falsetimeline = []
 
 from ultralytics import YOLO
 import threading
 import pyttsx3
 import io
 import matplotlib.pyplot as plt
-
+import numpy as np
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
@@ -697,10 +697,13 @@ def analyze_video(uploaded_file):
         object_counts = {}
         consecutive_phone_frames = 0
         last_alert_time = 0.0
-        frame_index = 0
-        timeline = []
-        confidence_values = []
-        blur_values = []
+       frame_index = 0
+timeline = []
+
+phone_heatmap = np.zeros((20, 20), dtype=np.float32)
+
+confidence_values = []
+blur_values = []
         last_annotated_rgb = None
         best_phone_frame_rgb = None
         best_phone_confidence = -1.0
@@ -772,7 +775,20 @@ def analyze_video(uploaded_file):
                             confidence_values.append(confidence)
                             phones_in_frame += 1
                             total_detections += 1
+                           # Record the detected phone's centre in a 20x20 heatmap.
+                           center_x = (x1 + x2) // 2
+                          center_y = (y1 + y2) // 2
 
+grid_x = min(
+    19,
+    max(0, int(center_x / width * 20))
+)
+grid_y = min(
+    19,
+    max(0, int(center_y / height * 20))
+)
+
+phone_heatmap[grid_y, grid_x] += 1
                             frame_best_confidence = max(
                                 frame_best_confidence,
                                 confidence,
@@ -894,6 +910,7 @@ def analyze_video(uploaded_file):
             "detections": total_detections,
             "annotated_frame_rgb": best_phone_frame_rgb if best_phone_frame_rgb is not None else last_annotated_rgb,
             "timeline": timeline,
+            "phone_heatmap": phone_heatmap.tolist(),
             "fps": fps,
             "duration": duration,
             "quality_warnings": quality_warnings,
@@ -1104,6 +1121,58 @@ if "last_analysis" in st.session_state:
         "This preview shows the sampled frame with the highest-confidence phone detection "
         "(or the last sampled frame if no phone was detected). Green boxes mark phone detections only."
     )
+        # =====================================
+    # PHONE DETECTION HEATMAP
+    # =====================================
+
+    st.subheader("🔥 Phone Detection Heatmap")
+    st.caption(
+        "Brighter areas show where phone detections occurred "
+        "more frequently in the analyzed video frames."
+    )
+
+    heatmap_data = saved_analysis.get("phone_heatmap")
+
+    if heatmap_data is not None:
+        heatmap_array = np.asarray(
+            heatmap_data,
+            dtype=np.float32,
+        )
+
+        if heatmap_array.sum() > 0:
+            figure, axis = plt.subplots(figsize=(8, 4.5))
+
+            image = axis.imshow(
+                heatmap_array,
+                cmap="hot",
+                interpolation="nearest",
+                extent=[0, 100, 100, 0],
+                aspect="auto",
+            )
+
+            axis.set_title("Phone Detection Locations")
+            axis.set_xlabel("Horizontal Position (%)")
+            axis.set_ylabel("Vertical Position (%)")
+
+            figure.colorbar(
+                image,
+                ax=axis,
+                label="Detection count",
+            )
+
+            figure.tight_layout()
+            st.pyplot(figure)
+            plt.close(figure)
+
+        else:
+            st.info(
+                "No phone detections were recorded, "
+                "so a heatmap cannot be displayed."
+            )
+    else:
+        st.info(
+            "Run a new video analysis to generate the heatmap."
+        )
     st.subheader("🔎 Detection Confidence and Video Quality")
     average_confidence = saved_analysis.get("average_confidence")
     highest_confidence = saved_analysis.get("highest_confidence")
