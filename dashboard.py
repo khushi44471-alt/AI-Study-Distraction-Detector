@@ -307,100 +307,94 @@ def show_phone_alert(preview=False):
     </div>
 
     <script>
-    const config = CONFIG_PLACEHOLDER;
-    const button = document.getElementById("playPreview");
-    const status = document.getElementById("soundStatus");
+    
+<script>
+const config = CONFIG_PLACEHOLDER;
+const button = document.getElementById("playPreview");
+const status = document.getElementById("soundStatus");
 
-    button.addEventListener("click", async function() {
-      try {
-        const ctx = new (
-          window.AudioContext || window.webkitAudioContext
-        )();
+async function playSound() {
+  try {
+    const ctx = new (
+      window.AudioContext || window.webkitAudioContext
+    )();
 
-        await ctx.resume();
+    await ctx.resume();
 
-        function tone(freq, start, duration, peak, type) {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
+    function tone(freq, start, duration, peak, type) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-          osc.type = type || "sine";
-          osc.frequency.setValueAtTime(freq, start);
+      osc.type = type || "sine";
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(
+        peak * config.volume, start + 0.025
+      );
+      gain.gain.linearRampToValueAtTime(
+        0.001, start + duration
+      );
 
-          gain.gain.setValueAtTime(0.001, start);
-          gain.gain.linearRampToValueAtTime(
-            peak * config.volume, start + 0.025
-          );
-          gain.gain.setValueAtTime(
-            peak * config.volume, start + duration * 0.70
-          );
-          gain.gain.linearRampToValueAtTime(
-            0.001, start + duration
-          );
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + duration + 0.02);
+    }
 
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(start);
-          osc.stop(start + duration + 0.02);
-        }
+    const now = ctx.currentTime;
 
-        const now = ctx.currentTime;
+    if (config.mode === "chime") {
+      tone(659.25, now, 0.22, 0.22);
+      tone(783.99, now + 0.24, 0.30, 0.22);
+    } else if (config.mode === "siren") {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-        if (config.mode === "chime") {
-          tone(659.25, now, 0.22, 0.22);
-          tone(783.99, now + 0.24, 0.30, 0.22);
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.linearRampToValueAtTime(1050, now + 0.65);
+      osc.frequency.linearRampToValueAtTime(520, now + 1.30);
+      osc.frequency.linearRampToValueAtTime(1050, now + 1.95);
+      osc.frequency.linearRampToValueAtTime(520, now + 2.60);
 
-        } else if (config.mode === "siren") {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(
+        0.10 * config.volume, now + 0.10
+      );
+      gain.gain.linearRampToValueAtTime(0.001, now + 2.70);
 
-          osc.type = "sawtooth";
-          osc.frequency.setValueAtTime(520, now);
-          osc.frequency.linearRampToValueAtTime(1050, now + 0.65);
-          osc.frequency.linearRampToValueAtTime(520, now + 1.30);
-          osc.frequency.linearRampToValueAtTime(1050, now + 1.95);
-          osc.frequency.linearRampToValueAtTime(520, now + 2.60);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 2.75);
+    } else {
+      const notes = [
+        [523.25, 0.00], [659.25, 0.14],
+        [783.99, 0.28], [1046.50, 0.42],
+        [783.99, 0.60], [1046.50, 0.78]
+      ];
 
-          gain.gain.setValueAtTime(0.001, now);
-          gain.gain.linearRampToValueAtTime(
-            0.10 * config.volume, now + 0.10
-          );
-          gain.gain.linearRampToValueAtTime(
-            0.001, now + 2.70
-          );
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(now);
-          osc.stop(now + 2.75);
-
-        } else {
-          const notes = [
-            [523.25, 0.00],
-            [659.25, 0.14],
-            [783.99, 0.28],
-            [1046.50, 0.42],
-            [783.99, 0.60],
-            [1046.50, 0.78]
-          ];
-
-          for (const note of notes) {
-            tone(note[0], now + note[1], 0.11, 0.20, "square");
-          }
-        }
-
-        status.textContent = "Preview playing";
-        setTimeout(() => {
-          status.textContent = "";
-          ctx.close();
-        }, 3200);
-
-      } catch (error) {
-        status.textContent = "Sound blocked by browser.";
-        console.log("Preview unavailable:", error);
+      for (const note of notes) {
+        tone(note[0], now + note[1], 0.11, 0.20, "square");
       }
-    });
-    </script>
-    """
+    }
+
+    status.textContent = "Sound playing";
+    setTimeout(() => ctx.close(), 3200);
+  } catch (error) {
+    status.textContent = "Browser blocked playback; use the preview button.";
+    console.log(error);
+  }
+}
+
+button.addEventListener("click", playSound);
+
+// Attempt automatic playback when this component loads.
+window.addEventListener("load", () => {
+  setTimeout(playSound, 300);
+});
+</script>
+
 
     sound_html = sound_html.replace(
         "CONFIG_PLACEHOLDER", config
