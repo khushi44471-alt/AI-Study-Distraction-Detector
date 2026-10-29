@@ -304,6 +304,9 @@ if "warning_summary" not in st.session_state:
         "recent_events": []
     }
 
+if "analysis_warning_triggered" not in st.session_state:
+    st.session_state.analysis_warning_triggered = False
+
 # ============================================================
 # Utility functions
 # ============================================================
@@ -889,6 +892,11 @@ class LivePhoneDetector(VideoProcessorBase):
                     st.session_state.last_live_warning_time = now
                     st.session_state.live_warning_triggered = True
                     st.session_state.live_phone_detected = True
+                    st.session_state.last_warning_reason = "Phone detected in live webcam"
+                    st.session_state.warning_summary = append_warning_summary(
+                        st.session_state.warning_summary,
+                        st.session_state.last_warning_reason
+                    )
 
                 cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
                 cv2.putText(
@@ -1024,11 +1032,6 @@ else:
 
 if st.session_state.get("live_warning_triggered", False):
     st.session_state.live_warning_triggered = False
-    st.session_state.last_warning_reason = "Phone detected in live webcam"
-    st.session_state.warning_summary = append_warning_summary(
-        st.session_state.warning_summary,
-        st.session_state.last_warning_reason
-    )
     st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
     speak_warning()
 
@@ -1168,6 +1171,16 @@ def analyze_video(uploaded_file):
             "alert_snapshot": compute_alert_snapshot(phone_percentage, focus_score),
         }
 
+        # FIX: automatic warning should play again on a fresh analysis run
+        if result["warning_count"] > 0 and not st.session_state.analysis_warning_triggered:
+            st.session_state.analysis_warning_triggered = True
+            st.session_state.last_warning_reason = "Phone detected in video analysis"
+            st.session_state.warning_summary = append_warning_summary(
+                st.session_state.warning_summary,
+                st.session_state.last_warning_reason
+            )
+            show_phone_alert(preview=False)
+
         return result
 
     except Exception as error:
@@ -1259,6 +1272,7 @@ if uploaded_video is not None:
     st.video(uploaded_video)
 
     if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
+        st.session_state.analysis_warning_triggered = False
         analysis_result = analyze_video(uploaded_video)
         if analysis_result is not None:
             try:
