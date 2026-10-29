@@ -1822,6 +1822,8 @@ with help_col:
 
 # Multiple public STUN endpoints give ICE more than one discovery endpoint to try.
 # STUN does not relay video; TURN may still be required on restricted networks.
+# Multiple public STUN endpoints give ICE more than one discovery endpoint to try.
+# STUN does not relay video; TURN may still be required on restricted networks.
 WEBRTC_RTC_CONFIGURATION = {
     "iceServers": [
         {
@@ -1834,6 +1836,11 @@ WEBRTC_RTC_CONFIGURATION = {
             ]
         },
         {"urls": ["stun:stun.cloudflare.com:3478"]},
+        {
+            "urls": ["turn:your-turn-server.com:3478"],
+            "username": "your_username",
+            "credential": "your_password"
+        },
     ]
 }
 
