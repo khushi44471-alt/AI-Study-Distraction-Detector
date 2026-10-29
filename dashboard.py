@@ -1,38 +1,10 @@
-from __future__ import annotations
-
-import base64
-import csv
-import io
-import json
 import tempfile
-import time
 from datetime import datetime
 from pathlib import Path
-
+import csv
 import cv2
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import plotly.express as px
 import streamlit as st
-import streamlit.components.v1 as components
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.platypus import (
-    Image as PDFImage,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
-from ultralytics import YOLO
-
-# ============================================================
-# Streamlit config
-# ============================================================
 
 st.set_page_config(
     page_title="AI Study Distraction Detector",
@@ -40,176 +12,200 @@ st.set_page_config(
     layout="wide",
 )
 
-# ============================================================
-# Styling
-# ============================================================
+import time
 
-st.markdown(
-    """
-    <style>
-    :root {
-        --bg-1: #0b0d12;
-        --bg-2: #11141c;
-        --panel: #171a24;
-        --panel-2: #1b1f2b;
-        --brand: #8b5cf6;
-        --brand-2: #6d28d9;
-        --text: #edf0f7;
-        --muted: #aab2c5;
-        --line: #2b3040;
-        --green: #22c55e;
-        --red: #ef4444;
-        --yellow: #f59e0b;
-    }
+# =====================================
+# STUDY SESSION TIMER
+# =====================================
 
-    .stApp {
-        background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 48%, var(--bg-1) 100%);
-        color: var(--text);
-    }
+if "study_timer_duration" not in st.session_state:
+    st.session_state.study_timer_duration = 25
 
-    [data-testid="stHeader"] {
-        background: rgba(11,13,18,0.92);
-    }
+if "study_timer_running" not in st.session_state:
+    st.session_state.study_timer_running = False
 
-    [data-testid="stSidebar"] {
-        background: #11131b;
-        border-right: 1px solid var(--line);
-    }
+if "study_timer_started_at" not in st.session_state:
+    st.session_state.study_timer_started_at = None
 
-    [data-testid="stSidebar"] * { color: var(--text); }
-    [data-testid="stSidebar"] hr { border-color: var(--line); }
-    [data-testid="stMarkdownContainer"], [data-testid="stText"], label, p, li { color: var(--text); }
-    h1, h2, h3, h4 { color: #f7f8fc; letter-spacing: -0.025em; }
-    [data-testid="stMetric"] {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        padding: 16px 18px;
-        border-radius: 15px;
-        box-shadow: 0 5px 18px rgba(0,0,0,.22);
-    }
-    [data-testid="stMetricLabel"] { color: var(--muted); font-weight: 600; }
-    [data-testid="stMetricValue"] { color: #f5f6fb; }
+if "study_timer_elapsed_before_pause" not in st.session_state:
+    st.session_state.study_timer_elapsed_before_pause = 0.0
 
-    div.stButton > button, div.stDownloadButton > button {
-        border-radius: 10px;
-        font-weight: 650;
-        border: 1px solid #383e51;
-        background: #202433;
-        color: #f4f5fb;
-        transition: transform .15s ease, box-shadow .15s ease;
-    }
-    div.stButton > button:hover, div.stDownloadButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 5px 14px rgba(139,92,246,.18);
-        border-color: var(--brand);
-        color: white;
-    }
+if "study_timer_finished" not in st.session_state:
+    st.session_state.study_timer_finished = False
 
-    [data-testid="stFileUploader"] {
-        border: 1px dashed #555d75;
-        border-radius: 14px;
-        padding: 8px;
-        background: rgba(25,28,39,.8);
-    }
+from ultralytics import YOLO
+import threading
+import wave
+import math
+import numpy as np
+import io
+import matplotlib.pyplot as plt
 
-    [data-testid="stDataFrame"], [data-testid="stTable"] {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    [data-baseweb="select"] > div, [data-baseweb="input"] > div, [data-baseweb="textarea"] > div {
-        background: var(--panel-2);
-        border-color: var(--line);
-        color: var(--text);
-    }
-    input, textarea { color: var(--text) !important; }
-
-    [data-testid="stAlert"] {
-        background: #1b1f2b;
-        border-color: var(--line);
-    }
-
-    .hero-panel {
-        padding: 28px 30px;
-        border-radius: 22px;
-        background: linear-gradient(120deg, #21143f 0%, #4c1d95 62%, #7c3aed 125%);
-        color: white;
-        margin: 4px 0 22px 0;
-        border: 1px solid #5937a1;
-        box-shadow: 0 14px 30px rgba(124,58,237,.18);
-    }
-    .hero-panel h1 {
-        color: white;
-        font-size: clamp(1.75rem, 4vw, 2.55rem);
-        margin: 0 0 8px 0;
-        line-height: 1.15;
-    }
-    .hero-panel p {
-        color: #e9ddff;
-        margin: 0;
-        font-size: 1rem;
-        max-width: 850px;
-    }
-    .hero-chip {
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,.35);
-        background: rgba(255,255,255,.12);
-        border-radius: 999px;
-        padding: 5px 11px;
-        margin-bottom: 13px;
-        font-size: .78rem;
-        font-weight: 700;
-        letter-spacing: .02em;
-    }
-
-    .section-note {
-        color: var(--muted);
-        font-size: .92rem;
-        margin-top: -7px;
-    }
-
-    .info-card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 15px;
-        padding: 16px 18px;
-        height: 100%;
-        box-shadow: 0 4px 14px rgba(0,0,0,.18);
-    }
-    .info-card h3 {
-        margin-top: 0;
-        color: #c4b5fd;
-        font-size: 1.02rem;
-    }
-    .info-card p {
-        margin-bottom: 0;
-        color: #c1c7d6;
-        font-size: .92rem;
-    }
-
-    [data-testid="stProgressBar"] > div > div { background: var(--brand); }
-
-    @media (max-width: 640px) {
-        .hero-panel { padding: 22px 19px; border-radius: 16px; }
-        [data-testid="stMetric"] { padding: 12px; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    Image as PDFImage,
 )
 
+
+
+
+# =====================================
+# CUSTOM PHONE ALERT SETTINGS
+# =====================================
+
+import base64
+import json
+import threading
+import streamlit.components.v1 as components
+
+ALERT_COOLDOWN = 30
+REQUIRED_CONSECUTIVE_DETECTIONS = 3
+
+# Choose the alert sound.
+alert_choice = st.selectbox(
+    "🔔 Choose Phone Alert Sound",
+    [
+        "1. Female Spoken Warning",
+        "2. Gentle Notification Chime",
+        "3. Rising Emergency Siren",
+        "4. Retro 8-Bit Game Melody",
+        "5. Custom MP3/WAV File",
+    ],
+    key="phone_alert_choice",
+)
+
+# Adjustable volume: 0% to 100%.
+alert_volume = st.slider(
+    "🔊 Alert Volume",
+    min_value=0,
+    max_value=100,
+    value=70,
+    step=5,
+    help="Controls the alert volume where supported.",
+    key="phone_alert_volume",
+)
+
+volume_level = alert_volume / 100.0
+
+custom_audio = None
+custom_audio_type = None
+
+# Upload a custom sound if option 5 is selected.
+if alert_choice == "5. Custom MP3/WAV File":
+    uploaded_audio = st.file_uploader(
+        "Upload your alert sound",
+        type=["mp3", "wav"],
+        key="custom_phone_alert_audio",
+    )
+
+    if uploaded_audio is not None:
+        custom_audio = base64.b64encode(
+            uploaded_audio.getvalue()
+        ).decode("utf-8")
+
+        custom_audio_type = (
+            uploaded_audio.type or "audio/mpeg"
+        )
+
+
+def make_alert_wav(choice, volume):
+    """Generate a short browser-playable warning (not server-side audio)."""
+    rate = 22050
+    if choice.startswith("3."):
+        segments = [(520, .35), (850, .35), (520, .35), (850, .35)]
+    elif choice.startswith("4."):
+        segments = [(523, .12), (659, .12), (784, .12), (1047, .20)]
+    else:
+        segments = [(659, .22), (0, .08), (784, .35)]
+    samples = []
+    for frequency, duration in segments:
+        count = int(rate * duration)
+        t = np.arange(count) / rate
+        envelope = np.minimum(1, t / .02) * np.minimum(1, (duration - t) / .04)
+        signal = np.sin(2 * np.pi * frequency * t) * envelope if frequency else np.zeros(count)
+        samples.append(signal)
+    pcm = (np.concatenate(samples) * min(1, max(0, volume)) * 0.35 * 32767).astype('<i2')
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(pcm.tobytes())
+    return buffer.getvalue()
+
+
+def show_phone_alert(preview=False):
+    """Show the warning; audio is played in the visitor's browser."""
+    if not preview:
+        st.warning("📱 Phone detected repeatedly. Check whether you need it for studying.")
+    if alert_choice.startswith("5."):
+        if custom_audio:
+            st.audio(base64.b64decode(custom_audio), format=custom_audio_type or 'audio/mpeg', autoplay=True)
+        else:
+            st.info("Upload an MP3 or WAV to use the custom warning.")
+    elif alert_choice.startswith("1."):
+        # SpeechSynthesis runs in the browser, not on Streamlit Cloud's server.
+        components.html("""<button id='speak' style='padding:10px'>▶ Play spoken warning</button>
+        <script>
+        const speak = () => {const u = new SpeechSynthesisUtterance(
+          'Attention! Phone detected! Please check whether you need your phone for studying.');
+          u.volume = VOLUME_PLACEHOLDER;
+          const voices = speechSynthesis.getVoices();
+          u.voice = voices.find(v => /female|zira|samantha|jenny|aria/i.test(v.name)) || voices[0] || null;
+          speechSynthesis.cancel(); speechSynthesis.speak(u);};
+        document.getElementById('speak').onclick=speak;
+        speak();
+        </script>""".replace('VOLUME_PLACEHOLDER', str(volume_level)), height=55)
+        st.caption("If your browser blocks automatic speech, press Play spoken warning.")
+    else:
+        st.audio(make_alert_wav(alert_choice, volume_level), format='audio/wav', autoplay=True)
+        st.caption("If automatic audio is blocked, press Play on the audio player.")
+
+
+# Test the currently selected alert without analyzing a video.
+if st.button("🔊 Test Selected Sound", key="test_phone_alert"):
+    show_phone_alert(preview=True)
+
+
+
+
+
+
+
+
 # ============================================================
-# Paths
+# AI STUDY DISTRACTION DETECTOR
+# ============================================================
+
+
+st.title("📱 AI Study Distraction Detector")
+
+st.write(
+    "AI-powered phone-visibility monitoring during recorded study sessions."
+)
+
+st.caption(
+    "Phone visibility is only an indicator, not proof of distraction. "
+    "A phone may be used for studying, and the detector may make mistakes."
+)
+
+
+# ============================================================
+# FILE PATHS AND REPORT SETTINGS
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 REPORT_DIR = BASE_DIR / "reports"
 REPORT_FILE = REPORT_DIR / "session_summary.csv"
-
-MODEL_NAME = "yolo11n.pt"
-MODEL_FILE = BASE_DIR / MODEL_NAME
-
-REPORT_DIR.mkdir(parents=True, exist_ok=True)
+MODEL_FILE = BASE_DIR / "yolo11n.pt"
 
 CSV_COLUMNS = [
     "Session Time",
@@ -228,206 +224,16 @@ NUMERIC_COLUMNS = [
     "Total Phone Detections",
 ]
 
-# ============================================================
-# Model loader
-# ============================================================
+REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-def ensure_model_exists() -> Path:
-    candidate_paths = [
-        MODEL_FILE,
-        BASE_DIR.parent / MODEL_NAME,
-        BASE_DIR.parent / "yolo11s.pt",
-        BASE_DIR.parent / "yolo11n.pt",
-    ]
-
-    for candidate in candidate_paths:
-        if candidate.exists():
-            return candidate
-
-    try:
-        YOLO(MODEL_NAME)
-        for candidate in candidate_paths:
-            if candidate.exists():
-                return candidate
-    except Exception:
-        pass
-
-    raise FileNotFoundError(
-        f"Could not find {MODEL_NAME}. Please install ultralytics and run: "
-        "python -c \"from ultralytics import YOLO; YOLO('yolo11n.pt')\""
-    )
-
-@st.cache_resource(show_spinner=False)
-def load_yolo_model(model_path: str):
-    return YOLO(model_path)
 
 # ============================================================
-# Session state
+# REPORT FUNCTIONS
 # ============================================================
 
-if "study_timer_duration" not in st.session_state:
-    st.session_state.study_timer_duration = 25
-if "study_timer_running" not in st.session_state:
-    st.session_state.study_timer_running = False
-if "study_timer_started_at" not in st.session_state:
-    st.session_state.study_timer_started_at = None
-if "study_timer_elapsed_before_pause" not in st.session_state:
-    st.session_state.study_timer_elapsed_before_pause = 0.0
-if "study_timer_finished" not in st.session_state:
-    st.session_state.study_timer_finished = False
+def load_report():
+    """Load existing session reports from CSV."""
 
-if "live_phone_detected" not in st.session_state:
-    st.session_state.live_phone_detected = False
-if "last_live_warning_time" not in st.session_state:
-    st.session_state.last_live_warning_time = 0.0
-if "live_warning_triggered" not in st.session_state:
-    st.session_state.live_warning_triggered = False
-
-if "session_snapshots" not in st.session_state:
-    st.session_state.session_snapshots = []
-
-if "last_warning_reason" not in st.session_state:
-    st.session_state.last_warning_reason = "No warning yet"
-
-if "live_status" not in st.session_state:
-    st.session_state.live_status = "FOCUSED / NO PHONE"
-
-if "live_focus_streak" not in st.session_state:
-    st.session_state.live_focus_streak = 0
-
-if "warning_summary" not in st.session_state:
-    st.session_state.warning_summary = {
-        "warning_count": 0,
-        "last_warning": "No warning yet",
-        "recent_events": []
-    }
-
-if "analysis_warning_triggered" not in st.session_state:
-    st.session_state.analysis_warning_triggered = False
-
-# ============================================================
-# Utility functions
-# ============================================================
-
-PHONE_KEYWORDS = [
-    "cell phone",
-    "mobile phone",
-    "phone",
-    "smartphone",
-    "cellphone",
-]
-
-def compute_phone_percentage(frames_with_phone, total_frames):
-    if total_frames == 0:
-        return 0.0
-    return (frames_with_phone / total_frames) * 100.0
-
-def get_focus_score(phone_percentage):
-    return max(0.0, min(100.0, 100.0 - phone_percentage))
-
-def get_alert_level(focus_score):
-    if focus_score >= 80:
-        return "Safe"
-    elif focus_score >= 55:
-        return "Warning"
-    return "Critical"
-
-def get_study_status(focus_score):
-    if focus_score >= 80:
-        return "Excellent focus"
-    elif focus_score >= 60:
-        return "Good focus"
-    elif focus_score >= 40:
-        return "Moderate distraction"
-    return "High distraction"
-
-def get_confidence_label(confidence):
-    if confidence >= 0.8:
-        return "High"
-    elif confidence >= 0.5:
-        return "Medium"
-    return "Low"
-
-def append_warning_log(log_list, message):
-    log_list.append({
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "message": message,
-    })
-    return log_list
-
-def generate_timeline(detection_flags):
-    return [
-        {"frame": idx, "phone_visible": 1 if flag else 0}
-        for idx, flag in enumerate(detection_flags)
-    ]
-
-def get_risk_band(focus_score):
-    if focus_score >= 80:
-        return "LOW RISK"
-    elif focus_score >= 60:
-        return "MEDIUM RISK"
-    elif focus_score >= 40:
-        return "HIGH RISK"
-    return "CRITICAL"
-
-def update_focus_streak(current_streak, phone_visible):
-    if phone_visible:
-        return 0
-    return current_streak + 1
-
-def build_session_summary(video_name, total_frames, phone_frames, phone_percentage, focus_score):
-    return {
-        "video_name": video_name,
-        "total_frames": int(total_frames),
-        "phone_frames": int(phone_frames),
-        "phone_percentage": round(float(phone_percentage), 2),
-        "focus_score": round(float(focus_score), 2),
-        "risk_band": get_risk_band(focus_score),
-        "status": get_study_status(focus_score)
-    }
-
-def update_session_snapshot(summary_dict):
-    if "session_snapshots" not in st.session_state:
-        st.session_state.session_snapshots = []
-
-    st.session_state.session_snapshots.append(summary_dict)
-    if len(st.session_state.session_snapshots) > 20:
-        st.session_state.session_snapshots = st.session_state.session_snapshots[-20:]
-
-def get_live_status(phone_detected):
-    if phone_detected:
-        return "PHONE DETECTED"
-    return "FOCUSED / NO PHONE"
-
-def compute_alert_snapshot(phone_percentage, focus_score):
-    return {
-        "phone_percentage": round(float(phone_percentage), 2),
-        "focus_score": round(float(focus_score), 2),
-        "risk_band": get_risk_band(focus_score),
-        "status": get_study_status(focus_score)
-    }
-
-def append_warning_summary(summary_dict, message):
-    summary_dict["warning_count"] += 1
-    summary_dict["last_warning"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    summary_dict["recent_events"].append({
-        "time": summary_dict["last_warning"],
-        "message": message
-    })
-    if len(summary_dict["recent_events"]) > 10:
-        summary_dict["recent_events"] = summary_dict["recent_events"][-10:]
-    return summary_dict
-
-def calculate_focus_streak_label(streak_value):
-    if streak_value >= 50:
-        return "Excellent focus streak"
-    elif streak_value >= 20:
-        return "Strong focus streak"
-    elif streak_value >= 5:
-        return "Steady focus"
-    return "Build focus streak"
-
-def load_report() -> pd.DataFrame:
     if not REPORT_FILE.exists() or REPORT_FILE.stat().st_size == 0:
         report_df = pd.DataFrame(columns=CSV_COLUMNS)
     else:
@@ -436,35 +242,26 @@ def load_report() -> pd.DataFrame:
         except pd.errors.EmptyDataError:
             report_df = pd.DataFrame(columns=CSV_COLUMNS)
 
+    # Ensure all required columns exist.
     for column in CSV_COLUMNS:
         if column not in report_df.columns:
             report_df[column] = pd.NA
 
+    # Convert report values to numeric types where appropriate.
     for column in NUMERIC_COLUMNS:
-        report_df[column] = pd.to_numeric(report_df[column], errors="coerce")
+        report_df[column] = pd.to_numeric(
+            report_df[column],
+            errors="coerce",
+        )
 
     return report_df[CSV_COLUMNS]
 
-def save_session_record(video_name, resolution, frames_processed, frames_with_phone, percentage, detections):
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    file_has_content = REPORT_FILE.exists() and REPORT_FILE.stat().st_size > 0
-
-    with REPORT_FILE.open("a", newline="", encoding="utf-8") as report_file:
-        writer = csv.writer(report_file)
-        if not file_has_content:
-            writer.writerow(CSV_COLUMNS)
-        writer.writerow([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            video_name,
-            resolution,
-            int(frames_processed),
-            int(frames_with_phone),
-            round(float(percentage), 2),
-            int(detections),
-        ])
 
 def create_pdf_report(analysis):
+    """Create a downloadable PDF report with statistics and a chart."""
+
     pdf_buffer = io.BytesIO()
+
     doc = SimpleDocTemplate(
         pdf_buffer,
         pagesize=A4,
@@ -485,15 +282,29 @@ def create_pdf_report(analysis):
     detections = int(analysis["detections"])
     focus_score = max(0.0, min(100.0, 100.0 - percentage))
 
-    safe_video_name = video_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    safe_video_name = (
+        video_name.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
 
-    story.append(Paragraph("AI Study Distraction Detector", styles["Title"]))
-    story.append(Paragraph("Study Session Report", styles["Heading2"]))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph(f"Report generated: {datetime.now().strftime('%d %B %Y, %I:%M %p')}", styles["Normal"]))
+    story.append(
+        Paragraph("AI Study Distraction Detector", styles["Title"])
+    )
+    story.append(
+        Paragraph("Study Session Report", styles["Heading2"])
+    )
     story.append(Spacer(1, 12))
 
-    table_data = [
+    story.append(
+        Paragraph(
+            f"Report generated: {datetime.now().strftime('%d %B %Y, %I:%M %p')}",
+            styles["Normal"],
+        )
+    )
+    story.append(Spacer(1, 12))
+
+    report_data = [
         ["Statistic", "Result"],
         ["Video", safe_video_name],
         ["Video Resolution", resolution],
@@ -504,7 +315,7 @@ def create_pdf_report(analysis):
         ["Phone-Free Score", f"{focus_score:.0f}/100"],
     ]
 
-    table = Table(table_data, colWidths=[230, 230], repeatRows=1)
+    table = Table(report_data, colWidths=[230, 230], repeatRows=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#24476B")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -517,406 +328,114 @@ def create_pdf_report(analysis):
 
     story.append(table)
     story.append(Spacer(1, 20))
-    story.append(Paragraph("Phone Visibility Chart", styles["Heading2"]))
+    story.append(
+        Paragraph("Phone Visibility Chart", styles["Heading2"])
+    )
 
     chart_buffer = io.BytesIO()
-    fig, ax = plt.subplots(figsize=(6, 3.2))
-    ax.bar(["Phone Visible", "Phone Not Detected"], [percentage, 100.0 - percentage])
-    ax.set_ylabel("Percentage (%)")
-    ax.set_ylim(0, 100)
-    ax.set_title("Analyzed Video Frames")
-    ax.grid(axis="y", alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(chart_buffer, format="png", dpi=160, bbox_inches="tight")
-    plt.close(fig)
+    figure, axis = plt.subplots(figsize=(6, 3.2))
+
+    axis.bar(
+        ["Phone Visible", "Phone Not Detected"],
+        [percentage, 100.0 - percentage],
+    )
+    axis.set_ylabel("Percentage (%)")
+    axis.set_ylim(0, 100)
+    axis.set_title("Analyzed Video Frames")
+    axis.grid(axis="y", alpha=0.25)
+
+    figure.tight_layout()
+    figure.savefig(
+        chart_buffer,
+        format="png",
+        dpi=160,
+        bbox_inches="tight",
+    )
+    plt.close(figure)
     chart_buffer.seek(0)
 
-    story.append(PDFImage(chart_buffer, width=6 * inch, height=3.2 * inch))
+    story.append(
+        PDFImage(chart_buffer, width=6 * inch, height=3.2 * inch)
+    )
     story.append(Spacer(1, 12))
-    story.append(Paragraph(
-        "<b>Interpretation:</b> The Phone-Free Score is calculated as 100 minus the phone-visible percentage. Phone visibility does not prove distraction; it is only a signal.",
-        styles["BodyText"],
-    ))
+
+    story.append(
+        Paragraph(
+            "<b>Interpretation:</b> The Phone-Free Score is calculated "
+            "as 100 minus the phone-visible percentage. Phone visibility "
+            "does not prove distraction, and this score is not a validated "
+            "measure of concentration or study quality.",
+            styles["BodyText"],
+        )
+    )
 
     doc.build(story)
     pdf_buffer.seek(0)
+
     return pdf_buffer.getvalue()
 
-# ============================================================
-# Alert audio functions
-# ============================================================
 
-ALERT_COOLDOWN = 20
 
-def play_female_warning(volume=0.8):
-    safe_volume = max(0.0, min(1.0, float(volume)))
-    message = "Attention! Phone detected! Please put your phone away and focus on studying!"
-    js = f"""
-    <script>
-    try {{
-        const speech = window.speechSynthesis;
-        if (speech) {{
-            speech.cancel();
-            const utterance = new SpeechSynthesisUtterance("{message}");
-            utterance.volume = {safe_volume};
-            utterance.rate = 0.9;
-            utterance.pitch = 1.15;
-            const voices = speech.getVoices();
-            const preferred = voices.find(v =>
-                /female|zira|samantha|aria|jenny|hazel/i.test((v.name || "") + " " + (v.voiceURI || ""))
-            );
-            if (preferred) utterance.voice = preferred;
-            speech.speak(utterance);
-        }}
-    }} catch (e) {{
-        console.log("Female warning failed:", e);
-    }}
-    </script>
-    """
-    components.html(js, height=0)
+def save_session(
+    video_name,
+    resolution,
+    frames_processed,
+    frames_with_phone,
+    percentage,
+    detections,
+):
+    """Append one completed analysis to the CSV report."""
 
-def play_warning_tone(mode="warning", volume=0.75):
-    vol = max(0.0, min(1.0, float(volume)))
-    configs = {
-        "siren": {
-            "pattern": [420, 520, 620, 760, 620, 520, 420],
-            "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60],
-            "type": "sawtooth",
-        },
-        "pulse": {
-            "pattern": [520, 560, 610, 660, 610, 560, 520, 450],
-            "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55],
-            "type": "triangle",
-        },
-        "sweep": {
-            "pattern": [390, 470, 560, 700, 560, 470, 390],
-            "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65],
-            "type": "sawtooth",
-        },
-        "bell": {
-            "pattern": [880, 770, 660, 770, 660, 560],
-            "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50],
-            "type": "triangle",
-        },
-        "warning": {
-            "pattern": [700, 760, 820, 760, 700, 680],
-            "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42],
-            "type": "sine",
-        },
-        "urgent": {
-            "pattern": [950, 900, 980, 900, 980, 860, 980, 820],
-            "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42],
-            "type": "square",
-        },
-        "digital": {
-            "pattern": [650, 720, 800, 860, 800, 720, 650],
-            "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28],
-            "type": "triangle",
-        },
-        "voice": {
-            "pattern": [430, 520, 610, 520, 610, 520, 430],
-            "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50],
-            "type": "sine",
-        },
-    }
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-    cfg = configs.get(mode, configs["warning"])
-    pattern = cfg["pattern"]
-    durations = cfg["durations"]
-    tone_type = cfg["type"]
-
-    js = f"""
-    <script>
-    (function() {{
-      try {{
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-        const vol = {vol};
-        const pattern = {json.dumps(pattern)};
-        const durations = {json.dumps(durations)};
-        const toneType = "{tone_type}";
-
-        pattern.forEach((freq, index) => {{
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-
-          osc.type = toneType;
-          osc.frequency.setValueAtTime(freq, now + index * 0.22);
-
-          const start = now + index * 0.22;
-          const duration = durations[index] || 0.35;
-          const peak = 0.08 + (index % 3) * 0.03;
-
-          gain.gain.setValueAtTime(0.0001, start);
-          gain.gain.linearRampToValueAtTime(vol * peak, start + 0.04);
-          gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-
-          osc.start(start);
-          osc.stop(start + duration + 0.04);
-        }});
-
-        setTimeout(() => {{
-          try {{ ctx.close(); }} catch (e) {{}}
-        }}, 7000);
-
-      }} catch (e) {{
-        console.log("Warning tone failed:", e);
-      }}
-    }})();
-    </script>
-    """
-    components.html(js, height=0)
-
-def speak_warning():
-    js = """
-    <script>
-    try {
-        const synth = window.speechSynthesis;
-        if (!synth) return;
-        synth.cancel();
-        const msg = new SpeechSynthesisUtterance("Attention! Phone detected. Please put your phone away and focus on studying.");
-        msg.volume = 0.9;
-        msg.rate = 0.9;
-        msg.pitch = 1.0;
-        synth.speak(msg);
-    } catch (e) {
-        console.log("Speech warning failed:", e);
-    }
-    </script>
-    """
-    components.html(js, height=0)
-
-# ============================================================
-# Alert UI
-# ============================================================
-
-alert_choice = st.selectbox(
-    "🔔 Choose Phone Alert Sound",
-    [
-        "1. Female Spoken Warning",
-        "2. Gentle Warning Siren",
-        "3. Deep Warning Pulse",
-        "4. Emergency Warning Sweep",
-        "5. Custom MP3/WAV File",
-        "6. Soft Warning Bell",
-        "7. Urgent Warning Tone",
-        "8. Warning Chime",
-        "9. Digital Warning Signal",
-        "10. Safety Warning Voice",
-    ],
-    key="phone_alert_choice_main",
-)
-
-alert_volume = st.slider(
-    "🔊 Alert Volume",
-    min_value=0,
-    max_value=100,
-    value=75,
-    step=5,
-    help="Controls the warning volume.",
-    key="phone_alert_volume_main",
-)
-
-volume_level = alert_volume / 100.0
-custom_audio = None
-custom_audio_type = None
-
-if alert_choice == "5. Custom MP3/WAV File":
-    uploaded_audio = st.file_uploader(
-        "Upload your warning sound",
-        type=["mp3", "wav"],
-        key="custom_phone_alert_audio_main",
+    file_has_content = (
+        REPORT_FILE.exists()
+        and REPORT_FILE.stat().st_size > 0
     )
-    if uploaded_audio is not None:
-        custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
-        custom_audio_type = uploaded_audio.type or "audio/mpeg"
 
-def play_custom_warning_audio():
-    if custom_audio is None:
-        st.info("Upload a custom MP3 or WAV file first.")
-        return
+    with REPORT_FILE.open(
+        "a",
+        newline="",
+        encoding="utf-8",
+    ) as report_file:
 
-    audio_html = f"""
-    <audio controls autoplay style="width:100%;">
-        <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
-        Your browser does not support this audio file.
-    </audio>
-    <script>
-    const player = document.querySelector("audio");
-    player.volume = {volume_level};
-    player.play().catch(() => {{
-        console.log("Custom warning autoplay blocked by browser.");
-    }});
-    </script>
-    """
-    components.html(audio_html, height=90)
+        writer = csv.writer(report_file)
 
-def show_phone_alert(preview=False):
-    if not preview:
-        st.warning("📱 Phone detected repeatedly! Please check whether you need your phone for studying.")
+        if not file_has_content:
+            writer.writerow(CSV_COLUMNS)
 
-    if alert_choice == "1. Female Spoken Warning":
-        play_female_warning(volume=volume_level)
-    elif alert_choice == "2. Gentle Warning Siren":
-        play_warning_tone("siren", volume=volume_level)
-    elif alert_choice == "3. Deep Warning Pulse":
-        play_warning_tone("pulse", volume=volume_level)
-    elif alert_choice == "4. Emergency Warning Sweep":
-        play_warning_tone("sweep", volume=volume_level)
-    elif alert_choice == "5. Custom MP3/WAV File":
-        play_custom_warning_audio()
-    elif alert_choice == "6. Soft Warning Bell":
-        play_warning_tone("bell", volume=volume_level)
-    elif alert_choice == "7. Urgent Warning Tone":
-        play_warning_tone("urgent", volume=volume_level)
-    elif alert_choice == "8. Warning Chime":
-        play_warning_tone("warning", volume=volume_level)
-    elif alert_choice == "9. Digital Warning Signal":
-        play_warning_tone("digital", volume=volume_level)
-    else:
-        play_warning_tone("voice", volume=volume_level)
+        writer.writerow([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            video_name,
+            resolution,
+            int(frames_processed),
+            int(frames_with_phone),
+            round(float(percentage), 2),
+            int(detections),
+        ])
 
-    fallback_html = """
-    <div style="margin-top: 12px;">
-        <button id="manual-warning-button"
-            style="padding: 10px 16px; background: #8b5cf6; color: white; border: none; border-radius: 10px; cursor: pointer;">
-            🔊 Play warning sound
-        </button>
-    </div>
-    <script>
-    document.getElementById("manual-warning-button")?.addEventListener("click", function() {
-        try {
-            const speech = window.speechSynthesis;
-            if (!speech) return;
-            speech.cancel();
-            const msg = new SpeechSynthesisUtterance("Attention! Attention! Phone detected! Please put your phone away and focus on studying!");
-            msg.volume = 0.8;
-            msg.rate = 0.9;
-            msg.pitch = 1.15;
-            speech.speak(msg);
-        } catch (e) {
-            console.log("Manual warning failed:", e);
-        }
-    });
-    </script>
-    """
-    components.html(fallback_html, height=70)
-
-if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
-    show_phone_alert(preview=True)
 
 # ============================================================
-# Object detection helpers
+# LOAD YOLO MODEL
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
-def get_model():
-    return load_yolo_model(str(ensure_model_exists()))
+def load_yolo_model(model_path):
+    """Load and cache the YOLO model."""
 
-def detect_phone_in_image(image):
-    model = get_model()
-    detections = []
-    confidence = 0.0
-
-    results = model.predict(image, imgsz=640, conf=0.18, verbose=False, max_det=20)
-    if not results or len(results) == 0:
-        return {"phone_detected": False, "phone_count": 0, "confidence": 0.0, "detections": detections}
-
-    result = results[0]
-    if result.boxes is None:
-        return {"phone_detected": False, "phone_count": 0, "confidence": 0.0, "detections": detections}
-
-    for box in result.boxes:
-        cls_id = int(box.cls[0].item())
-        class_name = model.names[cls_id] if not isinstance(model.names, dict) else model.names.get(cls_id, "")
-        class_name = str(class_name).strip().lower()
-        conf = float(box.conf[0].item())
-
-        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-            detections.append({
-                "class": class_name,
-                "confidence": conf,
-                "bbox": [x1, y1, x2, y2],
-            })
-            confidence = max(confidence, conf)
-
-    return {
-        "phone_detected": len(detections) > 0,
-        "phone_count": len(detections),
-        "confidence": float(confidence),
-        "detections": detections,
-    }
+    return YOLO(model_path)
 
 # ============================================================
-# Live detection using camera capture
+# VIDEO ANALYSIS
 # ============================================================
 
-st.divider()
-st.subheader("📷 Live Camera Detection")
-st.caption("Use your camera and let the app detect whether a phone is visible.")
-
-live_image = st.camera_input("Camera", key="live_camera_input")
-
-if live_image is not None:
-    frame = np.array(live_image)
-    live_result = detect_phone_in_image(frame)
-
-    st.session_state.live_phone_detected = live_result["phone_detected"]
-    st.session_state.live_status = get_live_status(live_result["phone_detected"])
-    st.session_state.live_focus_streak = update_focus_streak(
-        st.session_state.live_focus_streak,
-        live_result["phone_detected"]
-    )
-
-    if live_result["phone_detected"]:
-        if time.time() - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
-            st.session_state.last_live_warning_time = time.time()
-            st.session_state.live_warning_triggered = True
-            st.session_state.last_warning_reason = "Phone detected in live camera"
-            st.session_state.warning_summary = append_warning_summary(
-                st.session_state.warning_summary,
-                st.session_state.last_warning_reason
-            )
-            show_phone_alert(preview=False)
-    else:
-        st.session_state.live_warning_triggered = False
-
-    live_risk = 100.0 if not live_result["phone_detected"] else max(0.0, 100.0 - 60.0)
-    live_risk_band = get_risk_band(live_risk)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Live Status", st.session_state.live_status)
-    col2.metric("Focus Streak", st.session_state.live_focus_streak)
-    col3.metric("Risk Level", live_risk_band)
-
-    st.progress(min(1.0, live_risk / 100.0))
-    st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
-
-    if live_result["phone_detected"]:
-        st.error("📱 Phone detected in live camera. Please put it away.")
-    else:
-        st.success("✅ No phone detected in live camera.")
-
-# ============================================================
-# Video analysis
-# ============================================================
 
 def analyze_video(uploaded_file):
+    """Sample every fifth frame and report phone detections and video-quality indicators."""
     temp_path = None
     capture = None
-    warning_log = []
-
-    try:
-        resolved_model_path = ensure_model_exists()
-    except FileNotFoundError as exc:
-        st.error(str(exc))
+    if not MODEL_FILE.exists():
+        st.error("Missing yolo11n.pt. Place it beside dashboard.py.")
         return None
 
     try:
@@ -934,127 +453,243 @@ def analyze_video(uploaded_file):
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = float(capture.get(cv2.CAP_PROP_FPS))
-
         if width <= 0 or height <= 0:
             st.error("Video dimensions could not be read. Try another video.")
             return None
+        duration = total_frames / fps if fps > 0 and total_frames > 0 else None
+        quality_warnings = []
+        if min(width, height) < 480:
+            quality_warnings.append("Low resolution: small or distant phones may be missed.")
+        if fps <= 0:
+            quality_warnings.append("Frame rate unavailable: timeline timestamps may be missing.")
+        elif fps < 10:
+            quality_warnings.append("Low frame rate: short phone appearances may be missed.")
+        if duration is not None and duration < 5:
+            quality_warnings.append("Very short video (under 5 seconds): results may not represent a session.")
 
-        model = load_yolo_model(str(resolved_model_path))
+        with st.spinner("Loading AI model..."):
+            model = load_yolo_model(str(MODEL_FILE))
 
-        sampled_frames = 0
-        frames_with_phone = 0
-        total_detections = 0
+        sampled_frames = frames_with_phone = total_detections = 0
+
+        # Desk Clutter Counter
         object_counts = {}
-        detection_confidences = []
-        detection_flags = []
+        consecutive_phone_frames = 0
+        last_alert_time = -ALERT_COOLDOWN
+        alert_events = 0
+        frame_index = 0
+        timeline = []
+        confidence_values = []
+        blur_values = []
+        last_annotated_rgb = None
+        best_phone_frame_rgb = None
+        best_phone_confidence = -1.0
         progress = st.progress(0.0)
         status = st.empty()
-        last_alert_time = 0.0
-        phone_frame_counter = 0
+        # LIVE AI DETECTION DISPLAY
+        st.subheader("🔴 Live AI Detection")
 
+        live_video = st.empty()
+
+        live_col1, live_col2, live_col3, live_col4 = st.columns(4)
+
+        live_frame_metric = live_col1.empty()
+        live_phone_frames_metric = live_col2.empty()
+        live_detections_metric = live_col3.empty()
+        live_visibility_metric = live_col4.empty()
         while True:
             success, frame = capture.read()
             if not success:
                 break
+            if frame_index % 5 == 0:
+                sampled_frames += 1
+                # Laplacian variance is a rough blur indicator, not a definitive quality test.
+                if len(blur_values) < 30:
+                    small = cv2.resize(frame, (min(width, 640), min(height, 360)))
+                    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                    blur_values.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
 
-            if sampled_frames % 5 == 0:
-                prediction = model.predict(source=frame, imgsz=640, conf=0.12, verbose=False, max_det=20)[0]
-                phone_count = 0
+                prediction = model.predict(source=frame, imgsz=640, conf=0.25, verbose=False)[0]
+                
+                annotated = frame.copy()
+                phones_in_frame = 0
+                frame_best_confidence = -1.0
 
                 if prediction.boxes is not None:
                     for box in prediction.boxes:
-                        cls_id = int(box.cls[0].item())
-                        class_name = (
-                            model.names[cls_id]
-                            if not isinstance(model.names, dict)
-                            else model.names.get(cls_id, "")
+                        class_id = int(box.cls[0].item())
+
+                        if isinstance(model.names, dict):
+                            class_name = model.names.get(
+                                class_id, "Unknown"
+                            )
+                        else:
+                            class_name = model.names[class_id]
+
+                       
+                        class_name = str(class_name).strip()
+
+                        # Count every object class recognized by YOLO.
+                        object_counts[class_name] = (
+                            object_counts.get(class_name, 0) + 1
                         )
-                        class_name = str(class_name).strip().lower()
-                        object_counts[class_name] = object_counts.get(class_name, 0) + 1
 
-                        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                            phone_count += 1
+                        confidence = float(box.conf[0].item())
+
+                        x1, y1, x2, y2 = [
+                            int(v) for v in box.xyxy[0].tolist()
+                        ]
+
+                        is_phone = class_name.lower() in (
+                            "cell phone",
+                            "mobile phone",
+                        )
+
+                        if is_phone:
+                            box_color = (0, 210, 0)
+                            label_name = "Phone"
+
+                            confidence_values.append(confidence)
+                            phones_in_frame += 1
                             total_detections += 1
-                            detection_confidences.append(float(box.conf[0].item()))
 
-                if phone_count > 0:
+                            frame_best_confidence = max(
+                                frame_best_confidence,
+                                confidence,
+                            )
+                        else:
+                            box_color = (255, 120, 0)
+                            label_name = class_name.title()
+
+                        # Draw a box around the detected object.
+                        cv2.rectangle(
+                            annotated,
+                            (x1, y1),
+                            (x2, y2),
+                            box_color,
+                            3,
+                        )
+
+                        # Show the object name and confidence.
+                        label = f"{label_name} {confidence:.0%}"
+
+                        cv2.putText(
+                            annotated,
+                            label,
+                            (x1, max(22, y1 - 9)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            box_color,
+                            2,
+                            cv2.LINE_AA,
+                        )
+
+                phone_found = phones_in_frame > 0
+                if phone_found:
                     frames_with_phone += 1
-                    phone_frame_counter += 1
-                    detection_flags.append(True)
-                    warning_log = append_warning_log(warning_log, "Phone detected in sampled frame")
+                    consecutive_phone_frames += 1
                 else:
-                    phone_frame_counter = 0
-                    detection_flags.append(False)
+                    consecutive_phone_frames = 0
 
-                current_time = time.monotonic()
-                if phone_frame_counter >= 3 and current_time - last_alert_time >= ALERT_COOLDOWN:
-                    last_alert_time = current_time
-                    st.session_state.last_warning_reason = "Phone detected in video analysis"
-                    st.session_state.warning_summary = append_warning_summary(
-                        st.session_state.warning_summary,
-                        st.session_state.last_warning_reason
+                elapsed_seconds = frame_index / fps if fps > 0 else None
+                timeline.append({
+                    "frame": frame_index,
+                    "seconds": elapsed_seconds,
+                    "phone_visible": int(phone_found),
+                    "phone_detections": phones_in_frame,
+                    "max_confidence": frame_best_confidence if phone_found else None,
+                })
+
+                if consecutive_phone_frames >= REQUIRED_CONSECUTIVE_DETECTIONS:
+                    current_time = frame_index / fps if fps > 0 else sampled_frames / 5
+                    if current_time - last_alert_time >= ALERT_COOLDOWN:
+                        alert_events += 1
+                        last_alert_time = current_time
+                        consecutive_phone_frames = 0
+
+                
+                annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+                last_annotated_rgb = annotated_rgb
+
+                # Update the live annotated video frame.
+                if live_video is not None:
+                    live_video.image(
+                        annotated_rgb,
+                        caption=f"Analysing video frame {frame_index + 1}",
+                        use_container_width=True,
                     )
-                    show_phone_alert(preview=False)
 
+                # Update live phone-detection statistics.
+                current_visibility = (
+                    frames_with_phone / sampled_frames * 100
+                    if sampled_frames > 0
+                    else 0.0
+                )
+
+                live_frame_metric.metric(
+                    "Frames Analysed",
+                    f"{sampled_frames:,}",
+                )
+                live_phone_frames_metric.metric(
+                    "Frames With Phone",
+                    f"{frames_with_phone:,}",
+                )
+                live_detections_metric.metric(
+                    "Phone Detections",
+                    f"{total_detections:,}",
+                )
+                live_visibility_metric.metric(
+                    "Phone Visible",
+                    f"{current_visibility:.1f}%",
+                )
+
+                if phone_found and frame_best_confidence > best_phone_confidence:
+                    best_phone_confidence = frame_best_confidence
+                    best_phone_frame_rgb = annotated_rgb.copy()
+
+                status.write(f"Analyzed {sampled_frames} sampled frames. Phone detections: {total_detections}")
                 if total_frames > 0:
-                    progress.progress(min((sampled_frames + 1) / total_frames, 1.0))
-                status.write(f"Analyzed {sampled_frames + 1} sampled frames...")
+                    progress.progress(min((frame_index + 1) / total_frames, 1.0))
+            frame_index += 1
 
-            sampled_frames += 1
-
-        phone_percentage = compute_phone_percentage(frames_with_phone, sampled_frames)
-        focus_score = get_focus_score(phone_percentage)
-        alert_level = get_alert_level(focus_score)
-        average_confidence = float(np.mean(detection_confidences)) if detection_confidences else 0.0
-        highest_confidence = float(np.max(detection_confidences)) if detection_confidences else 0.0
-        warning_count = len(warning_log)
-
-        summary = build_session_summary(
-            uploaded_file.name,
-            sampled_frames,
-            frames_with_phone,
-            phone_percentage,
-            focus_score
-        )
-        update_session_snapshot(summary)
-
-        result = {
+        if sampled_frames == 0:
+            st.error("No readable frames were found in this video.")
+            return None
+        if sampled_frames < 5:
+            quality_warnings.append("Too few sampled frames for a meaningful comparison.")
+        mean_blur = sum(blur_values) / len(blur_values) if blur_values else None
+        if mean_blur is not None and mean_blur < 35:
+            quality_warnings.append("Possible blur or low image detail detected; verify the video visually.")
+        if width >= 3840 or height >= 2160:
+            quality_warnings.append("High-resolution video: analysis is resized to 640 pixels for YOLO, so tiny phones may be missed.")
+        progress.progress(1.0)
+        status.write("Video analysis completed.")
+        percentage = frames_with_phone / sampled_frames * 100
+        return {
+            "alert_events": alert_events,
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
             "frames_processed": sampled_frames,
             "frames_with_phone": frames_with_phone,
-            "percentage": round(float(phone_percentage), 2),
+            "percentage": round(percentage, 2),
             "detections": total_detections,
-            "focus_score": focus_score,
-            "alert_level": alert_level,
-            "average_confidence": average_confidence,
-            "highest_confidence": highest_confidence,
-            "warnings": warning_log,
-            "warning_count": warning_count,
-            "timeline": generate_timeline(detection_flags),
-            "object_counts": object_counts,
-            "total_object_detections": sum(object_counts.values()),
-            "unique_object_classes": len(object_counts),
-            "study_status": get_study_status(focus_score),
-            "risk_band": get_risk_band(focus_score),
-            "alert_snapshot": compute_alert_snapshot(phone_percentage, focus_score),
+            "annotated_frame_rgb": best_phone_frame_rgb if best_phone_frame_rgb is not None else last_annotated_rgb,
+            "timeline": timeline,
+            "fps": fps,
+            "duration": duration,
+            "quality_warnings": quality_warnings,
+            "mean_blur": mean_blur,
+            "average_confidence": sum(confidence_values) / len(confidence_values) if confidence_values else None,
+            "highest_confidence": max(confidence_values) if confidence_values else None,
+            "detection_threshold": 0.25,
+            "object_counts": dict(object_counts),
+"total_object_detections": sum(object_counts.values()),
+"unique_object_classes": len(object_counts),
+            "has_phone_example": best_phone_frame_rgb is not None,
         }
-
-        if result["warning_count"] > 0 and not st.session_state.analysis_warning_triggered:
-            st.session_state.analysis_warning_triggered = True
-            st.session_state.last_warning_reason = "Phone detected in video analysis"
-            st.session_state.warning_summary = append_warning_summary(
-                st.session_state.warning_summary,
-                st.session_state.last_warning_reason
-            )
-            show_phone_alert(preview=False)
-
-        return result
-
     except Exception as error:
         st.error(f"Video analysis failed: {error}")
         return None
-
     finally:
         if capture is not None:
             capture.release()
@@ -1064,87 +699,141 @@ def analyze_video(uploaded_file):
             except OSError:
                 pass
 
+
 # ============================================================
-# Dashboard summary
+# DASHBOARD SUMMARY AND CHARTS
 # ============================================================
 
 st.divider()
 st.subheader("📊 Study Session Dashboard")
-st.caption("Quick overview of completed analysis sessions.")
 
 report_df = load_report()
 
 if report_df.empty:
-    st.info("No completed sessions yet. Upload a study video to see the dashboard results.")
+    st.info(
+        "No completed sessions yet. Analyze a video to see "
+        "your statistics and charts here."
+    )
 else:
     total_sessions = len(report_df)
-    total_frames = int(report_df["Frames Processed"].fillna(0).sum())
-    total_detections = int(report_df["Total Phone Detections"].fillna(0).sum())
-    average_visibility = report_df["Phone Visible Percentage"].dropna().mean()
+    total_frames = int(
+        report_df["Frames Processed"].fillna(0).sum()
+    )
+    total_detections = int(
+        report_df["Total Phone Detections"].fillna(0).sum()
+    )
+    average_visibility = (
+        report_df["Phone Visible Percentage"].dropna().mean()
+    )
 
     col1, col2, col3, col4 = st.columns(4)
+
     col1.metric("Sessions Analyzed", total_sessions)
     col2.metric("Frames Processed", f"{total_frames:,}")
     col3.metric("Phone Detections", f"{total_detections:,}")
-    col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A")
+
+    if pd.notna(average_visibility):
+        col4.metric(
+            "Average Phone Visibility",
+            f"{average_visibility:.1f}%",
+        )
+    else:
+        col4.metric("Average Phone Visibility", "N/A")
+
+    st.subheader("📱 Phone Visibility Overview")
+
+    if pd.notna(average_visibility):
+        phone_visible = max(
+            0.0, min(float(average_visibility), 100.0)
+        )
+
+        pie_df = pd.DataFrame({
+            "Category": ["Phone Visible", "Phone Not Detected"],
+            "Percentage": [
+                phone_visible,
+                100.0 - phone_visible,
+            ],
+        })
+
+        st.caption(
+            "This chart shows average phone visibility across "
+            "analyzed sessions, not a measure of attention."
+        )
+
+        st.plotly_chart(
+            __import__("plotly.express", fromlist=["express"]).pie(
+                pie_df,
+                names="Category",
+                values="Percentage",
+                title="Average Phone Visibility",
+            ),
+            use_container_width=True,
+        )
 
     st.subheader("📈 Session Comparison")
-    chart_df = report_df[["Video", "Phone Visible Percentage"]].dropna()
+
+    chart_df = report_df[
+        ["Video", "Phone Visible Percentage"]
+    ].dropna()
+
     if not chart_df.empty:
         chart_df = chart_df.rename(columns={
             "Video": "Study Video",
             "Phone Visible Percentage": "Phone Visibility (%)",
         })
-        st.bar_chart(chart_df.set_index("Study Video"))
+
+        st.bar_chart(
+            chart_df.set_index("Study Video")
+        )
     else:
-        st.info("No visibility data yet.")
+        st.info("No visibility percentages are available yet.")
 
     st.subheader("📋 Session History")
     st.dataframe(report_df, use_container_width=True)
 
     csv_data = report_df.to_csv(index=False).encode("utf-8")
+
     st.download_button(
         "Download Session Report (CSV)",
         data=csv_data,
         file_name="session_summary.csv",
         mime="text/csv",
-        key="download_csv_summary_main",
     )
 
-st.subheader("🧾 Recent Warning Summary")
-warning_summary = st.session_state.warning_summary
-st.write(f"Total warnings: {warning_summary['warning_count']}")
-st.write(f"Last warning: {warning_summary['last_warning']}")
 
-if warning_summary["recent_events"]:
-    warning_df = pd.DataFrame(warning_summary["recent_events"])
-    st.dataframe(warning_df, use_container_width=True)
-else:
-    st.info("No warnings yet.")
+st.caption(
+    "Class 12 AI Project | Phone visibility analysis only; "
+    "not a validated attention measurement."
+)
+
 
 # ============================================================
-# Video upload section
+# VIDEO UPLOAD AND ANALYSIS
 # ============================================================
 
 st.divider()
-st.subheader("🎬 AI Video Analysis")
-st.caption("Upload a study video to measure phone visibility during the session.")
+st.subheader("AI Video Analysis")
+
+st.write(
+    "Upload a recorded study-session video (MP4, MOV, or AVI), "
+    "then click Start AI Detection."
+)
 
 uploaded_video = st.file_uploader(
     "Choose a study video",
     type=["mp4", "mov", "avi"],
-    key="uploaded_video_main",
 )
 
 if uploaded_video is not None:
     st.video(uploaded_video)
 
-    if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
-        st.session_state.analysis_warning_triggered = False
+    if st.button("Start AI Detection", type="primary"):
+
         analysis_result = analyze_video(uploaded_video)
+
         if analysis_result is not None:
             try:
-                save_session_record(
+                save_session(
                     analysis_result["video_name"],
                     analysis_result["resolution"],
                     analysis_result["frames_processed"],
@@ -1152,111 +841,202 @@ if uploaded_video is not None:
                     analysis_result["percentage"],
                     analysis_result["detections"],
                 )
+
                 st.session_state["last_analysis"] = analysis_result
-                st.success("Analysis completed and saved to the report.")
+                st.session_state["pending_alert"] = analysis_result.get("alert_events", 0) > 0
+
+                st.success(
+                    "Analysis completed and session results "
+                    "were saved to the report."
+                )
+
+                # Refresh the dashboard with the new report.
+                st.rerun()
             except Exception as error:
-                st.error(f"The analysis finished, but the report could not be saved: {error}")
+                st.error(
+                    "The analysis finished, but the report "
+                    f"could not be saved: {error}" 
+                )
+
 
 # ============================================================
-# Final results
+# DISPLAY LAST ANALYZED FRAME AND RESULTS
 # ============================================================
+
+if st.session_state.pop("pending_alert", False):
+    st.subheader("🔔 Phone detection warning")
+    show_phone_alert()
+    st.caption("The warning was triggered during the recording analysis. Browser autoplay settings may require pressing Play.")
 
 if "last_analysis" in st.session_state:
     saved_analysis = st.session_state["last_analysis"]
+    saved_frame = saved_analysis.get("annotated_frame_rgb")
 
     st.divider()
-    st.subheader("📈 Detection Results")
+    st.subheader("📸 Example Frame with Phone Detection")
 
-    focus_score = saved_analysis["focus_score"]
-    phone_percentage = saved_analysis["percentage"]
-    snapshot = compute_alert_snapshot(phone_percentage, focus_score)
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Focus Score", f"{focus_score:.1f}%")
-    col2.metric("Phone Visibility", f"{phone_percentage:.1f}%")
-    col3.metric("Risk Band", snapshot["risk_band"])
-    col4.metric("Study Status", snapshot["status"])
-
-    st.subheader("📉 Distraction Timeline")
-    timeline_df = pd.DataFrame(saved_analysis["timeline"])
-    if not timeline_df.empty:
-        fig = px.line(
-            timeline_df,
-            x="frame",
-            y="phone_visible",
-            title="Phone visibility across sampled frames",
-            markers=True,
-            range_y=[0, 1.2],
+    if saved_frame is not None:
+        st.image(
+            saved_frame,
+            caption=f"Phone-detection example from {saved_analysis['video_name']}",
+            use_container_width=True,
         )
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
-        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No timeline is available yet.")
+        st.info("No analyzed frame is available for display.")
 
-    st.subheader("🔒 Warning Log")
-    warnings = saved_analysis.get("warnings", [])
-    if warnings:
-        warning_df = pd.DataFrame(warnings)
-        st.dataframe(warning_df, use_container_width=True)
-    else:
-        st.info("No warnings were recorded.")
-
-    st.subheader("🎯 Confidence and Quality")
+    
+    st.caption(
+        "This preview shows the sampled frame with the highest-confidence phone detection "
+        "(or the last sampled frame if no phone was detected). Green boxes mark phone detections only."
+    )
+    st.subheader("🔎 Detection Confidence and Video Quality")
+    average_confidence = saved_analysis.get("average_confidence")
+    highest_confidence = saved_analysis.get("highest_confidence")
     confidence_col1, confidence_col2, confidence_col3 = st.columns(3)
-    confidence_col1.metric("Average Confidence", f"{saved_analysis.get('average_confidence', 0):.1%}")
-    confidence_col2.metric("Highest Confidence", f"{saved_analysis.get('highest_confidence', 0):.1%}")
-    confidence_col3.metric("Warning Count", saved_analysis.get("warning_count", 0))
+    confidence_col1.metric("Detection threshold", f"{saved_analysis.get('detection_threshold', 0.25):.0%}")
+    confidence_col2.metric("Average phone confidence", f"{average_confidence:.1%}" if average_confidence is not None else "N/A")
+    confidence_col3.metric("Highest phone confidence", f"{highest_confidence:.1%}" if highest_confidence is not None else "N/A")
+    st.caption("Confidence is the model's score for each detected phone, not a guarantee of correctness. N/A means no phone detections met the threshold.")
+    warnings = saved_analysis.get("quality_warnings", [])
+    if warnings:
+        for warning in warnings:
+            st.warning(warning)
+    else:
+        st.success("No obvious technical video-quality warnings from the basic checks. This does not guarantee accurate detection.")
+    duration = saved_analysis.get("duration")
+    st.write(f"Video: {saved_analysis['resolution']} | " + (f"Duration: {duration:.1f} seconds" if duration is not None else "Duration unavailable"))
 
-    st.subheader("🧮 Object Counter")
+    st.subheader("📊 Detection Results")
+
+
+
+    # =====================================
+    # DESK CLUTTER COUNTER
+    # =====================================
+
+    st.divider()
+    st.subheader("🧮 Desk Clutter Counter")
+
     object_counts = saved_analysis.get("object_counts", {})
+
+    clutter_col1, clutter_col2 = st.columns(2)
+
+    clutter_col1.metric(
+        "Total Object Detections",
+        f"{saved_analysis.get('total_object_detections', 0):,}",
+    )
+
+    clutter_col2.metric(
+        "Unique Object Classes",
+        saved_analysis.get("unique_object_classes", 0),
+    )
+
     if object_counts:
         clutter_df = pd.DataFrame(
             [
-                {"Object Class": name.title(), "Detection Count": count}
-                for name, count in sorted(object_counts.items(), key=lambda item: item[1], reverse=True)
+                {
+                    "Object Class": name.title(),
+                    "Detection Count": count,
+                }
+                for name, count in sorted(
+                    object_counts.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
             ]
         )
-        st.dataframe(clutter_df, use_container_width=True, hide_index=True)
-        st.bar_chart(clutter_df.set_index("Object Class"))
-    else:
-        st.info("No objects were detected in the sampled frames.")
 
-    st.subheader("📦 Session Snapshot")
-    session_snapshots = st.session_state.get("session_snapshots", [])
-    if session_snapshots:
-        snapshot_df = pd.DataFrame(session_snapshots)
-        st.dataframe(snapshot_df, use_container_width=True)
-    else:
-        st.info("No session snapshots saved yet.")
+        st.dataframe(
+            clutter_df,
+            use_container_width=True,
+            hide_index=True,
+        )
 
-    pdf_data = create_pdf_report(saved_analysis)
-    st.download_button(
-        "Download PDF Report",
-        data=pdf_data,
-        file_name="study_session_report.pdf",
-        mime="application/pdf",
-        key="download_pdf_report_main",
+        st.bar_chart(
+            clutter_df.set_index("Object Class")
+        )
+    else:
+        st.info("No objects were detected in the analyzed frames.")
+
+    st.caption(
+        "Counts represent detections across sampled frames. "
+        "The same object may be counted repeatedly, so these are "
+        "not counts of unique physical objects or a validated measure "
+        "of desk clutter."
     )
 
-# ============================================================
-# Timer
-# ============================================================
+    # =====================================
+    # STUDY FOCUS SCORE
+    # =====================================
+
+    sampled_frames = saved_analysis["frames_processed"]
+    phone_frames = saved_analysis["frames_with_phone"]
+    percentage = saved_analysis["percentage"]
+
+    focus_score = max(
+        0.0,
+        min(100.0, 100.0 - percentage),
+    )
+
+    st.divider()
+    st.subheader("🎯 Study Focus Score")
+
+    score_col1, score_col2 = st.columns(2)
+
+    score_col1.metric(
+        "Study Focus Score",
+        f"{focus_score:.0f}/100",
+    )
+
+    score_col2.metric(
+        "Phone Visible in Analyzed Frames",
+        f"{percentage:.1f}%",
+    )
+
+    st.progress(int(round(focus_score)))
+
+    st.markdown("**How is the score calculated?**")
+
+    st.write(
+        "Study Focus Score = 100 − Phone Visible Percentage"
+    )
+
+    st.write(
+        f"Your video had a phone visible in "
+        f"{phone_frames:,} out of {sampled_frames:,} "
+        f"analyzed frames."
+    )
+
+    st.write(
+        f"Calculation: 100 − {percentage:.1f} "
+        f"= {focus_score:.1f}/100."
+    )
+
+    st.caption(
+        "This is a phone-visibility-based indicator, not a "
+        "measured attention or concentration score. A phone "
+        "may be used for studying, and the AI may miss or "
+        "misidentify phones."
+    )
+
+
+# =====================================
+# STUDY SESSION TIMER UI
+# =====================================
 
 st.divider()
 st.subheader("⏱️ Study Session Timer")
-st.caption("Use the timer to manage a focused study block.")
 
 duration_options = [25, 45, 60]
+
 selected_duration = st.selectbox(
-    "Choose study duration (minutes)",
+    "Choose your study duration (minutes)",
     duration_options,
-    index=duration_options.index(st.session_state.study_timer_duration),
+    index=duration_options.index(
+        st.session_state.study_timer_duration
+    ),
     disabled=st.session_state.study_timer_running,
-    key="study_timer_duration_selector_main",
+    key="study_timer_duration_selector",
 )
 
 if selected_duration != st.session_state.study_timer_duration:
@@ -1269,9 +1049,15 @@ if selected_duration != st.session_state.study_timer_duration:
 total_seconds = st.session_state.study_timer_duration * 60
 
 if st.session_state.study_timer_running:
-    elapsed_seconds = st.session_state.study_timer_elapsed_before_pause + time.monotonic() - st.session_state.study_timer_started_at
+    elapsed_seconds = (
+        st.session_state.study_timer_elapsed_before_pause
+        + time.monotonic()
+        - st.session_state.study_timer_started_at
+    )
 else:
-    elapsed_seconds = st.session_state.study_timer_elapsed_before_pause
+    elapsed_seconds = (
+        st.session_state.study_timer_elapsed_before_pause
+    )
 
 elapsed_seconds = min(elapsed_seconds, total_seconds)
 remaining_seconds = max(0, total_seconds - elapsed_seconds)
@@ -1282,79 +1068,242 @@ if remaining_seconds <= 0:
 
 elapsed_minutes = int(elapsed_seconds) // 60
 elapsed_remainder = int(elapsed_seconds) % 60
+
 remaining_minutes = int(remaining_seconds) // 60
 remaining_remainder = int(remaining_seconds) % 60
 
 timer_col1, timer_col2 = st.columns(2)
-timer_col1.metric("Elapsed Study Time", f"{elapsed_minutes:02d}:{elapsed_remainder:02d}")
-timer_col2.metric("Time Remaining", f"{remaining_minutes:02d}:{remaining_remainder:02d}")
 
-st.progress(min(1.0, elapsed_seconds / total_seconds))
+timer_col1.metric(
+    "Elapsed Study Time",
+    f"{elapsed_minutes:02d}:{elapsed_remainder:02d}",
+)
+
+timer_col2.metric(
+    "Time Remaining",
+    f"{remaining_minutes:02d}:{remaining_remainder:02d}",
+)
+
+st.progress(
+    min(1.0, elapsed_seconds / total_seconds)
+)
 
 button_col1, button_col2, button_col3 = st.columns(3)
 
 with button_col1:
     if st.button(
         "▶️ Start / Resume",
-        disabled=(st.session_state.study_timer_running or st.session_state.study_timer_finished),
-        key="study_timer_start_main",
+        disabled=(
+            st.session_state.study_timer_running
+            or st.session_state.study_timer_finished
+        ),
+        key="study_timer_start",
     ):
         st.session_state.study_timer_started_at = time.monotonic()
         st.session_state.study_timer_running = True
+        st.rerun()
 
 with button_col2:
     if st.button(
         "⏸️ Pause",
         disabled=not st.session_state.study_timer_running,
-        key="study_timer_pause_main",
+        key="study_timer_pause",
     ):
         st.session_state.study_timer_elapsed_before_pause = elapsed_seconds
         st.session_state.study_timer_running = False
         st.session_state.study_timer_started_at = None
+        st.rerun()
 
 with button_col3:
-    if st.button("🔄 Reset", key="study_timer_reset_main"):
+    if st.button(
+        "🔄 Reset",
+        key="study_timer_reset",
+    ):
         st.session_state.study_timer_running = False
         st.session_state.study_timer_started_at = None
         st.session_state.study_timer_elapsed_before_pause = 0.0
         st.session_state.study_timer_finished = False
+        st.rerun()
 
 if st.session_state.study_timer_finished:
     st.success("🎉 Study session completed! Take a short break.")
+
 elif st.session_state.study_timer_running:
     st.info("Your study timer is running.")
+    time.sleep(1)
+    st.rerun()
 
-# ============================================================
-# About section
-# ============================================================
+st.caption(
+    "The timer tracks your study session independently of video analysis. "
+    "Recorded-video statistics and live camera monitoring are separate."
+)
+
+
+# =====================================
+# DISTRACTION TIMELINE
+# =====================================
 
 st.divider()
-st.header("ℹ️ About the Project")
-st.markdown("Learn what the prototype does, how it works, and how to interpret the results.")
+st.subheader("📍 Distraction Timeline")
 
-about1, about2, about3 = st.columns(3)
-with about1:
-    st.markdown(
-        '<div class="info-card"><h3>🎯 Project objective</h3><p>Identify visible mobile phones in study-session videos and summarize distraction patterns.</p></div>',
-        unsafe_allow_html=True,
-    )
-with about2:
-    st.markdown(
-        '<div class="info-card"><h3>🧠 AI workflow</h3><p>OpenCV reads frames, the YOLO model runs object detection, and the dashboard summarizes phone visibility over time.</p></div>',
-        unsafe_allow_html=True,
-    )
-with about3:
-    st.markdown(
-        '<div class="info-card"><h3>📊 Results and reports</h3><p>Focus score, warning log, CSV history, and downloadable PDF help explain the outcomes clearly.</p></div>',
-        unsafe_allow_html=True,
+saved_analysis = st.session_state.get("last_analysis")
+
+if saved_analysis is None:
+    st.info("Analyze a video first to view its distraction timeline and download the report.")
+
+else:
+    timeline_data = saved_analysis.get("timeline", [])
+    timeline_df = pd.DataFrame(timeline_data)
+
+    if (
+        not timeline_df.empty
+        and "seconds" in timeline_df.columns
+        and timeline_df["seconds"].notna().any()
+    ):
+        chart_df = timeline_df.dropna(subset=["seconds"]).copy()
+        chart_df["Time (seconds)"] = chart_df["seconds"]
+
+        st.write(
+            "This chart shows phone detections over video time. "
+            "A value of 1 means a phone was detected in that sampled "
+            "frame; 0 means no phone was detected."
+        )
+
+        chart_df = chart_df.set_index("Time (seconds)")[["phone_visible"]]
+        chart_df.columns = ["Phone detected (1 = yes, 0 = no)"]
+
+        st.line_chart(chart_df)
+
+        detection_df = timeline_df[
+            timeline_df["phone_visible"] == 1
+        ].copy()
+
+        if not detection_df.empty:
+            detection_df["Timestamp"] = detection_df["seconds"].apply(
+                lambda value: (
+                    f"{int(value // 60):02d}:"
+                    f"{value % 60:05.2f}"
+                )
+            )
+
+            if "max_confidence" in detection_df.columns:
+                detection_df["Confidence"] = detection_df["max_confidence"].apply(
+                    lambda value: f"{value:.1%}" if pd.notna(value) else "N/A"
+                )
+            event_columns = ["Timestamp", "frame", "phone_detections"]
+            if "Confidence" in detection_df.columns:
+                event_columns.append("Confidence")
+            detection_df = detection_df[event_columns].rename(
+                columns={
+                    "frame": "Video Frame Number",
+                    "phone_detections": "Phones Detected",
+                }
+            )
+
+            st.markdown("**Phone Detection Events**")
+            st.dataframe(
+                detection_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.success("No phone was detected in the sampled frames.")
+
+        st.caption(
+            "The detector analyzes sampled video frames, so brief phone "
+            "appearances may be missed. Phone visibility does not prove "
+            "distraction."
+        )
+
+    elif timeline_data:
+        st.warning("The video did not provide usable timestamps.")
+    else:
+        st.info("No timeline data is available. Analyze a video again.")
+
+    st.divider()
+    st.subheader("📄 Downloadable Session Report")
+
+    pdf_data = create_pdf_report(saved_analysis)
+
+    st.download_button(
+        label="Download Session Report (PDF)",
+        data=pdf_data,
+        file_name="study_session_report.pdf",
+        mime="application/pdf",
+        key="pdf_session_report",
     )
 
-st.markdown("#### Technology stack")
-st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab")
+    st.caption(
+        "Phone-Free Score = 100 − Phone Visible Percentage. "
+        "This indicates phone visibility only; it does not measure "
+        "actual concentration or study quality."
+    )
 
-st.markdown("#### Important limitations")
-st.warning(
-    "A detected phone does not prove distraction. The model can miss objects or misclassify things. This app should be used as a study-support tool, not as a final judgment."
-)
-st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
+# ============================================================
+# LIVE BROWSER CAMERA (LAPTOP / PHONE)
+# ============================================================
+st.divider()
+st.subheader("📷 Live Camera Phone Detection")
+st.caption("Press START and grant camera permission. This uses the browser camera, not the server webcam. A secure HTTPS connection is required.")
+try:
+    import av
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoProcessorBase
+except ImportError:
+    st.info("Live camera needs streamlit-webrtc and av installed. Recorded-video analysis still works.")
+else:
+    if not MODEL_FILE.exists():
+        st.error("Live camera unavailable: yolo11n.pt is missing beside dashboard.py.")
+    else:
+        live_model = load_yolo_model(str(MODEL_FILE))
+        @st.cache_resource
+        def get_live_model_lock():
+            return threading.Lock()
+        live_lock = get_live_model_lock()
+
+        class PhoneCameraProcessor(VideoProcessorBase):
+            def __init__(self):
+                self.lock = threading.Lock()
+                self.phone_visible = False
+                self.detections = 0
+                self.frames = 0
+
+            def recv(self, frame):
+                image = frame.to_ndarray(format="bgr24")
+                with live_lock:
+                    result = live_model.predict(source=image, imgsz=640, conf=.25, verbose=False)[0]
+                annotated = image.copy()
+                count = 0
+                if result.boxes is not None:
+                    for detected in result.boxes:
+                        class_id = int(detected.cls[0].item())
+                        if str(live_model.names[class_id]).lower() not in ("cell phone", "mobile phone"):
+                            continue
+                        count += 1
+                        confidence = float(detected.conf[0].item())
+                        x1, y1, x2, y2 = map(int, detected.xyxy[0].tolist())
+                        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 210, 0), 3)
+                        cv2.putText(annotated, f"Phone {confidence:.0%}", (x1, max(25, y1-8)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, .7, (0, 210, 0), 2)
+                with self.lock:
+                    self.phone_visible = count > 0
+                    self.detections += count
+                    self.frames += 1
+                if count:
+                    cv2.putText(annotated, "PHONE VISIBLE", (15, 35),
+                                cv2.FONT_HERSHEY_SIMPLEX, .9, (0, 0, 255), 2)
+                return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+
+        camera = webrtc_streamer(
+            key="live-phone-camera", mode=WebRtcMode.SENDRECV,
+            video_processor_factory=PhoneCameraProcessor,
+            media_stream_constraints={"video": True, "audio": False},
+            async_processing=True,
+        )
+        if camera.state.playing:
+            st.success("Camera started. Green rectangles mark detected phones.")
+            st.caption("If video stays black, check browser camera permission and network WebRTC restrictions.")
+        else:
+            st.info("Press START above to begin live camera detection.")
+        st.caption("Live monitoring does not measure attention. Audio warnings for uploaded-video analysis appear after processing.")
 
