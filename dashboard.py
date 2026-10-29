@@ -1158,9 +1158,33 @@ if st.session_state.get("live_phone_detected", False):
 elif st.session_state.webcam_started:
     st.success("Live detection is active and no phone is currently detected.")
 
+if st.button("▶️ Start webcam manually", key="manual_webcam_start"):
+    st.session_state.webcam_started = True
+
 if st.session_state.webcam_started:
-    try:
-        webcam_ctx = webrtc_streamer(
+    st.info("Webcam started manually. Please allow camera access.")
+    camera_image = st.camera_input("Take a photo", key="manual_camera_test")
+    
+    if camera_image is not None:
+        image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
+        model = load_webcam_model()
+        result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
+
+        detected = False
+        if result.boxes is not None:
+            for box in result.boxes:
+                class_id = int(box.cls[0].item())
+                class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
+                class_name = str(class_name).strip().lower()
+                if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                    detected = True
+                    break
+
+        if detected:
+            st.error("📱 Phone detected.")
+            show_phone_alert(preview=False)
+        else:
+            st.success("No phone detected in this frame.")
             key="study_phone_webcam_live_warning_single",
             video_processor_factory=LivePhoneDetector,
             media_stream_constraints={
@@ -1457,9 +1481,7 @@ if st.session_state.study_timer_finished:
     st.success("🎉 Study session completed! Take a short break.")
 elif st.session_state.study_timer_running:
     st.info("Your study timer is running.")
-    time.sleep(1)
-    st.rerun()
-
+   
 # ============================================================
 # TIMELINE
 # ============================================================
