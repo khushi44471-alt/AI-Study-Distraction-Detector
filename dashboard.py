@@ -841,6 +841,11 @@ webrtc_streamer(
             {"urls": ["stun:stun.l.google.com:19302"]},
             {"urls": ["stun:stun1.l.google.com:19302"]},
             {"urls": ["stun:stun2.l.google.com:19302"]},
+            {
+                "urls": ["turn:your-turn-server.example.com:3478"],
+                "username": "your_turn_username",
+                "credential": "your_turn_password",
+            },
         ]
     },
     async_processing=True,
