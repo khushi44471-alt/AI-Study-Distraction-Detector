@@ -226,7 +226,6 @@ def ensure_model_exists() -> Path:
             return candidate
 
     try:
-        # Try to auto-download the model if it is missing.
         _ = YOLO(MODEL_NAME)
         for candidate in candidate_paths:
             if candidate.exists():
@@ -289,6 +288,9 @@ if "last_live_warning_time" not in st.session_state:
 
 if "webcam_connection_attempt" not in st.session_state:
     st.session_state.webcam_connection_attempt = 1
+
+if "webcam_started" not in st.session_state:
+    st.session_state.webcam_started = False
 
 # ============================================================
 # WARNING SOUND SETTINGS
@@ -1182,6 +1184,14 @@ class LivePhoneDetector(VideoProcessorBase):
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
+# Faster webcam startup: do not auto-create the WeRTC stream repeatedly.
+start_live_camera = st.button("▶️ Start live camera", key="start_live_camera_button")
+if start_live_camera:
+    st.session_state.webcam_started = True
+
+stop_live_camera = st.button("⏹️ Stop live camera", key="stop_live_camera_button")
+if stop_live_camera:
+    st.session_state.webcam_started = False
 
 if st.session_state.get("live_phone_detected", False):
     now = time.monotonic()
@@ -1189,43 +1199,48 @@ if st.session_state.get("live_phone_detected", False):
         st.session_state.last_live_warning_time = now
         st.error("📱 LIVE PHONE DETECTED! Put the phone away now.")
         show_phone_alert(preview=False)
-else:
+elif st.session_state.webcam_started:
     st.success("Live detection is active and no phone is currently detected.")
 
-# Webcam startup
-try:
-    webcam_ctx = webrtc_streamer(
-        key=f"study_phone_webcam_live_warning_{st.session_state.webcam_connection_attempt}",
-        video_processor_factory=LivePhoneDetector,
-        media_stream_constraints={"video": True, "audio": False},
-        rtc_configuration={
-            "iceServers": [
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                {"urls": ["stun:stun1.l.google.com:19302"]},
-                {"urls": ["stun:stun2.l.google.com:19302"]},
-                {"urls": ["stun:stun3.l.google.com:19302"]},
-                {"urls": ["stun:stun4.l.google.com:19302"]},
-                {"urls": ["stun:stun.cloudflare.com:3478"]},
-            ]
-        },
-        async_processing=True,
-    )
-
-    if getattr(webcam_ctx.state, "playing", False):
-        st.success("Live webcam is connected and monitoring.")
-    else:
-        st.info(
-            "Click START above and allow camera access. "
-            "If it hangs, this is usually a network or webcam permission issue."
+if st.session_state.webcam_started:
+    try:
+        webcam_ctx = webrtc_streamer(
+            key="study_phone_webcam_live_warning_single",
+            video_processor_factory=LivePhoneDetector,
+            media_stream_constraints={
+                "video": {
+                    "frameRate": 15,
+                    "width": 640,
+                    "height": 480,
+                    "facingMode": "user",
+                },
+                "audio": False,
+            },
+            rtc_configuration={
+                "iceServers": [
+                    {"urls": ["stun:stun.l.google.com:19302"]},
+                    {"urls": ["stun:stun1.l.google.com:19302"]},
+                    {"urls": ["stun:stun.cloudflare.com:3478"]},
+                ]
+            },
+            async_processing=True,
         )
+
+        if getattr(webcam_ctx.state, "playing", False):
+            st.success("Live webcam is connected and monitoring.")
+        else:
+            st.info("Allow camera access to start the detection.")
+            st.warning(detect_network_issue())
+    except Exception as webcam_error:
+        st.error("The webcam component could not start.")
+        st.code(f"{type(webcam_error).__name__}: {webcam_error}")
         st.warning(detect_network_issue())
-except Exception as webcam_error:
-    st.error("The webcam component could not start.")
-    st.code(f"{type(webcam_error).__name__}: {webcam_error}")
-    st.warning(detect_network_issue())
+else:
+    st.info("Click the Start live camera button once. This stops the repeated connection attempts and connects faster.")
 
 if st.button("🔄 Reset live connection", key="webcam_reset_main", help="Use this after a failed or stuck connection"):
     st.session_state.webcam_connection_attempt += 1
+    st.session_state.webcam_started = False
     st.rerun()
 
 st.caption("This live detection warns instantly in real time. It does not wait for a video file to finish analyzing.")
