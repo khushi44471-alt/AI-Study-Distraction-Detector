@@ -8,4 +8,4 @@ matplotlib
 reportlab
 pyttsx3
 plotly
-
+streamlit-webrtc
