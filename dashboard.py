@@ -274,6 +274,8 @@ if "live_phone_detected" not in st.session_state:
     st.session_state.live_phone_detected = False
 if "last_live_warning_time" not in st.session_state:
     st.session_state.last_live_warning_time = 0.0
+if "live_warning_triggered" not in st.session_state:
+    st.session_state.live_warning_triggered = False
 
 # ============================================================
 # ALERT SOUND SETTINGS
@@ -717,7 +719,7 @@ def load_yolo_model(model_path: str):
 class LivePhoneDetector(VideoProcessorBase):
     def __init__(self):
         self.model = load_yolo_model(str(ensure_model_exists()))
-        self.last_detection_time = 0.0
+        self.last_warn_time = 0.0
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
@@ -744,10 +746,6 @@ class LivePhoneDetector(VideoProcessorBase):
                         detections.append((x1, y1, x2, y2, conf))
 
             if detections:
-                st.session_state.live_phone_detected = True
-                now = time.monotonic()
-                if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
-                    st.session_state.last_live_warning_time = now
                 for x1, y1, x2, y2, conf in detections:
                     cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
                     cv2.putText(
@@ -760,6 +758,15 @@ class LivePhoneDetector(VideoProcessorBase):
                         2,
                         cv2.LINE_AA,
                     )
+
+                now = time.monotonic()
+                if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
+                    st.session_state.last_live_warning_time = now
+                    st.session_state.live_warning_triggered = True
+                    st.session_state.live_phone_detected = True
+                    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
+                    speak_warning()
+
                 cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
                 cv2.putText(
                     image,
@@ -784,10 +791,30 @@ class LivePhoneDetector(VideoProcessorBase):
                     2,
                     cv2.LINE_AA,
                 )
+
         except Exception:
             st.session_state.live_phone_detected = False
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
+
+def speak_warning():
+    js = """
+    <script>
+    try {
+        const synth = window.speechSynthesis;
+        if (!synth) return;
+        synth.cancel();
+        const msg = new SpeechSynthesisUtterance("Attention! Phone detected. Please put your phone away and focus on studying.");
+        msg.volume = 0.9;
+        msg.rate = 0.9;
+        msg.pitch = 1.0;
+        synth.speak(msg);
+    } catch (e) {
+        console.log("Speech warning failed:", e);
+    }
+    </script>
+    """
+    components.html(js, height=0)
 
 # ============================================================
 # LIVE WEBRTC SECTION
@@ -795,14 +822,14 @@ class LivePhoneDetector(VideoProcessorBase):
 
 st.divider()
 st.subheader("📷 Live Webcam Detection")
-st.caption("Use Chrome and allow camera access. This is the real-time live detector and warns immediately if a phone is detected.")
+st.caption("Use Chrome and allow camera access. This is the real-time live detector and warns immediately when a phone is detected.")
 
 webrtc_streamer(
     key="live_phone_detector",
     video_processor_factory=LivePhoneDetector,
     media_stream_constraints={
         "video": {
-            "frameRate": 12,
+            "frameRate": 10,
             "width": 640,
             "height": 480,
             "facingMode": "user",
@@ -810,14 +837,17 @@ webrtc_streamer(
         "audio": False,
     },
     rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["stun:stun1.l.google.com:19302"]},
+            {"urls": ["stun:stun2.l.google.com:19302"]},
+        ]
     },
     async_processing=True,
 )
 
-if st.session_state.get("live_phone_detected", False):
-    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
-    show_phone_alert(preview=False)
+if st.session_state.get("live_warning_triggered", False):
+    st.session_state.live_warning_triggered = False
 
 # ============================================================
 # VIDEO ANALYSIS
@@ -853,205 +883,56 @@ def analyze_video(uploaded_file):
             st.error("Video dimensions could not be read. Try another video.")
             return None
 
-        duration = total_frames / fps if fps > 0 and total_frames > 0 else None
-        quality_warnings = []
-
-        if min(width, height) < 480:
-            quality_warnings.append("Low resolution: small or distant phones may be missed.")
-        if fps <= 0:
-            quality_warnings.append("Frame rate unavailable: timeline timestamps may be missing.")
-        elif fps < 10:
-            quality_warnings.append("Low frame rate: short phone appearances may be missed.")
-        if duration is not None and duration < 5:
-            quality_warnings.append("Very short video (under 5 seconds): results may not represent a session.")
-
-        with st.spinner("Loading model..."):
-            model = load_yolo_model(str(resolved_model_path))
+        model = load_yolo_model(str(resolved_model_path))
 
         sampled_frames = 0
         frames_with_phone = 0
         total_detections = 0
         object_counts = {}
-        confidence_values = []
-        blur_values = []
-        frame_index = 0
-        timeline = []
-        phone_heatmap = np.zeros((20, 20), dtype=np.float32)
-        last_annotated_rgb = None
-        best_phone_frame_rgb = None
-        best_phone_confidence = -1.0
-
         progress = st.progress(0.0)
         status = st.empty()
-        st.subheader("🔴 Video Analysis")
-
-        live_video = st.empty()
-        live_col1, live_col2, live_col3, live_col4 = st.columns(4)
-        live_frame_metric = live_col1.empty()
-        live_phone_frames_metric = live_col2.empty()
-        live_detections_metric = live_col3.empty()
-        live_visibility_metric = live_col4.empty()
-
-        consecutive_phone_frames = 0
-        last_alert_time = 0.0
 
         while True:
             success, frame = capture.read()
             if not success:
                 break
 
-            if frame_index % 5 == 0:
-                sampled_frames += 1
-
-                if len(blur_values) < 30:
-                    small = cv2.resize(frame, (min(width, 640), min(height, 360)))
-                    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-                    blur_values.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
-
-                prediction = model.predict(
-                    source=frame,
-                    imgsz=640,
-                    conf=0.12,
-                    verbose=False,
-                    max_det=20,
-                )[0]
-
-                annotated = frame.copy()
-                phones_in_frame = 0
-                frame_best_confidence = -1.0
+            if sampled_frames % 5 == 0:
+                prediction = model.predict(source=frame, imgsz=640, conf=0.12, verbose=False, max_det=20)[0]
+                phone_count = 0
 
                 if prediction.boxes is not None:
                     for box in prediction.boxes:
-                        class_id = int(box.cls[0].item())
-                        class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "Unknown")
+                        cls_id = int(box.cls[0].item())
+                        class_name = model.names[cls_id] if not isinstance(model.names, dict) else model.names.get(cls_id, "")
                         class_name = str(class_name).strip().lower()
-
                         object_counts[class_name] = object_counts.get(class_name, 0) + 1
-                        confidence = float(box.conf[0].item())
-                        x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
 
-                        is_phone = any(keyword in class_name for keyword in PHONE_KEYWORDS)
-
-                        if is_phone:
-                            confidence_values.append(confidence)
-                            phones_in_frame += 1
+                        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                            phone_count += 1
                             total_detections += 1
-                            frame_best_confidence = max(frame_best_confidence, confidence)
 
-                            center_x = (x1 + x2) // 2
-                            center_y = (y1 + y2) // 2
-                            grid_x = min(19, max(0, int(center_x / width * 20)))
-                            grid_y = min(19, max(0, int(center_y / height * 20)))
-                            phone_heatmap[grid_y, grid_x] += 1
-
-                            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 210, 0), 3)
-                            cv2.putText(
-                                annotated,
-                                f"Phone {confidence:.0%}",
-                                (x1, max(22, y1 - 9)),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.7,
-                                (0, 210, 0),
-                                2,
-                                cv2.LINE_AA,
-                            )
-                        else:
-                            cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 120, 0), 2)
-                            cv2.putText(
-                                annotated,
-                                class_name.title(),
-                                (x1, max(22, y1 - 9)),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.55,
-                                (255, 120, 0),
-                                2,
-                                cv2.LINE_AA,
-                            )
-
-                phone_found = phones_in_frame > 0
-                if phone_found:
+                if phone_count > 0:
                     frames_with_phone += 1
-                    consecutive_phone_frames += 1
-                else:
-                    consecutive_phone_frames = 0
 
-                elapsed_seconds = frame_index / fps if fps > 0 else None
-                timeline.append({
-                    "frame": frame_index,
-                    "seconds": elapsed_seconds,
-                    "phone_visible": int(phone_found),
-                    "phone_detections": phones_in_frame,
-                    "max_confidence": frame_best_confidence if phone_found else None,
-                })
-
-                current_time = time.monotonic()
-                if should_alert_user(consecutive_phone_frames, last_alert_time, current_time):
-                    show_phone_alert()
-                    last_alert_time = current_time
-                    consecutive_phone_frames = 0
-
-                annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-                last_annotated_rgb = annotated_rgb
-
-                if live_video is not None:
-                    live_video.image(annotated_rgb, caption=f"Analysing video frame {frame_index + 1}", use_container_width=True)
-
-                current_visibility = frames_with_phone / sampled_frames * 100 if sampled_frames > 0 else 0.0
-                live_frame_metric.metric("Frames Analysed", f"{sampled_frames:,}")
-                live_phone_frames_metric.metric("Frames With Phone", f"{frames_with_phone:,}")
-                live_detections_metric.metric("Phone Detections", f"{total_detections:,}")
-                live_visibility_metric.metric("Phone Visible", f"{current_visibility:.1f}%")
-
-                if phone_found and frame_best_confidence > best_phone_confidence:
-                    best_phone_confidence = frame_best_confidence
-                    best_phone_frame_rgb = annotated_rgb.copy()
-
-                status.write(f"Analyzed {sampled_frames} sampled frames. Phone detections: {total_detections}")
                 if total_frames > 0:
-                    progress.progress(min((frame_index + 1) / total_frames, 1.0))
+                    progress.progress(min((sampled_frames + 1) / total_frames, 1.0))
+                status.write(f"Analyzed {sampled_frames + 1} sampled frames...")
 
-            frame_index += 1
+            sampled_frames += 1
 
-        if sampled_frames == 0:
-            st.error("No readable frames were found in this video.")
-            return None
-
-        if sampled_frames < 5:
-            quality_warnings.append("Too few sampled frames for a meaningful comparison.")
-
-        mean_blur = sum(blur_values) / len(blur_values) if blur_values else None
-        if mean_blur is not None and mean_blur < 35:
-            quality_warnings.append("Possible blur or low image detail detected; verify the video visually.")
-
-        if width >= 3840 or height >= 2160:
-            quality_warnings.append("High-resolution video: analysis is resized to 640 pixels for YOLO, so tiny phones may be missed.")
-
-        progress.progress(1.0)
-        status.write("Video analysis completed.")
-        percentage = frames_with_phone / sampled_frames * 100
-
-        return {
+        percentage = (frames_with_phone / sampled_frames) * 100 if sampled_frames else 0.0
+        result = {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
             "frames_processed": sampled_frames,
             "frames_with_phone": frames_with_phone,
-            "percentage": round(percentage, 2),
+            "percentage": round(float(percentage), 2),
             "detections": total_detections,
-            "annotated_frame_rgb": best_phone_frame_rgb if best_phone_frame_rgb is not None else last_annotated_rgb,
-            "timeline": timeline,
-            "phone_heatmap": phone_heatmap.tolist(),
-            "fps": fps,
-            "duration": duration,
-            "quality_warnings": quality_warnings,
-            "mean_blur": mean_blur,
-            "average_confidence": sum(confidence_values) / len(confidence_values) if confidence_values else None,
-            "highest_confidence": max(confidence_values) if confidence_values else None,
-            "detection_threshold": 0.25,
-            "object_counts": dict(object_counts),
-            "total_object_detections": sum(object_counts.values()),
-            "unique_object_classes": len(object_counts),
-            "has_phone_example": best_phone_frame_rgb is not None,
+            "object_counts": object_counts,
         }
+
+        return result
 
     except Exception as error:
         st.error(f"Video analysis failed: {error}")
@@ -1077,7 +958,7 @@ st.caption("A quick overview of completed video analyses and saved session histo
 report_df = load_report()
 
 if report_df.empty:
-    st.info("No completed sessions yet. Analyze a video to see your statistics and charts here.")
+    st.info("No completed sessions yet. Upload a video to see the stats here.")
 else:
     total_sessions = len(report_df)
     total_frames = int(report_df["Frames Processed"].fillna(0).sum())
@@ -1088,22 +969,7 @@ else:
     col1.metric("Sessions Analyzed", total_sessions)
     col2.metric("Frames Processed", f"{total_frames:,}")
     col3.metric("Phone Detections", f"{total_detections:,}")
-
-    if pd.notna(average_visibility):
-        col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%")
-    else:
-        col4.metric("Average Phone Visibility", "N/A")
-
-    st.subheader("📱 Phone Visibility Overview")
-
-    if pd.notna(average_visibility):
-        phone_visible = max(0.0, min(float(average_visibility), 100.0))
-        pie_df = pd.DataFrame({
-            "Category": ["Phone Visible", "Phone Not Detected"],
-            "Percentage": [phone_visible, 100.0 - phone_visible],
-        })
-        st.caption("This chart shows average phone visibility across analyzed sessions, not a measure of attention.")
-        st.plotly_chart(px.pie(pie_df, names="Category", values="Percentage", title="Average Phone Visibility"), use_container_width=True)
+    col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A")
 
     st.subheader("📈 Session Comparison")
     chart_df = report_df[["Video", "Phone Visible Percentage"]].dropna()
@@ -1114,7 +980,7 @@ else:
         })
         st.bar_chart(chart_df.set_index("Study Video"))
     else:
-        st.info("No visibility percentages are available yet.")
+        st.info("No visibility data yet.")
 
     st.subheader("📋 Session History")
     st.dataframe(report_df, use_container_width=True)
@@ -1127,8 +993,6 @@ else:
         mime="text/csv",
         key="download_csv_summary_main",
     )
-
-st.caption("Class 12 AI Project | Phone visibility analysis only; not a validated attention measurement.")
 
 # ============================================================
 # VIDEO UPLOAD
