@@ -8,5 +8,5 @@ numpy
 matplotlib
 reportlab
 pyttsx3
-streamlit-webrtc
+
 plotly
