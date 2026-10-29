@@ -202,13 +202,16 @@ st.markdown(
 )
 
 # ============================================================
-# PROJECT FILE LOCATIONS
+# FILE LOCATIONS
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 REPORT_DIR = BASE_DIR / "reports"
 REPORT_FILE = REPORT_DIR / "session_summary.csv"
-MODEL_FILE = BASE_DIR / "yolo11n.pt"
+
+# STRONGER YOLO MODEL
+MODEL_NAME = "yolo11m.pt"
+MODEL_FILE = BASE_DIR / MODEL_NAME
 
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -262,7 +265,7 @@ if "webcam_connection_attempt" not in st.session_state:
     st.session_state.webcam_connection_attempt = 1
 
 # ============================================================
-# WARNING SETTINGS
+# WARNING SOUND SETTINGS
 # ============================================================
 
 ALERT_COOLDOWN = 25
@@ -702,7 +705,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 # ============================================================
-# MODEL LOADING
+# MODEL
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
@@ -710,7 +713,7 @@ def load_yolo_model(model_path: str):
     return YOLO(model_path)
 
 # ============================================================
-# VIDEO ANALYSIS
+# VIDEO ANALYSIS (kept)
 # ============================================================
 
 def analyze_video(uploaded_file):
@@ -718,7 +721,7 @@ def analyze_video(uploaded_file):
     capture = None
 
     if not MODEL_FILE.exists():
-        st.error("Missing yolo11n.pt. Place it beside dashboard.py.")
+        st.error(f"Missing {MODEL_NAME}. Place it beside dashboard.py or install ultralytics so it can auto-download it.")
         return None
 
     try:
@@ -752,7 +755,7 @@ def analyze_video(uploaded_file):
         if duration is not None and duration < 5:
             quality_warnings.append("Very short video (under 5 seconds): results may not represent a session.")
 
-        with st.spinner("Loading AI model..."):
+        with st.spinner("Loading stronger AI model..."):
             model = load_yolo_model(str(MODEL_FILE))
 
         sampled_frames = frames_with_phone = total_detections = 0
@@ -1021,11 +1024,16 @@ st.caption("This works in real time. It warns instantly when a phone is visible 
 
 @st.cache_resource(show_spinner=False)
 def load_webcam_model():
-    possible_paths = [MODEL_FILE, BASE_DIR.parent / "yolo11n.pt"]
+    possible_paths = [
+        MODEL_FILE,
+        BASE_DIR.parent / MODEL_NAME,
+        BASE_DIR.parent / "yolo11s.pt",
+        BASE_DIR.parent / "yolo11n.pt",
+    ]
     for model_path in possible_paths:
         if model_path.exists():
             return load_yolo_model(str(model_path))
-    raise FileNotFoundError("Could not find yolo11n.pt beside dashboard.py or in the repository parent folder.")
+    raise FileNotFoundError(f"Could not find {MODEL_NAME} beside dashboard.py or in the repository parent folder.")
 
 class LivePhoneDetector(VideoProcessorBase):
     def __init__(self):
@@ -1038,26 +1046,13 @@ class LivePhoneDetector(VideoProcessorBase):
         image = frame.to_ndarray(format="bgr24")
         self.frame_count += 1
 
-        # Improve image before detection
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-        if blur_score < 40:
-            # if frame is too blurry, still show clarity warning but don't force false detection
-            cv2.putText(
-                image,
-                "Frame is blurry - detection may be weak",
-                (20, image.shape[0] - 20),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 0),
-                2,
-                cv2.LINE_AA,
-            )
-        # light preprocessing for better phone detection
-        image_for_model = cv2.resize(image, (640, 480))
-        image_for_model = cv2.convertScaleAbs(image_for_model, alpha=1.2, beta=15)
 
         try:
+            image_for_model = cv2.resize(image, (640, 480))
+            image_for_model = cv2.convertScaleAbs(image_for_model, alpha=1.2, beta=15)
+
             result = self.model.predict(
                 source=image_for_model,
                 imgsz=640,
@@ -1087,12 +1082,10 @@ class LivePhoneDetector(VideoProcessorBase):
             self.last_detections = detections
             self.phone_warning = bool(detections)
 
-        except Exception as error:
+        except Exception:
             self.last_detections = []
             self.phone_warning = False
-            logging.getLogger("streamlit_webrtc").exception("Live phone detection failed")
 
-        # Draw boxes on original image using resized coordinates
         for x1, y1, x2, y2, confidence in self.last_detections:
             x1 = int(x1 * image.shape[1] / 640)
             y1 = int(y1 * image.shape[0] / 480)
@@ -1107,6 +1100,18 @@ class LivePhoneDetector(VideoProcessorBase):
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (0, 0, 255),
+                2,
+                cv2.LINE_AA,
+            )
+
+        if blur_score < 40:
+            cv2.putText(
+                image,
+                "Warning: frame is blurry",
+                (20, image.shape[0] - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 0),
                 2,
                 cv2.LINE_AA,
             )
@@ -1141,7 +1146,6 @@ class LivePhoneDetector(VideoProcessorBase):
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
-# Live detection warning trigger
 if st.session_state.get("live_phone_detected", False):
     now = time.monotonic()
     if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
@@ -1183,7 +1187,6 @@ except Exception as webcam_error:
     st.code(f"{type(webcam_error).__name__}: {webcam_error}")
     st.warning(detect_network_issue())
 
-# Reset button
 if st.button("🔄 Reset live connection", key="webcam_reset_main", help="Use this after a failed or stuck connection"):
     st.session_state.webcam_connection_attempt += 1
     st.rerun()
