@@ -713,7 +713,7 @@ def load_yolo_model(model_path: str):
     return YOLO(model_path)
 
 # ============================================================
-# LIVE DETECTION
+# LIVE DETECTION CLASS
 # ============================================================
 
 class LivePhoneDetector(VideoProcessorBase):
@@ -764,8 +764,6 @@ class LivePhoneDetector(VideoProcessorBase):
                     st.session_state.last_live_warning_time = now
                     st.session_state.live_warning_triggered = True
                     st.session_state.live_phone_detected = True
-                    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
-                    speak_warning()
 
                 cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
                 cv2.putText(
@@ -817,6 +815,14 @@ def speak_warning():
     components.html(js, height=0)
 
 # ============================================================
+# TURN SERVER CONFIG
+# ============================================================
+
+TURN_SERVER = "turn:your-turn-server.example.com:3478"
+TURN_USERNAME = "your_turn_username"
+TURN_PASSWORD = "your_turn_password"
+
+# ============================================================
 # LIVE WEBRTC SECTION
 # ============================================================
 
@@ -842,9 +848,9 @@ webrtc_streamer(
             {"urls": ["stun:stun1.l.google.com:19302"]},
             {"urls": ["stun:stun2.l.google.com:19302"]},
             {
-                "urls": ["turn:your-turn-server.example.com:3478"],
-                "username": "your_turn_username",
-                "credential": "your_turn_password",
+                "urls": [TURN_SERVER],
+                "username": TURN_USERNAME,
+                "credential": TURN_PASSWORD,
             },
         ]
     },
@@ -853,6 +859,8 @@ webrtc_streamer(
 
 if st.session_state.get("live_warning_triggered", False):
     st.session_state.live_warning_triggered = False
+    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
+    speak_warning()
 
 # ============================================================
 # VIDEO ANALYSIS
@@ -896,6 +904,8 @@ def analyze_video(uploaded_file):
         object_counts = {}
         progress = st.progress(0.0)
         status = st.empty()
+        last_alert_time = 0.0
+        phone_frame_counter = 0
 
         while True:
             success, frame = capture.read()
@@ -919,6 +929,14 @@ def analyze_video(uploaded_file):
 
                 if phone_count > 0:
                     frames_with_phone += 1
+                    phone_frame_counter += 1
+                else:
+                    phone_frame_counter = 0
+
+                current_time = time.monotonic()
+                if phone_frame_counter >= 3 and current_time - last_alert_time >= ALERT_COOLDOWN:
+                    last_alert_time = current_time
+                    show_phone_alert(preview=False)
 
                 if total_frames > 0:
                     progress.progress(min((sampled_frames + 1) / total_frames, 1.0))
