@@ -1101,7 +1101,7 @@ if MODEL_FILE.exists():
     live_model = load_live_camera_model()
     live_model_lock = threading.Lock()
 
-    class PhoneCameraProcessor(VideoProcessorBase):
+    class PhoneCameraProcessor:
         def recv(self, frame):
             image = frame.to_ndarray(format="bgr24")
 
