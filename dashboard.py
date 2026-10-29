@@ -288,6 +288,22 @@ if "live_warning_triggered" not in st.session_state:
 if "session_snapshots" not in st.session_state:
     st.session_state.session_snapshots = []
 
+if "last_warning_reason" not in st.session_state:
+    st.session_state.last_warning_reason = "No warning yet"
+
+if "live_status" not in st.session_state:
+    st.session_state.live_status = "FOCUSED / NO PHONE"
+
+if "live_focus_streak" not in st.session_state:
+    st.session_state.live_focus_streak = 0
+
+if "warning_summary" not in st.session_state:
+    st.session_state.warning_summary = {
+        "warning_count": 0,
+        "last_warning": "No warning yet",
+        "recent_events": []
+    }
+
 # ============================================================
 # Utility functions
 # ============================================================
@@ -412,6 +428,26 @@ def compute_alert_snapshot(phone_percentage, focus_score):
 
 def should_warn_again(last_warn_time, cooldown_seconds=20):
     return (time.time() - last_warn_time) >= cooldown_seconds
+
+def append_warning_summary(summary_dict, message):
+    summary_dict["warning_count"] += 1
+    summary_dict["last_warning"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    summary_dict["recent_events"].append({
+        "time": summary_dict["last_warning"],
+        "message": message
+    })
+    if len(summary_dict["recent_events"]) > 10:
+        summary_dict["recent_events"] = summary_dict["recent_events"][-10:]
+    return summary_dict
+
+def calculate_focus_streak_label(streak_value):
+    if streak_value >= 50:
+        return "Excellent focus streak"
+    elif streak_value >= 20:
+        return "Strong focus streak"
+    elif streak_value >= 5:
+        return "Steady focus"
+    return "Build focus streak"
 
 def load_report() -> pd.DataFrame:
     if not REPORT_FILE.exists() or REPORT_FILE.stat().st_size == 0:
@@ -964,8 +1000,35 @@ webrtc_streamer(
     async_processing=True,
 )
 
+live_detected = st.session_state.get("live_phone_detected", False)
+st.session_state.live_status = get_live_status(live_detected)
+
+risk_score = 100.0 if not live_detected else max(0.0, 100.0 - 60.0)
+risk_band = get_risk_band(risk_score)
+
+live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
+live_status_col1.metric("Live Status", st.session_state.live_status)
+live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
+live_status_col3.metric("Risk Level", risk_band)
+
+st.progress(min(1.0, risk_score / 100.0))
+st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
+
+if live_detected:
+    st.session_state.live_focus_streak = 0
+else:
+    st.session_state.live_focus_streak = update_focus_streak(
+        st.session_state.live_focus_streak,
+        False
+    )
+
 if st.session_state.get("live_warning_triggered", False):
     st.session_state.live_warning_triggered = False
+    st.session_state.last_warning_reason = "Phone detected in live webcam"
+    st.session_state.warning_summary = append_warning_summary(
+        st.session_state.warning_summary,
+        st.session_state.last_warning_reason
+    )
     st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
     speak_warning()
 
@@ -1167,6 +1230,17 @@ else:
         key="download_csv_summary_main",
     )
 
+st.subheader("🧾 Recent Live Warning Summary")
+warning_summary = st.session_state.warning_summary
+st.write(f"Total warnings: {warning_summary['warning_count']}")
+st.write(f"Last warning: {warning_summary['last_warning']}")
+
+if warning_summary["recent_events"]:
+    warning_df = pd.DataFrame(warning_summary["recent_events"])
+    st.dataframe(warning_df, use_container_width=True)
+else:
+    st.info("No warnings yet.")
+
 # ============================================================
 # Video upload section
 # ============================================================
@@ -1214,7 +1288,6 @@ if "last_analysis" in st.session_state:
 
     focus_score = saved_analysis["focus_score"]
     phone_percentage = saved_analysis["percentage"]
-
     snapshot = compute_alert_snapshot(phone_percentage, focus_score)
 
     col1, col2, col3, col4 = st.columns(4)
@@ -1279,7 +1352,6 @@ if "last_analysis" in st.session_state:
     else:
         st.info("No session snapshots saved yet.")
 
-    # Download PDF
     pdf_data = create_pdf_report(saved_analysis)
     st.download_button(
         "Download PDF Report",
