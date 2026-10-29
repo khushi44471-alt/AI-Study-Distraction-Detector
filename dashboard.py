@@ -382,6 +382,53 @@ if alert_choice == "5. Custom MP3/WAV File":
     )
     if uploaded_audio is not None:
         custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
+        custom_audio_type = uploaded_audio.type or "audio/mpeg"# ============================================================
+# ALERT SETTINGS
+# ============================================================
+
+ALERT_COOLDOWN = 30
+REQUIRED_CONSECUTIVE_DETECTIONS = 3
+
+alert_choice = st.selectbox(
+    "🔔 Choose Phone Alert Sound",
+    [
+        "1. Female Spoken Warning",
+        "2. Gentle Notification Chime",
+        "3. Rising Emergency Siren",
+        "4. Retro 8-Bit Game Melody",
+        "5. Custom MP3/WAV File",
+        "6. Soft Bell Ring",
+        "7. Sharp Beep",
+        "8. Urgent Alarm Pulse",
+        "9. Digital Notification",
+        "10. School Bell",
+    ],
+    key="phone_alert_choice",
+)
+
+alert_volume = st.slider(
+    "🔊 Alert Volume",
+    min_value=0,
+    max_value=100,
+    value=70,
+    step=5,
+    help="Controls the alert volume where supported.",
+    key="phone_alert_volume",
+)
+
+volume_level = alert_volume / 100.0
+
+custom_audio = None
+custom_audio_type = None
+
+if alert_choice == "5. Custom MP3/WAV File":
+    uploaded_audio = st.file_uploader(
+        "Upload your alert sound",
+        type=["mp3", "wav"],
+        key="custom_phone_alert_audio",
+    )
+    if uploaded_audio is not None:
+        custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
         custom_audio_type = uploaded_audio.type or "audio/mpeg"
 
 if st.button("🔊 Test Selected Sound", key="test_phone_alert"):
