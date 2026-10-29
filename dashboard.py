@@ -268,6 +268,9 @@ if "study_timer_elapsed_before_pause" not in st.session_state:
 if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
+if "camera_on" not in st.session_state:
+    st.session_state.camera_on = False
+
 # ============================================================
 # ALERT SOUND SETTINGS
 # ============================================================
@@ -351,46 +354,14 @@ def play_female_warning(volume=0.8):
 def play_warning_tone(mode, volume=0.75):
     vol = max(0.0, min(1.0, float(volume)))
     configs = {
-        "siren": {
-            "pattern": [420, 520, 620, 760, 620, 520, 420],
-            "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60],
-            "type": "sawtooth",
-        },
-        "pulse": {
-            "pattern": [520, 560, 610, 660, 610, 560, 520, 450],
-            "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55],
-            "type": "triangle",
-        },
-        "sweep": {
-            "pattern": [390, 470, 560, 700, 560, 470, 390],
-            "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65],
-            "type": "sawtooth",
-        },
-        "bell": {
-            "pattern": [880, 770, 660, 770, 660, 560],
-            "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50],
-            "type": "triangle",
-        },
-        "warning": {
-            "pattern": [700, 760, 820, 760, 700, 680],
-            "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42],
-            "type": "sine",
-        },
-        "urgent": {
-            "pattern": [950, 900, 980, 900, 980, 860, 980, 820],
-            "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42],
-            "type": "square",
-        },
-        "digital": {
-            "pattern": [650, 720, 800, 860, 800, 720, 650],
-            "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28],
-            "type": "triangle",
-        },
-        "voice": {
-            "pattern": [430, 520, 610, 520, 610, 520, 430],
-            "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50],
-            "type": "sine",
-        },
+        "siren": {"pattern": [420, 520, 620, 760, 620, 520, 420], "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60], "type": "sawtooth"},
+        "pulse": {"pattern": [520, 560, 610, 660, 610, 560, 520, 450], "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55], "type": "triangle"},
+        "sweep": {"pattern": [390, 470, 560, 700, 560, 470, 390], "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65], "type": "sawtooth"},
+        "bell": {"pattern": [880, 770, 660, 770, 660, 560], "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50], "type": "triangle"},
+        "warning": {"pattern": [700, 760, 820, 760, 700, 680], "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42], "type": "sine"},
+        "urgent": {"pattern": [950, 900, 980, 900, 980, 860, 980, 820], "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42], "type": "square"},
+        "digital": {"pattern": [650, 720, 800, 860, 800, 720, 650], "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28], "type": "triangle"},
+        "voice": {"pattern": [430, 520, 610, 520, 610, 520, 430], "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50], "type": "sine"},
     }
 
     cfg = configs.get(mode, configs["warning"])
@@ -568,7 +539,6 @@ with st.sidebar:
     st.markdown("[🎬 Video analysis](#ai-video-analysis)")
     st.markdown("[📈 Latest results](#detection-results)")
     st.markdown("[⏱️ Study timer](#study-session-timer)")
-    st.markdown("[📍 Detection timeline](#distraction-timeline)")
     st.markdown("---")
     with st.expander("ℹ️ About this project", expanded=False):
         st.write("**Objective:** identify visible phone appearances in sampled study-video frames.")
@@ -1015,14 +985,66 @@ else:
 st.caption("Class 12 AI Project | Phone visibility analysis only; not a validated attention measurement.")
 
 # ============================================================
-# LIVE WEBCAM / PHONE CAMERA DETECTION
+# LIVE WEBCAM / MANUAL CAMERA DETECTION
 # ============================================================
 
 st.divider()
-st.subheader("📷 Live Webcam / Phone Camera Detection")
-st.caption("This feature is optional and may not work on restricted school computers.")
+st.subheader("📷 Live Webcam / Manual Camera Detection")
+st.caption("Use Chrome browser. Click Start camera and allow access. This is the safe webcam version and avoids unstable WebRTC.")
 
-st.info("Live webcam detection is disabled for stability. Please use the uploaded video analysis for the reliable project workflow.")
+col_start, col_stop = st.columns(2)
+with col_start:
+    if st.button("▶️ Start camera", key="start_live_camera_button"):
+        st.session_state.camera_on = True
+with col_stop:
+    if st.button("⏹️ Stop camera", key="stop_live_camera_button"):
+        st.session_state.camera_on = False
+
+if st.session_state.camera_on:
+    camera_image = st.camera_input("Use your browser camera", key="manual_camera_input")
+
+    if camera_image is not None:
+        image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
+        model = load_yolo_model(str(ensure_model_exists()))
+        result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
+
+        detected = False
+        boxes = []
+
+        if result.boxes is not None:
+            for box in result.boxes:
+                class_id = int(box.cls[0].item())
+                class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
+                class_name = str(class_name).strip().lower()
+
+                if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                    detected = True
+                    x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                    conf = float(box.conf[0].item())
+                    boxes.append((x1, y1, x2, y2, conf))
+
+        if detected:
+            st.error("📱 Phone detected in live camera.")
+            show_phone_alert(preview=False)
+        else:
+            st.success("✅ No phone detected in this live camera frame.")
+
+        if boxes:
+            for x1, y1, x2, y2, conf in boxes:
+                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                cv2.putText(
+                    image,
+                    f"PHONE {conf:.0%}",
+                    (x1, max(20, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 0, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+else:
+    st.info("Click Start camera to use the browser webcam. This is the stable camera style for Chrome on localhost.")
 
 # ============================================================
 # VIDEO UPLOAD
@@ -1124,7 +1146,7 @@ if "last_analysis" in st.session_state:
     st.subheader("📊 Detection Results")
 
     st.divider()
-    st.subheader("🧮 Desk Clutter Counter")
+    st.subheader("🧮 Object Counter")
 
     object_counts = saved_analysis.get("object_counts", {})
     clutter_col1, clutter_col2 = st.columns(2)
@@ -1244,62 +1266,6 @@ elif st.session_state.study_timer_running:
     st.info("Your study timer is running.")
 
 # ============================================================
-# TIMELINE
-# ============================================================
-
-st.divider()
-st.subheader("📍 Distraction Timeline")
-
-saved_analysis = st.session_state.get("last_analysis")
-if saved_analysis is None:
-    st.info("Analyze a video first to view its distraction timeline and download the report.")
-else:
-    timeline_data = saved_analysis.get("timeline", [])
-    timeline_df = pd.DataFrame(timeline_data)
-
-    if not timeline_df.empty and "seconds" in timeline_df.columns and timeline_df["seconds"].notna().any():
-        chart_df = timeline_df.dropna(subset=["seconds"]).copy()
-        chart_df["Time (seconds)"] = chart_df["seconds"]
-        st.write("This chart shows phone detections over video time. A value of 1 means a phone was detected in that sampled frame; 0 means no phone was detected.")
-        chart_df = chart_df.set_index("Time (seconds)")[["phone_visible"]]
-        chart_df.columns = ["Phone detected (1 = yes, 0 = no)"]
-        st.line_chart(chart_df)
-
-        detection_df = timeline_df[timeline_df["phone_visible"] == 1].copy()
-        if not detection_df.empty:
-            detection_df["Timestamp"] = detection_df["seconds"].apply(lambda value: f"{int(value // 60):02d}:{value % 60:05.2f}")
-            if "max_confidence" in detection_df.columns:
-                detection_df["Confidence"] = detection_df["max_confidence"].apply(lambda value: f"{value:.1%}" if pd.notna(value) else "N/A")
-            event_columns = ["Timestamp", "frame", "phone_detections"]
-            if "Confidence" in detection_df.columns:
-                event_columns.append("Confidence")
-            detection_df = detection_df[event_columns].rename(columns={"frame": "Video Frame Number", "phone_detections": "Phones Detected"})
-            st.markdown("**Phone Detection Events**")
-            st.dataframe(detection_df, use_container_width=True, hide_index=True)
-        else:
-            st.success("No phone was detected in the sampled frames.")
-
-        st.caption("The detector analyzes sampled video frames, so brief phone appearances may be missed. Phone visibility does not prove distraction.")
-    elif timeline_data:
-        st.warning("The video did not provide usable timestamps.")
-    else:
-        st.info("No timeline data is available. Analyze a video again.")
-
-    st.divider()
-    st.subheader("📄 Downloadable Session Report")
-
-    pdf_data = create_pdf_report(saved_analysis)
-    st.download_button(
-        label="Download Session Report (PDF)",
-        data=pdf_data,
-        file_name="study_session_report.pdf",
-        mime="application/pdf",
-        key="pdf_session_report_main",
-    )
-
-    st.caption("Phone-Free Score = 100 − Phone Visible Percentage. This indicates phone visibility only; it does not measure actual concentration or study quality.")
-
-# ============================================================
 # ABOUT SECTION
 # ============================================================
 
@@ -1332,3 +1298,4 @@ st.warning(
     "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
