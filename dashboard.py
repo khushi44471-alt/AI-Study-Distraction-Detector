@@ -9,7 +9,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import av
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,7 +28,6 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
 
 # ============================================================
@@ -334,13 +332,6 @@ def get_alert_level(focus_score):
         return "Warning"
     return "Critical"
 
-def get_confidence_label(confidence):
-    if confidence >= 0.8:
-        return "High"
-    elif confidence >= 0.5:
-        return "Medium"
-    return "Low"
-
 def get_study_status(focus_score):
     if focus_score >= 80:
         return "Excellent focus"
@@ -349,6 +340,13 @@ def get_study_status(focus_score):
     elif focus_score >= 40:
         return "Moderate distraction"
     return "High distraction"
+
+def get_confidence_label(confidence):
+    if confidence >= 0.8:
+        return "High"
+    elif confidence >= 0.5:
+        return "Medium"
+    return "Low"
 
 def append_warning_log(log_list, message):
     log_list.append({
@@ -377,21 +375,6 @@ def update_focus_streak(current_streak, phone_visible):
         return 0
     return current_streak + 1
 
-def summarize_warning_events(warning_log, max_entries=10):
-    if not warning_log:
-        return {
-            "warning_count": 0,
-            "last_warning": "No warning yet",
-            "recent_events": []
-        }
-
-    recent = warning_log[-max_entries:]
-    return {
-        "warning_count": len(warning_log),
-        "last_warning": recent[-1]["time"],
-        "recent_events": recent
-    }
-
 def build_session_summary(video_name, total_frames, phone_frames, phone_percentage, focus_score):
     return {
         "video_name": video_name,
@@ -416,11 +399,6 @@ def get_live_status(phone_detected):
         return "PHONE DETECTED"
     return "FOCUSED / NO PHONE"
 
-def recent_focus_score_summary(session_summaries):
-    if not session_summaries:
-        return 0.0
-    return sum(item["focus_score"] for item in session_summaries) / len(session_summaries)
-
 def compute_alert_snapshot(phone_percentage, focus_score):
     return {
         "phone_percentage": round(float(phone_percentage), 2),
@@ -428,9 +406,6 @@ def compute_alert_snapshot(phone_percentage, focus_score):
         "risk_band": get_risk_band(focus_score),
         "status": get_study_status(focus_score)
     }
-
-def should_warn_again(last_warn_time, cooldown_seconds=20):
-    return (time.time() - last_warn_time) >= cooldown_seconds
 
 def append_warning_summary(summary_dict, message):
     summary_dict["warning_count"] += 1
@@ -837,203 +812,97 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
 # ============================================================
-# Live webcam detection
+# Object detection helpers
 # ============================================================
 
-class LivePhoneDetector(VideoProcessorBase):
-    def __init__(self):
-        self.model = load_yolo_model(str(ensure_model_exists()))
-        self.last_warn_time = 0.0
+@st.cache_resource(show_spinner=False)
+def get_model():
+    return load_yolo_model(str(ensure_model_exists()))
 
-    def recv(self, frame):
-        image = frame.to_ndarray(format="bgr24")
+def detect_phone_in_image(image):
+    model = get_model()
+    detections = []
+    confidence = 0.0
 
-        try:
-            result = self.model.predict(
-                source=image,
-                imgsz=640,
-                conf=0.18,
-                verbose=False,
-                max_det=20,
-            )[0]
+    results = model.predict(image, imgsz=640, conf=0.18, verbose=False, max_det=20)
+    if not results or len(results) == 0:
+        return {"phone_detected": False, "phone_count": 0, "confidence": 0.0, "detections": detections}
 
-            detections = []
-            if result.boxes is not None:
-                for box in result.boxes:
-                    class_id = int(box.cls[0].item())
-                    class_name = (
-                        self.model.names[class_id]
-                        if not isinstance(self.model.names, dict)
-                        else self.model.names.get(class_id, "")
-                    )
-                    class_name = str(class_name).strip().lower()
+    result = results[0]
+    if result.boxes is None:
+        return {"phone_detected": False, "phone_count": 0, "confidence": 0.0, "detections": detections}
 
-                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                        x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-                        conf = float(box.conf[0].item())
-                        detections.append((x1, y1, x2, y2, conf))
+    for box in result.boxes:
+        cls_id = int(box.cls[0].item())
+        class_name = model.names[cls_id] if not isinstance(model.names, dict) else model.names.get(cls_id, "")
+        class_name = str(class_name).strip().lower()
+        conf = float(box.conf[0].item())
 
-            if detections:
-                for x1, y1, x2, y2, conf in detections:
-                    cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                    cv2.putText(
-                        image,
-                        f"PHONE {conf:.0%}",
-                        (x1, max(20, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
+        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+            detections.append({
+                "class": class_name,
+                "confidence": conf,
+                "bbox": [x1, y1, x2, y2],
+            })
+            confidence = max(confidence, conf)
 
-                now = time.monotonic()
-                if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
-                    st.session_state.last_live_warning_time = now
-                    st.session_state.live_warning_triggered = True
-                    st.session_state.live_phone_detected = True
-                    st.session_state.last_warning_reason = "Phone detected in live webcam"
-                    st.session_state.warning_summary = append_warning_summary(
-                        st.session_state.warning_summary,
-                        st.session_state.last_warning_reason
-                    )
-
-                cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
-                cv2.putText(
-                    image,
-                    "PHONE DETECTED LIVE",
-                    (20, 35),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-            else:
-                st.session_state.live_phone_detected = False
-                cv2.rectangle(image, (0, 0), (image.shape[1], 42), (25, 110, 25), -1)
-                cv2.putText(
-                    image,
-                    "NO PHONE DETECTED",
-                    (18, 28),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-
-        except Exception:
-            st.session_state.live_phone_detected = False
-
-        return av.VideoFrame.from_ndarray(image, format="bgr24")
+    return {
+        "phone_detected": len(detections) > 0,
+        "phone_count": len(detections),
+        "confidence": float(confidence),
+        "detections": detections,
+    }
 
 # ============================================================
-# TURN config
-# ============================================================
-
-TURN_SERVER = "turn:your-turn-server.example.com:3478"
-TURN_USERNAME = "your_turn_username"
-TURN_PASSWORD = "your_turn_password"
-
-# ============================================================
-# Hero section
-# ============================================================
-
-st.markdown(
-    """
-    <div class="hero-panel">
-      <span class="hero-chip">Class 12 Artificial Intelligence Project</span>
-      <h1>📱 AI Study Distraction Detector</h1>
-      <p>Computer vision for monitoring phone visibility during study sessions, with live detection, focus scoring, warning alerts, and downloadable reports.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    '<p class="section-note">Phone visibility is an indicator only — not proof of distraction. It can support reflection, not replace judgment.</p>',
-    unsafe_allow_html=True,
-)
-
-with st.sidebar:
-    st.markdown("## 📱 Study Detector")
-    st.caption("AI project workspace")
-    st.markdown("---")
-    st.markdown("### Quick navigation")
-    st.markdown("[📊 Session dashboard](#study-session-dashboard)")
-    st.markdown("[📷 Live webcam](#live-webcam-detection)")
-    st.markdown("[🎬 Video analysis](#ai-video-analysis)")
-    st.markdown("[📈 Detection results](#detection-results)")
-    st.markdown("[⏱️ Study timer](#study-session-timer)")
-    st.markdown("---")
-    with st.expander("ℹ️ About this project", expanded=False):
-        st.write("**Objective:** detect visible phone appearances in study-session videos.")
-        st.write("**Technology:** Python, Streamlit, OpenCV, YOLO, Pandas, Plotly.")
-        st.write("**Output:** focus score, detection timeline, warnings, and report downloads.")
-        st.caption("This is a prototype and may miss or misidentify objects.")
-
-# ============================================================
-# Live webcam section
+# Live detection using camera capture
 # ============================================================
 
 st.divider()
-st.subheader("📷 Live Webcam Detection")
-st.caption("Use Chrome and allow camera access. This section gives immediate detection and warning.")
+st.subheader("📷 Live Camera Detection")
+st.caption("Use your camera and let the app detect whether a phone is visible.")
 
-webrtc_streamer(
-    key="live_phone_detector",
-    video_processor_factory=LivePhoneDetector,
-    media_stream_constraints={
-        "video": {
-            "frameRate": 10,
-            "width": 640,
-            "height": 480,
-            "facingMode": "user",
-        },
-        "audio": False,
-    },
-    rtc_configuration={
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-            {"urls": ["stun:stun1.l.google.com:19302"]},
-            {"urls": ["stun:stun2.l.google.com:19302"]},
-            {
-                "urls": [TURN_SERVER],
-                "username": TURN_USERNAME,
-                "credential": TURN_PASSWORD,
-            },
-        ]
-    },
-    async_processing=True,
-)
+live_image = st.camera_input("Camera", key="live_camera_input")
 
-live_detected = st.session_state.get("live_phone_detected", False)
-st.session_state.live_status = get_live_status(live_detected)
+if live_image is not None:
+    frame = np.array(live_image)
+    live_result = detect_phone_in_image(frame)
 
-risk_score = 100.0 if not live_detected else max(0.0, 100.0 - 60.0)
-risk_band = get_risk_band(risk_score)
-
-live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
-live_status_col1.metric("Live Status", st.session_state.live_status)
-live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
-live_status_col3.metric("Risk Level", risk_band)
-
-st.progress(min(1.0, risk_score / 100.0))
-st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
-
-if live_detected:
-    st.session_state.live_focus_streak = 0
-else:
+    st.session_state.live_phone_detected = live_result["phone_detected"]
+    st.session_state.live_status = get_live_status(live_result["phone_detected"])
     st.session_state.live_focus_streak = update_focus_streak(
         st.session_state.live_focus_streak,
-        False
+        live_result["phone_detected"]
     )
 
-if st.session_state.get("live_warning_triggered", False):
-    st.session_state.live_warning_triggered = False
-    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
-    speak_warning()
+    if live_result["phone_detected"]:
+        if time.time() - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
+            st.session_state.last_live_warning_time = time.time()
+            st.session_state.live_warning_triggered = True
+            st.session_state.last_warning_reason = "Phone detected in live camera"
+            st.session_state.warning_summary = append_warning_summary(
+                st.session_state.warning_summary,
+                st.session_state.last_warning_reason
+            )
+            show_phone_alert(preview=False)
+    else:
+        st.session_state.live_warning_triggered = False
+
+    live_risk = 100.0 if not live_result["phone_detected"] else max(0.0, 100.0 - 60.0)
+    live_risk_band = get_risk_band(live_risk)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Live Status", st.session_state.live_status)
+    col2.metric("Focus Streak", st.session_state.live_focus_streak)
+    col3.metric("Risk Level", live_risk_band)
+
+    st.progress(min(1.0, live_risk / 100.0))
+    st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
+
+    if live_result["phone_detected"]:
+        st.error("📱 Phone detected in live camera. Please put it away.")
+    else:
+        st.success("✅ No phone detected in live camera.")
 
 # ============================================================
 # Video analysis
@@ -1082,7 +951,6 @@ def analyze_video(uploaded_file):
         status = st.empty()
         last_alert_time = 0.0
         phone_frame_counter = 0
-        focus_streak = 0
 
         while True:
             success, frame = capture.read()
@@ -1113,16 +981,19 @@ def analyze_video(uploaded_file):
                     frames_with_phone += 1
                     phone_frame_counter += 1
                     detection_flags.append(True)
-                    focus_streak = update_focus_streak(focus_streak, True)
                     warning_log = append_warning_log(warning_log, "Phone detected in sampled frame")
                 else:
                     phone_frame_counter = 0
                     detection_flags.append(False)
-                    focus_streak = update_focus_streak(focus_streak, False)
 
                 current_time = time.monotonic()
                 if phone_frame_counter >= 3 and current_time - last_alert_time >= ALERT_COOLDOWN:
                     last_alert_time = current_time
+                    st.session_state.last_warning_reason = "Phone detected in video analysis"
+                    st.session_state.warning_summary = append_warning_summary(
+                        st.session_state.warning_summary,
+                        st.session_state.last_warning_reason
+                    )
                     show_phone_alert(preview=False)
 
                 if total_frames > 0:
@@ -1134,7 +1005,6 @@ def analyze_video(uploaded_file):
         phone_percentage = compute_phone_percentage(frames_with_phone, sampled_frames)
         focus_score = get_focus_score(phone_percentage)
         alert_level = get_alert_level(focus_score)
-
         average_confidence = float(np.mean(detection_confidences)) if detection_confidences else 0.0
         highest_confidence = float(np.max(detection_confidences)) if detection_confidences else 0.0
         warning_count = len(warning_log)
@@ -1167,11 +1037,9 @@ def analyze_video(uploaded_file):
             "unique_object_classes": len(object_counts),
             "study_status": get_study_status(focus_score),
             "risk_band": get_risk_band(focus_score),
-            "focus_streak": focus_streak,
             "alert_snapshot": compute_alert_snapshot(phone_percentage, focus_score),
         }
 
-        # FIX: automatic warning should play again on a fresh analysis run
         if result["warning_count"] > 0 and not st.session_state.analysis_warning_triggered:
             st.session_state.analysis_warning_triggered = True
             st.session_state.last_warning_reason = "Phone detected in video analysis"
@@ -1243,7 +1111,7 @@ else:
         key="download_csv_summary_main",
     )
 
-st.subheader("🧾 Recent Live Warning Summary")
+st.subheader("🧾 Recent Warning Summary")
 warning_summary = st.session_state.warning_summary
 st.write(f"Total warnings: {warning_summary['warning_count']}")
 st.write(f"Last warning: {warning_summary['last_warning']}")
@@ -1284,7 +1152,6 @@ if uploaded_video is not None:
                     analysis_result["percentage"],
                     analysis_result["detections"],
                 )
-
                 st.session_state["last_analysis"] = analysis_result
                 st.success("Analysis completed and saved to the report.")
             except Exception as error:
@@ -1483,10 +1350,11 @@ with about3:
     )
 
 st.markdown("#### Technology stack")
-st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab · WebRTC")
+st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab")
 
 st.markdown("#### Important limitations")
 st.warning(
     "A detected phone does not prove distraction. The model can miss objects or misclassify things. This app should be used as a study-support tool, not as a final judgment."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
