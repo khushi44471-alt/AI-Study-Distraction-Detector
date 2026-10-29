@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
@@ -284,6 +285,9 @@ if "last_live_warning_time" not in st.session_state:
 if "live_warning_triggered" not in st.session_state:
     st.session_state.live_warning_triggered = False
 
+if "session_snapshots" not in st.session_state:
+    st.session_state.session_snapshots = []
+
 # ============================================================
 # Utility functions
 # ============================================================
@@ -339,6 +343,75 @@ def generate_timeline(detection_flags):
         {"frame": idx, "phone_visible": 1 if flag else 0}
         for idx, flag in enumerate(detection_flags)
     ]
+
+def get_risk_band(focus_score):
+    if focus_score >= 80:
+        return "LOW RISK"
+    elif focus_score >= 60:
+        return "MEDIUM RISK"
+    elif focus_score >= 40:
+        return "HIGH RISK"
+    return "CRITICAL"
+
+def update_focus_streak(current_streak, phone_visible):
+    if phone_visible:
+        return 0
+    return current_streak + 1
+
+def summarize_warning_events(warning_log, max_entries=10):
+    if not warning_log:
+        return {
+            "warning_count": 0,
+            "last_warning": "No warning yet",
+            "recent_events": []
+        }
+
+    recent = warning_log[-max_entries:]
+    return {
+        "warning_count": len(warning_log),
+        "last_warning": recent[-1]["time"],
+        "recent_events": recent
+    }
+
+def build_session_summary(video_name, total_frames, phone_frames, phone_percentage, focus_score):
+    return {
+        "video_name": video_name,
+        "total_frames": int(total_frames),
+        "phone_frames": int(phone_frames),
+        "phone_percentage": round(float(phone_percentage), 2),
+        "focus_score": round(float(focus_score), 2),
+        "risk_band": get_risk_band(focus_score),
+        "status": get_study_status(focus_score)
+    }
+
+def update_session_snapshot(summary_dict):
+    if "session_snapshots" not in st.session_state:
+        st.session_state.session_snapshots = []
+
+    st.session_state.session_snapshots.append(summary_dict)
+    if len(st.session_state.session_snapshots) > 20:
+        st.session_state.session_snapshots = st.session_state.session_snapshots[-20:]
+
+def get_live_status(phone_detected):
+    if phone_detected:
+        return "PHONE DETECTED"
+    return "FOCUSED / NO PHONE"
+
+def recent_focus_score_summary(session_summaries):
+    if not session_summaries:
+        return 0.0
+    return sum(item["focus_score"] for item in session_summaries) / len(session_summaries)
+
+def compute_alert_snapshot(phone_percentage, focus_score):
+    return {
+        "phone_percentage": round(float(phone_percentage), 2),
+        "focus_score": round(float(focus_score), 2),
+        "risk_band": get_risk_band(focus_score),
+        "status": get_study_status(focus_score)
+    }
+
+def should_warn_again(last_warn_time, cooldown_seconds=20):
+    return (time.time() - last_warn_time) >= cooldown_seconds
 
 def load_report() -> pd.DataFrame:
     if not REPORT_FILE.exists() or REPORT_FILE.stat().st_size == 0:
@@ -943,6 +1016,7 @@ def analyze_video(uploaded_file):
         status = st.empty()
         last_alert_time = 0.0
         phone_frame_counter = 0
+        focus_streak = 0
 
         while True:
             success, frame = capture.read()
@@ -973,10 +1047,12 @@ def analyze_video(uploaded_file):
                     frames_with_phone += 1
                     phone_frame_counter += 1
                     detection_flags.append(True)
+                    focus_streak = update_focus_streak(focus_streak, True)
                     warning_log = append_warning_log(warning_log, "Phone detected in sampled frame")
                 else:
                     phone_frame_counter = 0
                     detection_flags.append(False)
+                    focus_streak = update_focus_streak(focus_streak, False)
 
                 current_time = time.monotonic()
                 if phone_frame_counter >= 3 and current_time - last_alert_time >= ALERT_COOLDOWN:
@@ -997,6 +1073,15 @@ def analyze_video(uploaded_file):
         highest_confidence = float(np.max(detection_confidences)) if detection_confidences else 0.0
         warning_count = len(warning_log)
 
+        summary = build_session_summary(
+            uploaded_file.name,
+            sampled_frames,
+            frames_with_phone,
+            phone_percentage,
+            focus_score
+        )
+        update_session_snapshot(summary)
+
         result = {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
@@ -1015,6 +1100,9 @@ def analyze_video(uploaded_file):
             "total_object_detections": sum(object_counts.values()),
             "unique_object_classes": len(object_counts),
             "study_status": get_study_status(focus_score),
+            "risk_band": get_risk_band(focus_score),
+            "focus_streak": focus_streak,
+            "alert_snapshot": compute_alert_snapshot(phone_percentage, focus_score),
         }
 
         return result
@@ -1127,11 +1215,13 @@ if "last_analysis" in st.session_state:
     focus_score = saved_analysis["focus_score"]
     phone_percentage = saved_analysis["percentage"]
 
+    snapshot = compute_alert_snapshot(phone_percentage, focus_score)
+
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Focus Score", f"{focus_score:.1f}%")
     col2.metric("Phone Visibility", f"{phone_percentage:.1f}%")
-    col3.metric("Alert Level", saved_analysis["alert_level"])
-    col4.metric("Study Status", saved_analysis["study_status"])
+    col3.metric("Risk Band", snapshot["risk_band"])
+    col4.metric("Study Status", snapshot["status"])
 
     st.subheader("📉 Distraction Timeline")
     timeline_df = pd.DataFrame(saved_analysis["timeline"])
@@ -1180,6 +1270,14 @@ if "last_analysis" in st.session_state:
         st.bar_chart(clutter_df.set_index("Object Class"))
     else:
         st.info("No objects were detected in the sampled frames.")
+
+    st.subheader("📦 Session Snapshot")
+    session_snapshots = st.session_state.get("session_snapshots", [])
+    if session_snapshots:
+        snapshot_df = pd.DataFrame(session_snapshots)
+        st.dataframe(snapshot_df, use_container_width=True)
+    else:
+        st.info("No session snapshots saved yet.")
 
     # Download PDF
     pdf_data = create_pdf_report(saved_analysis)
