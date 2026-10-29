@@ -4,7 +4,6 @@ import base64
 import csv
 import io
 import json
-import logging
 import tempfile
 import time
 from datetime import datetime
@@ -209,11 +208,9 @@ BASE_DIR = Path(__file__).resolve().parent
 REPORT_DIR = BASE_DIR / "reports"
 REPORT_FILE = REPORT_DIR / "session_summary.csv"
 
-# STRONGER YOLO MODEL
 MODEL_NAME = "yolo11m.pt"
 MODEL_FILE = BASE_DIR / MODEL_NAME
 
-# Auto-download helper for the model if it is missing.
 def ensure_model_exists() -> Path:
     candidate_paths = [
         MODEL_FILE,
@@ -221,12 +218,13 @@ def ensure_model_exists() -> Path:
         BASE_DIR.parent / "yolo11s.pt",
         BASE_DIR.parent / "yolo11n.pt",
     ]
+
     for candidate in candidate_paths:
         if candidate.exists():
             return candidate
 
     try:
-        _ = YOLO(MODEL_NAME)
+        YOLO(MODEL_NAME)
         for candidate in candidate_paths:
             if candidate.exists():
                 return candidate
@@ -258,42 +256,29 @@ NUMERIC_COLUMNS = [
 ]
 
 # ============================================================
-# TIMER STATE
+# SESSION STATE
 # ============================================================
 
 if "study_timer_duration" not in st.session_state:
     st.session_state.study_timer_duration = 25
-
 if "study_timer_running" not in st.session_state:
     st.session_state.study_timer_running = False
-
 if "study_timer_started_at" not in st.session_state:
     st.session_state.study_timer_started_at = None
-
 if "study_timer_elapsed_before_pause" not in st.session_state:
     st.session_state.study_timer_elapsed_before_pause = 0.0
-
 if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
-# ============================================================
-# LIVE DETECTION STATE
-# ============================================================
-
 if "live_phone_detected" not in st.session_state:
     st.session_state.live_phone_detected = False
-
 if "last_live_warning_time" not in st.session_state:
     st.session_state.last_live_warning_time = 0.0
-
-if "webcam_connection_attempt" not in st.session_state:
-    st.session_state.webcam_connection_attempt = 1
-
 if "webcam_started" not in st.session_state:
     st.session_state.webcam_started = False
 
 # ============================================================
-# WARNING SOUND SETTINGS
+# ALERT SOUND SETTINGS
 # ============================================================
 
 ALERT_COOLDOWN = 25
@@ -327,7 +312,6 @@ alert_volume = st.slider(
 )
 
 volume_level = alert_volume / 100.0
-
 custom_audio = None
 custom_audio_type = None
 
@@ -340,7 +324,6 @@ if alert_choice == "5. Custom MP3/WAV File":
     if uploaded_audio is not None:
         custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
         custom_audio_type = uploaded_audio.type or "audio/mpeg"
-
 
 def play_female_warning(volume=0.8):
     safe_volume = max(0.0, min(1.0, float(volume)))
@@ -373,7 +356,6 @@ def play_female_warning(volume=0.8):
     </script>
     """
     components.html(js, height=0)
-
 
 def play_warning_tone(mode, volume=0.75):
     vol = max(0.0, min(1.0, float(volume)))
@@ -473,7 +455,6 @@ def play_warning_tone(mode, volume=0.75):
     """
     components.html(js, height=0)
 
-
 def play_custom_warning_audio():
     if custom_audio is None:
         st.info("Upload a custom MP3 or WAV file first.")
@@ -493,7 +474,6 @@ def play_custom_warning_audio():
     </script>
     """
     components.html(audio_html, height=90)
-
 
 def show_phone_alert(preview=False):
     if not preview:
@@ -546,7 +526,6 @@ def show_phone_alert(preview=False):
     """
     components.html(fallback_html, height=70)
 
-
 if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
@@ -562,7 +541,6 @@ PHONE_KEYWORDS = [
     "cellphone",
 ]
 
-
 def detect_network_issue():
     return """
     Camera connection might be blocked by:
@@ -573,7 +551,6 @@ def detect_network_issue():
     - mobile data restrictions
     Try: same network, allow camera, reset browser, use localhost or HTTPS.
     """
-
 
 def should_alert_user(phone_count, last_alert_time, current_time):
     if phone_count <= 0:
@@ -624,7 +601,6 @@ with st.sidebar:
 # REPORT HELPERS
 # ============================================================
 
-
 def load_report() -> pd.DataFrame:
     if not REPORT_FILE.exists() or REPORT_FILE.stat().st_size == 0:
         report_df = pd.DataFrame(columns=CSV_COLUMNS)
@@ -643,7 +619,6 @@ def load_report() -> pd.DataFrame:
 
     return report_df[CSV_COLUMNS]
 
-
 def save_session(video_name, resolution, frames_processed, frames_with_phone, percentage, detections):
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     file_has_content = REPORT_FILE.exists() and REPORT_FILE.stat().st_size > 0
@@ -661,7 +636,6 @@ def save_session(video_name, resolution, frames_processed, frames_with_phone, pe
             round(float(percentage), 2),
             int(detections),
         ])
-
 
 def create_pdf_report(analysis):
     pdf_buffer = io.BytesIO()
@@ -751,9 +725,8 @@ def load_yolo_model(model_path: str):
     return YOLO(model_path)
 
 # ============================================================
-# VIDEO ANALYSIS (kept)
+# VIDEO ANALYSIS
 # ============================================================
-
 
 def analyze_video(uploaded_file):
     temp_path = None
@@ -780,6 +753,7 @@ def analyze_video(uploaded_file):
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = float(capture.get(cv2.CAP_PROP_FPS))
+
         if width <= 0 or height <= 0:
             st.error("Video dimensions could not be read. Try another video.")
             return None
@@ -796,10 +770,12 @@ def analyze_video(uploaded_file):
         if duration is not None and duration < 5:
             quality_warnings.append("Very short video (under 5 seconds): results may not represent a session.")
 
-        with st.spinner("Loading stronger AI model..."):
+        with st.spinner("Loading model..."):
             model = load_yolo_model(str(resolved_model_path))
 
-        sampled_frames = frames_with_phone = total_detections = 0
+        sampled_frames = 0
+        frames_with_phone = 0
+        total_detections = 0
         object_counts = {}
         confidence_values = []
         blur_values = []
@@ -844,6 +820,7 @@ def analyze_video(uploaded_file):
                     verbose=False,
                     max_det=20,
                 )[0]
+
                 annotated = frame.copy()
                 phones_in_frame = 0
                 frame_best_confidence = -1.0
@@ -851,10 +828,7 @@ def analyze_video(uploaded_file):
                 if prediction.boxes is not None:
                     for box in prediction.boxes:
                         class_id = int(box.cls[0].item())
-                        if isinstance(model.names, dict):
-                            class_name = model.names.get(class_id, "Unknown")
-                        else:
-                            class_name = model.names[class_id]
+                        class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "Unknown")
                         class_name = str(class_name).strip().lower()
 
                         object_counts[class_name] = object_counts.get(class_name, 0) + 1
@@ -864,34 +838,40 @@ def analyze_video(uploaded_file):
                         is_phone = any(keyword in class_name for keyword in PHONE_KEYWORDS)
 
                         if is_phone:
-                            box_color = (0, 210, 0)
-                            label_name = "Phone"
                             confidence_values.append(confidence)
                             phones_in_frame += 1
                             total_detections += 1
+                            frame_best_confidence = max(frame_best_confidence, confidence)
 
                             center_x = (x1 + x2) // 2
                             center_y = (y1 + y2) // 2
                             grid_x = min(19, max(0, int(center_x / width * 20)))
                             grid_y = min(19, max(0, int(center_y / height * 20)))
                             phone_heatmap[grid_y, grid_x] += 1
-                            frame_best_confidence = max(frame_best_confidence, confidence)
-                        else:
-                            box_color = (255, 120, 0)
-                            label_name = class_name.title()
 
-                        cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, 3)
-                        label = f"{label_name} {confidence:.0%}"
-                        cv2.putText(
-                            annotated,
-                            label,
-                            (x1, max(22, y1 - 9)),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7,
-                            box_color,
-                            2,
-                            cv2.LINE_AA,
-                        )
+                            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 210, 0), 3)
+                            cv2.putText(
+                                annotated,
+                                f"Phone {confidence:.0%}",
+                                (x1, max(22, y1 - 9)),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.7,
+                                (0, 210, 0),
+                                2,
+                                cv2.LINE_AA,
+                            )
+                        else:
+                            cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 120, 0), 2)
+                            cv2.putText(
+                                annotated,
+                                class_name.title(),
+                                (x1, max(22, y1 - 9)),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.55,
+                                (255, 120, 0),
+                                2,
+                                cv2.LINE_AA,
+                            )
 
                 phone_found = phones_in_frame > 0
                 if phone_found:
@@ -1061,31 +1041,24 @@ st.caption("Class 12 AI Project | Phone visibility analysis only; not a validate
 
 st.divider()
 st.subheader("📷 Live Webcam / Phone Camera Detection")
-st.caption("This works in real time. It warns instantly when a phone is visible in the live camera feed.")
+st.caption("Use your browser camera. For phones, use Chrome or Edge and allow camera permission.")
 
 @st.cache_resource(show_spinner=False)
 def load_webcam_model():
     try:
-        resolved_model_path = ensure_model_exists()
-        return load_yolo_model(str(resolved_model_path))
+        return load_yolo_model(str(ensure_model_exists()))
     except Exception as exc:
         st.error(f"Model error: {exc}")
         raise
-
 
 class LivePhoneDetector(VideoProcessorBase):
     def __init__(self):
         self.model = load_webcam_model()
         self.last_detections = []
         self.phone_warning = False
-        self.frame_count = 0
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
-        self.frame_count += 1
-
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
 
         try:
             image_for_model = cv2.resize(image, (640, 480))
@@ -1094,7 +1067,7 @@ class LivePhoneDetector(VideoProcessorBase):
             result = self.model.predict(
                 source=image_for_model,
                 imgsz=640,
-                conf=0.12,
+                conf=0.18,
                 verbose=False,
                 device="cpu",
                 max_det=20,
@@ -1104,11 +1077,7 @@ class LivePhoneDetector(VideoProcessorBase):
             if result.boxes is not None:
                 for box in result.boxes:
                     class_id = int(box.cls[0].item())
-                    if isinstance(self.model.names, dict):
-                        class_name = self.model.names.get(class_id, "")
-                    else:
-                        class_name = self.model.names[class_id]
-
+                    class_name = self.model.names[class_id] if not isinstance(self.model.names, dict) else self.model.names.get(class_id, "")
                     class_name = str(class_name).strip().lower()
                     if not any(keyword in class_name for keyword in PHONE_KEYWORDS):
                         continue
@@ -1138,18 +1107,6 @@ class LivePhoneDetector(VideoProcessorBase):
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (0, 0, 255),
-                2,
-                cv2.LINE_AA,
-            )
-
-        if blur_score < 40:
-            cv2.putText(
-                image,
-                "Warning: frame is blurry",
-                (20, image.shape[0] - 20),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 0),
                 2,
                 cv2.LINE_AA,
             )
@@ -1184,14 +1141,13 @@ class LivePhoneDetector(VideoProcessorBase):
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
-# Faster webcam startup: do not auto-create the WeRTC stream repeatedly.
-start_live_camera = st.button("▶️ Start live camera", key="start_live_camera_button")
-if start_live_camera:
-    st.session_state.webcam_started = True
-
-stop_live_camera = st.button("⏹️ Stop live camera", key="stop_live_camera_button")
-if stop_live_camera:
-    st.session_state.webcam_started = False
+col_start, col_stop = st.columns(2)
+with col_start:
+    if st.button("▶️ Start live camera", key="start_live_camera_button"):
+        st.session_state.webcam_started = True
+with col_stop:
+    if st.button("⏹️ Stop live camera", key="stop_live_camera_button"):
+        st.session_state.webcam_started = False
 
 if st.session_state.get("live_phone_detected", False):
     now = time.monotonic()
@@ -1209,7 +1165,7 @@ if st.session_state.webcam_started:
             video_processor_factory=LivePhoneDetector,
             media_stream_constraints={
                 "video": {
-                    "frameRate": 15,
+                    "frameRate": 12,
                     "width": 640,
                     "height": 480,
                     "facingMode": "user",
@@ -1217,29 +1173,63 @@ if st.session_state.webcam_started:
                 "audio": False,
             },
             rtc_configuration={
-                "iceServers": [
-                    {"urls": ["stun:stun.l.google.com:19302"]},
-                    {"urls": ["stun:stun1.l.google.com:19302"]},
-                    {"urls": ["stun:stun.cloudflare.com:3478"]},
-                ]
+                "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
             },
             async_processing=True,
         )
 
         if getattr(webcam_ctx.state, "playing", False):
-            st.success("Live webcam is connected and monitoring.")
+            st.success("WebRTC webcam connected and monitoring.")
         else:
-            st.info("Allow camera access to start the detection.")
-            st.warning(detect_network_issue())
-    except Exception as webcam_error:
-        st.error("The webcam component could not start.")
-        st.code(f"{type(webcam_error).__name__}: {webcam_error}")
-        st.warning(detect_network_issue())
+            st.warning("WebRTC camera not ready. Using browser camera fallback below.")
+            camera_image = st.camera_input("Use your phone camera", key="phone_camera_fallback")
+            if camera_image is not None:
+                image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
+                model = load_webcam_model()
+                result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
+
+                detected = False
+                if result.boxes is not None:
+                    for box in result.boxes:
+                        class_id = int(box.cls[0].item())
+                        class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
+                        class_name = str(class_name).strip().lower()
+                        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                            detected = True
+                            break
+
+                if detected:
+                    st.error("📱 Phone detected from live phone camera.")
+                    show_phone_alert(preview=False)
+                else:
+                    st.success("Live camera active — no phone detected.")
+    except Exception:
+        st.warning("WebRTC failed. Using browser camera fallback.")
+        camera_image = st.camera_input("Use your phone camera", key="phone_camera_fallback_2")
+        if camera_image is not None:
+            image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
+            model = load_webcam_model()
+            result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
+
+            detected = False
+            if result.boxes is not None:
+                for box in result.boxes:
+                    class_id = int(box.cls[0].item())
+                    class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
+                    class_name = str(class_name).strip().lower()
+                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                        detected = True
+                        break
+
+            if detected:
+                st.error("📱 Phone detected from live phone camera.")
+                show_phone_alert(preview=False)
+            else:
+                st.success("Live camera active — no phone detected.")
 else:
-    st.info("Click the Start live camera button once. This stops the repeated connection attempts and connects faster.")
+    st.info("Click Start live camera once. On mobile, use Chrome or Edge and allow camera access. If WebRTC fails, the fallback camera will still work.")
 
 if st.button("🔄 Reset live connection", key="webcam_reset_main", help="Use this after a failed or stuck connection"):
-    st.session_state.webcam_connection_attempt += 1
     st.session_state.webcam_started = False
     st.rerun()
 
@@ -1559,3 +1549,4 @@ st.warning(
     "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
