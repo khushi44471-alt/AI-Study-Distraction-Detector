@@ -202,7 +202,7 @@ st.markdown(
 )
 
 # ============================================================
-# FILES
+# DATA FILES
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -230,7 +230,7 @@ NUMERIC_COLUMNS = [
 ]
 
 # ============================================================
-# TIMER
+# TIMER STATE
 # ============================================================
 
 if "study_timer_duration" not in st.session_state:
@@ -249,10 +249,23 @@ if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
 # ============================================================
-# WARNING SOUND SETTINGS
+# LIVE WARNING STATE
 # ============================================================
 
-ALERT_COOLDOWN = 30
+if "live_phone_detected" not in st.session_state:
+    st.session_state.live_phone_detected = False
+
+if "last_live_warning_time" not in st.session_state:
+    st.session_state.last_live_warning_time = 0.0
+
+if "live_warning_count" not in st.session_state:
+    st.session_state.live_warning_count = 0
+
+# ============================================================
+# ALERTS
+# ============================================================
+
+ALERT_COOLDOWN = 25
 REQUIRED_CONSECUTIVE_DETECTIONS = 3
 
 alert_choice = st.selectbox(
@@ -502,7 +515,7 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
 # ============================================================
-# HELPERS
+# LIVE WARNING HELPERS
 # ============================================================
 
 def detect_network_issue():
@@ -681,7 +694,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 # ============================================================
-# MODEL LOADING
+# YOLO MODEL
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
@@ -689,7 +702,7 @@ def load_yolo_model(model_path: str):
     return YOLO(model_path)
 
 # ============================================================
-# VIDEO ANALYSIS
+# VIDEO ANALYSIS (kept)
 # ============================================================
 
 def analyze_video(uploaded_file):
@@ -747,7 +760,7 @@ def analyze_video(uploaded_file):
 
         progress = st.progress(0.0)
         status = st.empty()
-        st.subheader("🔴 Live AI Detection")
+        st.subheader("🔴 Video Analysis")
 
         live_video = st.empty()
         live_col1, live_col2, live_col3, live_col4 = st.columns(4)
@@ -921,7 +934,7 @@ def analyze_video(uploaded_file):
                 pass
 
 # ============================================================
-# MAIN DASHBOARD
+# DASHBOARD
 # ============================================================
 
 st.divider()
@@ -985,12 +998,12 @@ else:
 st.caption("Class 12 AI Project | Phone visibility analysis only; not a validated attention measurement.")
 
 # ============================================================
-# LIVE WEBCAM
+# LIVE WEBCAM / PHONE CAMERA DETECTION
 # ============================================================
 
 st.divider()
-st.subheader("📷 Live AI Camera Detection")
-st.caption("Use your laptop webcam or phone camera to detect visible mobile phones in real time.")
+st.subheader("📷 Live Webcam / Phone Camera Detection")
+st.caption("This works in real time. It warns instantly when a phone is visible in the live camera feed.")
 
 @st.cache_resource(show_spinner=False)
 def load_webcam_model():
@@ -1005,7 +1018,6 @@ class LivePhoneDetector(VideoProcessorBase):
         self.model = load_webcam_model()
         self.last_detections = []
         self.phone_warning = False
-        self.last_inference_error = None
         self.frame_count = 0
 
     def recv(self, frame):
@@ -1039,10 +1051,10 @@ class LivePhoneDetector(VideoProcessorBase):
 
             self.last_detections = detections
             self.phone_warning = bool(detections)
-            self.last_inference_error = None
 
         except Exception as error:
-            self.last_inference_error = str(error)
+            self.last_detections = []
+            self.phone_warning = False
             logging.getLogger("streamlit_webrtc").exception("Live phone detection failed")
 
         for x1, y1, x2, y2, confidence in self.last_detections:
@@ -1060,7 +1072,7 @@ class LivePhoneDetector(VideoProcessorBase):
 
         height, width = image.shape[:2]
         if self.phone_warning:
-            banner = "PHONE DETECTED - PLEASE CHECK YOUR PHONE USE"
+            banner = "PHONE DETECTED LIVE - PLEASE PUT IT AWAY"
             cv2.rectangle(image, (0, 0), (width, 52), (0, 0, 210), -1)
             cv2.putText(
                 image,
@@ -1072,11 +1084,6 @@ class LivePhoneDetector(VideoProcessorBase):
                 2,
                 cv2.LINE_AA,
             )
-
-            try:
-                play_female_warning(volume=volume_level)
-            except Exception:
-                pass
         else:
             cv2.rectangle(image, (0, 0), (width, 42), (25, 110, 25), -1)
             cv2.putText(
@@ -1090,10 +1097,11 @@ class LivePhoneDetector(VideoProcessorBase):
                 cv2.LINE_AA,
             )
 
+        st.session_state.live_phone_detected = self.phone_warning
+
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
-logging.getLogger("streamlit_webrtc").setLevel(logging.INFO)
-
+# Live warning logic
 if "webcam_connection_attempt" not in st.session_state:
     st.session_state.webcam_connection_attempt = 1
 
@@ -1108,10 +1116,7 @@ with reset_col:
         st.rerun()
 
 with help_col:
-    st.caption(
-        f"Connection attempt: {st.session_state.webcam_connection_attempt}. "
-        "If the stream gets stuck, press Reset once, then press START again."
-    )
+    st.caption(f"Connection attempt: {st.session_state.webcam_connection_attempt}")
 
 WEBRTC_RTC_CONFIGURATION = {
     "iceServers": [
@@ -1133,8 +1138,6 @@ WEBRTC_RTC_CONFIGURATION = {
     ]
 }
 
-st.caption("If your phone camera keeps spinning, this usually means WebRTC networking/STUN-TURN issue, not a broken camera.")
-
 try:
     webcam_ctx = webrtc_streamer(
         key=f"study_phone_webcam_live_warning_{st.session_state.webcam_connection_attempt}",
@@ -1145,12 +1148,11 @@ try:
     )
 
     if getattr(webcam_ctx.state, "playing", False):
-        st.success("WebRTC connected. Live phone detection is running.")
+        st.success("Live webcam is connected and monitoring.")
     else:
         st.info(
-            "Waiting for the live connection. Press START above and allow camera access. "
-            "If the existing 'connection is taking longer than expected' message remains, "
-            "press 'Reset live connection' once and try START again."
+            "Click START above and allow camera access. "
+            "If the stream hangs, press Reset live connection and try again."
         )
         st.warning(detect_network_issue())
 except Exception as webcam_error:
@@ -1158,14 +1160,18 @@ except Exception as webcam_error:
     st.code(f"{type(webcam_error).__name__}: {webcam_error}")
     st.warning(detect_network_issue())
 
-st.markdown("#### If the connection still times out")
-st.write(
-    "This version tries several public STUN endpoints and adds a reset button. "
-    "If it still times out, the phone/browser may be allowed to use its camera while the network "
-    "blocks WebRTC media traffic. In that case code alone cannot guarantee a connection; a TURN "
-    "relay or a different network that permits WebRTC may be necessary. The recorded-video analysis "
-    "remains available as a fallback."
-)
+# Trigger real-time warning outside the webcam loop
+if st.session_state.get("live_phone_detected", False):
+    st.error("📱 LIVE PHONE DETECTED! Put the phone away now.")
+    now = time.monotonic()
+    if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
+        st.session_state.last_live_warning_time = now
+        st.session_state.live_warning_count += 1
+        show_phone_alert(preview=False)
+else:
+    st.success("Live detection is active and no phone is currently detected.")
+
+st.caption("This live detection warns instantly in real time while the webcam is running. It does not wait for a recorded video to finish analyzing.")
 
 # ============================================================
 # VIDEO UPLOAD
@@ -1174,8 +1180,6 @@ st.write(
 st.divider()
 st.subheader("🎬 AI Video Analysis")
 st.caption("Upload a recorded study session to analyse sampled frames for visible phones.")
-
-st.write("Upload a recorded study-session video (MP4, MOV, or AVI), then click Start AI Detection.")
 
 uploaded_video = st.file_uploader(
     "Choose a study video",
@@ -1206,7 +1210,7 @@ if uploaded_video is not None:
                 st.error(f"The analysis finished, but the report could not be saved: {error}")
 
 # ============================================================
-# LAST ANALYSIS
+# LAST ANALYSIS RESULTS
 # ============================================================
 
 if "last_analysis" in st.session_state:
@@ -1217,22 +1221,13 @@ if "last_analysis" in st.session_state:
     st.subheader("📸 Example Frame with Phone Detection")
 
     if saved_frame is not None:
-        st.image(
-            saved_frame,
-            caption=f"Phone-detection example from {saved_analysis['video_name']}",
-            use_container_width=True,
-        )
+        st.image(saved_frame, caption=f"Phone-detection example from {saved_analysis['video_name']}", use_container_width=True)
     else:
         st.info("No analyzed frame is available for display.")
 
-    st.caption(
-        "This preview shows the sampled frame with the highest-confidence phone detection "
-        "(or the last sampled frame if no phone was detected). Green boxes mark phone detections only."
-    )
+    st.caption("This preview shows the sampled frame with the highest-confidence phone detection.")
 
     st.subheader("🔥 Phone Detection Heatmap")
-    st.caption("Brighter areas show where phone detections occurred more frequently in the analyzed video frames.")
-
     heatmap_data = saved_analysis.get("phone_heatmap")
     if heatmap_data is not None:
         heatmap_array = np.asarray(heatmap_data, dtype=np.float32)
@@ -1264,14 +1259,14 @@ if "last_analysis" in st.session_state:
     confidence_col1.metric("Detection threshold", f"{saved_analysis.get('detection_threshold', 0.25):.0%}")
     confidence_col2.metric("Average phone confidence", f"{average_confidence:.1%}" if average_confidence is not None else "N/A")
     confidence_col3.metric("Highest phone confidence", f"{highest_confidence:.1%}" if highest_confidence is not None else "N/A")
-    st.caption("Confidence is the model's score for each detected phone, not a guarantee of correctness. N/A means no phone detections met the threshold.")
+    st.caption("Confidence is the model's score for each detected phone, not a guarantee of correctness.")
 
     warnings = saved_analysis.get("quality_warnings", [])
     if warnings:
         for warning in warnings:
             st.warning(warning)
     else:
-        st.success("No obvious technical video-quality warnings from the basic checks. This does not guarantee accurate detection.")
+        st.success("No obvious technical video-quality warnings were found.")
 
     duration = saved_analysis.get("duration")
     st.write(f"Video: {saved_analysis['resolution']} | " + (f"Duration: {duration:.1f} seconds" if duration is not None else "Duration unavailable"))
@@ -1298,8 +1293,6 @@ if "last_analysis" in st.session_state:
     else:
         st.info("No objects were detected in the analyzed frames.")
 
-    st.caption("Counts represent detections across sampled frames. The same object may be counted repeatedly, so these are not counts of unique physical objects or a validated measure of desk clutter.")
-
     sampled_frames = saved_analysis["frames_processed"]
     phone_frames = saved_analysis["frames_with_phone"]
     percentage = saved_analysis["percentage"]
@@ -1317,7 +1310,6 @@ if "last_analysis" in st.session_state:
     st.write("Study Focus Score = 100 − Phone Visible Percentage")
     st.write(f"Your video had a phone visible in {phone_frames:,} out of {sampled_frames:,} analyzed frames.")
     st.write(f"Calculation: 100 − {percentage:.1f} = {focus_score:.1f}/100.")
-    st.caption("This is a phone-visibility-based indicator, not a measured attention or concentration score. A phone may be used for studying, and the AI may miss or misidentify phones.")
 
 # ============================================================
 # TIMER
@@ -1406,8 +1398,6 @@ elif st.session_state.study_timer_running:
     time.sleep(1)
     st.rerun()
 
-st.caption("The timer tracks your study session independently of video analysis. Phone detection is based on the analyzed video, not live monitoring.")
-
 # ============================================================
 # TIMELINE
 # ============================================================
@@ -1494,11 +1484,9 @@ st.write("Python · Streamlit · Ultralytics YOLO · OpenCV · Pandas · Matplot
 
 st.markdown("#### Important limitations")
 st.warning(
-    "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. "
-    "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
+    "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
-       
 
 
 
