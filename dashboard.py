@@ -31,7 +31,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-from streamlit_webrtc import WebRtcMode, VideoProcessorBase, webrtc_streamer
+from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
 from ultralytics import YOLO
 
 # ============================================================
@@ -203,7 +203,7 @@ st.markdown(
 )
 
 # ============================================================
-# APP DATA & FILES
+# APP FILES
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -250,11 +250,54 @@ if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
 # ============================================================
-# AUTO SOUND WARNING SYSTEM
+# ALERT SETTINGS + SOUND FUNCTIONS
 # ============================================================
 
-# This is the function that actually makes the warning sound play automatically.
-# Browsers may block autoplay until the user clicks once, so this is best-effort.
+ALERT_COOLDOWN = 30
+REQUIRED_CONSECUTIVE_DETECTIONS = 3
+
+alert_choice = st.selectbox(
+    "🔔 Choose Phone Alert Sound",
+    [
+        "1. Female Spoken Warning",
+        "2. Gentle Notification Chime",
+        "3. Rising Emergency Siren",
+        "4. Retro 8-Bit Game Melody",
+        "5. Custom MP3/WAV File",
+        "6. Soft Bell Ring",
+        "7. Sharp Beep",
+        "8. Urgent Alarm Pulse",
+        "9. Digital Notification",
+        "10. School Bell",
+    ],
+    key="phone_alert_choice_main",
+)
+
+alert_volume = st.slider(
+    "🔊 Alert Volume",
+    min_value=0,
+    max_value=100,
+    value=70,
+    step=5,
+    help="Controls the alert volume where supported.",
+    key="phone_alert_volume_main",
+)
+
+volume_level = alert_volume / 100.0
+
+custom_audio = None
+custom_audio_type = None
+
+if alert_choice == "5. Custom MP3/WAV File":
+    uploaded_audio = st.file_uploader(
+        "Upload your alert sound",
+        type=["mp3", "wav"],
+        key="custom_phone_alert_audio_main",
+    )
+    if uploaded_audio is not None:
+        custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
+        custom_audio_type = uploaded_audio.type or "audio/mpeg"
+
 def play_auto_warning_sound(volume=0.75, sound_mode="female"):
     safe_volume = max(0.0, min(1.0, float(volume)))
     if sound_mode == "female":
@@ -295,144 +338,203 @@ def play_auto_warning_sound(volume=0.75, sound_mode="female"):
     """
     components.html(js, height=0)
 
-# This is the main alert call used by the app
 def show_phone_alert(preview=False):
-    """
-    Show a user-facing warning and try automatic sound playback.
-    Browsers usually block autoplay until a click happens once, but this function
-    still makes the best-effort automatic attempt.
-    """
     if not preview:
         st.warning("📱 Phone detected repeatedly! Please check whether you need your phone for studying.")
 
-    # Try automatic warning sound first
-    play_auto_warning_sound(volume=volume_level, sound_mode="female")
+    if alert_choice == "1. Female Spoken Warning":
+        play_auto_warning_sound(volume=volume_level, sound_mode="female")
+    elif alert_choice == "2. Gentle Notification Chime":
+        mode = "chime"
+    elif alert_choice == "3. Rising Emergency Siren":
+        mode = "siren"
+    elif alert_choice == "4. Retro 8-Bit Game Melody":
+        mode = "retro"
+    elif alert_choice == "5. Custom MP3/WAV File":
+        if custom_audio is None:
+            st.info("Upload a custom audio file before testing the alert.")
+            return
+        audio_html = f"""
+        <audio controls autoplay style="width:100%;">
+            <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
+            Your browser does not support this audio file.
+        </audio>
+        <script>
+        const player = document.querySelector("audio");
+        player.volume = {volume_level};
+        player.play().catch(() => {{
+            console.log("Custom audio autoplay was blocked by the browser.");
+        }});
+        </script>
+        """
+        components.html(audio_html, height=75)
+        return
+    elif alert_choice == "6. Soft Bell Ring":
+        mode = "bell"
+    elif alert_choice == "7. Sharp Beep":
+        mode = "beep"
+    elif alert_choice == "8. Urgent Alarm Pulse":
+        mode = "alarm"
+    elif alert_choice == "9. Digital Notification":
+        mode = "digital"
+    else:
+        mode = "schoolbell"
 
-    # If browser blocked it, show a button fallback
-    fallback_html = """
-    <div style="margin-top: 10px;">
-        <button id="manual-phone-warning-button"
-            style="padding: 10px 16px; background: #8b5cf6; color: white; border: none; border-radius: 10px; cursor: pointer;">
-            🔊 Play warning sound
-        </button>
+    config = json.dumps({
+        "mode": mode,
+        "volume": volume_level,
+    })
+
+    sound_html = """
+    <div style="font-family:Arial,sans-serif;">
+      <button id="playPreview"
+        style="padding:9px 15px; cursor:pointer;">
+        ▶ Play Sound Preview
+      </button>
+      <span id="soundStatus" style="margin-left:8px;"></span>
     </div>
+
     <script>
-    document.getElementById("manual-phone-warning-button")?.addEventListener("click", function() {
-        try {
-            const speech = window.speechSynthesis;
-            if (!speech) return;
-            speech.cancel();
-            const msg = new SpeechSynthesisUtterance("Attention! Attention! Phone detected! Please put your phone away and focus on studying!");
-            msg.volume = 0.75;
-            msg.rate = 0.95;
-            msg.pitch = 1.15;
-            speech.speak(msg);
-        } catch (e) {
-            console.log("Manual warning failed:", e);
+    const config = CONFIG_PLACEHOLDER;
+    const button = document.getElementById("playPreview");
+    const status = document.getElementById("soundStatus");
+
+    async function playSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        await ctx.resume();
+
+        function tone(freq, start, duration, peak, type) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = type || "sine";
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.001, start);
+          gain.gain.linearRampToValueAtTime(peak * config.volume, start + 0.025);
+          gain.gain.linearRampToValueAtTime(0.001, start + duration);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(start);
+          osc.stop(start + duration + 0.02);
         }
-    });
+
+        const now = ctx.currentTime;
+
+        if (config.mode === "chime") {
+          tone(659.25, now, 0.22, 0.22);
+          tone(783.99, now + 0.24, 0.30, 0.22);
+
+        } else if (config.mode === "siren") {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.linearRampToValueAtTime(1050, now + 0.65);
+          osc.frequency.linearRampToValueAtTime(520, now + 1.30);
+          osc.frequency.linearRampToValueAtTime(1050, now + 1.95);
+          osc.frequency.linearRampToValueAtTime(520, now + 2.60);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.10 * config.volume, now + 0.10);
+          gain.gain.linearRampToValueAtTime(0.001, now + 2.70);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 2.75);
+
+        } else if (config.mode === "retro") {
+          const notes = [
+            [523.25, 0.00], [659.25, 0.14],
+            [783.99, 0.28], [1046.50, 0.42],
+            [783.99, 0.60], [1046.50, 0.78]
+          ];
+          for (const note of notes) {
+            tone(note[0], now + note[1], 0.11, 0.20, "square");
+          }
+
+        } else if (config.mode === "bell") {
+          tone(880, now, 0.30, 0.18, "sine");
+          tone(660, now + 0.32, 0.36, 0.18, "triangle");
+          tone(440, now + 0.72, 0.45, 0.16, "sine");
+
+        } else if (config.mode === "beep") {
+          tone(1500, now, 0.08, 0.18, "square");
+          tone(1500, now + 0.18, 0.08, 0.18, "square");
+          tone(1500, now + 0.36, 0.12, 0.18, "square");
+
+        } else if (config.mode === "alarm") {
+          tone(950, now, 0.10, 0.22, "sawtooth");
+          tone(900, now + 0.12, 0.10, 0.22, "sawtooth");
+          tone(950, now + 0.24, 0.10, 0.22, "sawtooth");
+          tone(900, now + 0.36, 0.15, 0.22, "sawtooth");
+
+        } else if (config.mode === "digital") {
+          tone(650, now, 0.06, 0.10, "square");
+          tone(780, now + 0.08, 0.06, 0.10, "square");
+          tone(880, now + 0.16, 0.06, 0.10, "square");
+
+        } else if (config.mode === "schoolbell") {
+          tone(740, now, 0.22, 0.20, "triangle");
+          tone(740, now + 0.28, 0.22, 0.18, "triangle");
+          tone(640, now + 0.56, 0.30, 0.18, "triangle");
+
+        } else {
+          tone(659.25, now, 0.22, 0.22);
+          tone(783.99, now + 0.24, 0.30, 0.22);
+        }
+
+        status.textContent = "Sound playing";
+        setTimeout(() => ctx.close(), 3200);
+      } catch (error) {
+        status.textContent = "Browser blocked playback; use the preview button.";
+        console.log(error);
+      }
+    }
+
+    button.addEventListener("click", playSound);
+    setTimeout(playSound, 300);
     </script>
     """
-    components.html(fallback_html, height=70)
 
-# ============================================================
-# ALERT SETTINGS
-# ============================================================
+    sound_html = sound_html.replace("CONFIG_PLACEHOLDER", config)
+    components.html(sound_html, height=60)
 
-ALERT_COOLDOWN = 30
-REQUIRED_CONSECUTIVE_DETECTIONS = 3
-
-alert_choice = st.selectbox(
-    "🔔 Choose Phone Alert Sound",
-    [
-        "1. Female Spoken Warning",
-        "2. Gentle Notification Chime",
-        "3. Rising Emergency Siren",
-        "4. Retro 8-Bit Game Melody",
-        "5. Custom MP3/WAV File",
-        "6. Soft Bell Ring",
-        "7. Sharp Beep",
-        "8. Urgent Alarm Pulse",
-        "9. Digital Notification",
-        "10. School Bell",
-    ],
-    key="phone_alert_choice",
-)
-
-alert_volume = st.slider(
-    "🔊 Alert Volume",
-    min_value=0,
-    max_value=100,
-    value=70,
-    step=5,
-    help="Controls the alert volume where supported.",
-    key="phone_alert_volume",
-)
-
-volume_level = alert_volume / 100.0
-
-custom_audio = None
-custom_audio_type = None
-
-if alert_choice == "5. Custom MP3/WAV File":
-    uploaded_audio = st.file_uploader(
-        "Upload your alert sound",
-        type=["mp3", "wav"],
-        key="custom_phone_alert_audio",
-    )
-    if uploaded_audio is not None:
-        custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
-        custom_audio_type = uploaded_audio.type or "audio/mpeg"# ============================================================
-# ALERT SETTINGS
-# ============================================================
-
-ALERT_COOLDOWN = 30
-REQUIRED_CONSECUTIVE_DETECTIONS = 3
-
-alert_choice = st.selectbox(
-    "🔔 Choose Phone Alert Sound",
-    [
-        "1. Female Spoken Warning",
-        "2. Gentle Notification Chime",
-        "3. Rising Emergency Siren",
-        "4. Retro 8-Bit Game Melody",
-        "5. Custom MP3/WAV File",
-        "6. Soft Bell Ring",
-        "7. Sharp Beep",
-        "8. Urgent Alarm Pulse",
-        "9. Digital Notification",
-        "10. School Bell",
-    ],
-    key="phone_alert_choice",
-)
-
-alert_volume = st.slider(
-    "🔊 Alert Volume",
-    min_value=0,
-    max_value=100,
-    value=70,
-    step=5,
-    help="Controls the alert volume where supported.",
-    key="phone_alert_volume",
-)
-
-volume_level = alert_volume / 100.0
-
-custom_audio = None
-custom_audio_type = None
-
-if alert_choice == "5. Custom MP3/WAV File":
-    uploaded_audio = st.file_uploader(
-        "Upload your alert sound",
-        type=["mp3", "wav"],
-        key="custom_phone_alert_audio",
-    )
-    if uploaded_audio is not None:
-        custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
-        custom_audio_type = uploaded_audio.type or "audio/mpeg"
-
-if st.button("🔊 Test Selected Sound", key="test_phone_alert"):
+if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def detect_network_issue():
+    return """
+    Camera connection might be blocked by:
+    - network restrictions
+    - Wi‑Fi NAT/firewall
+    - missing TURN server
+    - browser permission denial
+    - mobile data restrictions
+    Try: same network, allow camera, reset browser, use localhost or HTTPS.
+    """
+
+def reset_live_stream():
+    if "webcam_connection_attempt" not in st.session_state:
+        st.session_state.webcam_connection_attempt = 1
+    st.session_state.webcam_connection_attempt += 1
+    st.rerun()
+
+def should_alert_user(phone_count, previous_phone_count, last_alert_time, current_time):
+    if phone_count <= 0:
+        return False
+    if current_time - last_alert_time < ALERT_COOLDOWN:
+        return False
+    if phone_count >= REQUIRED_CONSECUTIVE_DETECTIONS:
+        return True
+    return False
 
 # ============================================================
 # HERO
@@ -892,6 +994,7 @@ else:
         data=csv_data,
         file_name="session_summary.csv",
         mime="text/csv",
+        key="download_csv_summary_main",
     )
 
 st.caption("Class 12 AI Project | Phone visibility analysis only; not a validated attention measurement.")
@@ -984,8 +1087,8 @@ class LivePhoneDetector(VideoProcessorBase):
                 2,
                 cv2.LINE_AA,
             )
+
             try:
-                # trigger sound again when live detection sees a phone
                 play_auto_warning_sound(volume=volume_level, sound_mode="female")
             except Exception:
                 pass
@@ -1011,12 +1114,18 @@ if "webcam_connection_attempt" not in st.session_state:
 
 reset_col, help_col = st.columns([1, 2])
 with reset_col:
-    if st.button("🔄 Reset live connection", key="reset_live_webcam_connection", help="Use this only after the live connection fails or gets stuck."):
+    if st.button(
+        "🔄 Reset live connection",
+        key="webcam_reset_main",
+        help="Use this only after the live connection fails or gets stuck.",
+    ):
         st.session_state.webcam_connection_attempt += 1
         st.rerun()
+
 with help_col:
     st.caption(
-        f"Connection attempt: {st.session_state.webcam_connection_attempt}. If the stream gets stuck, press Reset once, then press START again."
+        f"Connection attempt: {st.session_state.webcam_connection_attempt}. "
+        "If the stream gets stuck, press Reset once, then press START again."
     )
 
 # IMPORTANT:
@@ -1042,9 +1151,13 @@ WEBRTC_RTC_CONFIGURATION = {
     ]
 }
 
+st.caption(
+    "If your phone camera keeps spinning, this usually means WebRTC networking/STUN-TURN issue, not a broken camera."
+)
+
 try:
     webcam_ctx = webrtc_streamer(
-        key=f"study-phone-webcam-live-warning-{st.session_state.webcam_connection_attempt}",
+        key=f"study_phone_webcam_live_warning_{st.session_state.webcam_connection_attempt}",
         video_processor_factory=LivePhoneDetector,
         media_stream_constraints={"video": True, "audio": False},
         rtc_configuration=WEBRTC_RTC_CONFIGURATION,
@@ -1059,14 +1172,11 @@ try:
             "If the existing 'connection is taking longer than expected' message remains, "
             "press 'Reset live connection' once and try START again."
         )
+        st.warning(detect_network_issue())
 except Exception as webcam_error:
     st.error("The webcam component could not start.")
     st.code(f"{type(webcam_error).__name__}: {webcam_error}")
-    st.info(
-        "If the error mentions missing packages or yolo11n.pt, that is an app/deployment issue. "
-        "If the component starts but keeps reporting a connection timeout, that usually indicates "
-        "a WebRTC network/ICE problem rather than Python syntax."
-    )
+    st.warning(detect_network_issue())
 
 st.markdown("#### If the connection still times out")
 st.write(
@@ -1087,12 +1197,16 @@ st.caption("Upload a recorded study session to analyse sampled frames for visibl
 
 st.write("Upload a recorded study-session video (MP4, MOV, or AVI), then click Start AI Detection.")
 
-uploaded_video = st.file_uploader("Choose a study video", type=["mp4", "mov", "avi"])
+uploaded_video = st.file_uploader(
+    "Choose a study video",
+    type=["mp4", "mov", "avi"],
+    key="uploaded_video_main",
+)
 
 if uploaded_video is not None:
     st.video(uploaded_video)
 
-    if st.button("Start AI Detection", type="primary"):
+    if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
         analysis_result = analyze_video(uploaded_video)
         if analysis_result is not None:
             try:
@@ -1123,11 +1237,18 @@ if "last_analysis" in st.session_state:
     st.subheader("📸 Example Frame with Phone Detection")
 
     if saved_frame is not None:
-        st.image(saved_frame, caption=f"Phone-detection example from {saved_analysis['video_name']}", use_container_width=True)
+        st.image(
+            saved_frame,
+            caption=f"Phone-detection example from {saved_analysis['video_name']}",
+            use_container_width=True,
+        )
     else:
         st.info("No analyzed frame is available for display.")
 
-    st.caption("This preview shows the sampled frame with the highest-confidence phone detection (or the last sampled frame if no phone was detected). Green boxes mark phone detections only.")
+    st.caption(
+        "This preview shows the sampled frame with the highest-confidence phone detection "
+        "(or the last sampled frame if no phone was detected). Green boxes mark phone detections only."
+    )
 
     st.subheader("🔥 Phone Detection Heatmap")
     st.caption("Brighter areas show where phone detections occurred more frequently in the analyzed video frames.")
@@ -1137,7 +1258,13 @@ if "last_analysis" in st.session_state:
         heatmap_array = np.asarray(heatmap_data, dtype=np.float32)
         if heatmap_array.sum() > 0:
             figure, axis = plt.subplots(figsize=(8, 4.5))
-            image = axis.imshow(heatmap_array, cmap="hot", interpolation="nearest", extent=[0, 100, 100, 0], aspect="auto")
+            image = axis.imshow(
+                heatmap_array,
+                cmap="hot",
+                interpolation="nearest",
+                extent=[0, 100, 100, 0],
+                aspect="auto",
+            )
             axis.set_title("Phone Detection Locations")
             axis.set_xlabel("Horizontal Position (%)")
             axis.set_ylabel("Vertical Position (%)")
@@ -1193,7 +1320,6 @@ if "last_analysis" in st.session_state:
 
     st.caption("Counts represent detections across sampled frames. The same object may be counted repeatedly, so these are not counts of unique physical objects or a validated measure of desk clutter.")
 
-    # Study focus
     sampled_frames = saved_analysis["frames_processed"]
     phone_frames = saved_analysis["frames_with_phone"]
     percentage = saved_analysis["percentage"]
@@ -1227,7 +1353,7 @@ selected_duration = st.selectbox(
     duration_options,
     index=duration_options.index(st.session_state.study_timer_duration),
     disabled=st.session_state.study_timer_running,
-    key="study_timer_duration_selector",
+    key="study_timer_duration_selector_main",
 )
 
 if selected_duration != st.session_state.study_timer_duration:
@@ -1265,20 +1391,28 @@ st.progress(min(1.0, elapsed_seconds / total_seconds))
 button_col1, button_col2, button_col3 = st.columns(3)
 
 with button_col1:
-    if st.button("▶️ Start / Resume", disabled=(st.session_state.study_timer_running or st.session_state.study_timer_finished), key="study_timer_start"):
+    if st.button(
+        "▶️ Start / Resume",
+        disabled=(st.session_state.study_timer_running or st.session_state.study_timer_finished),
+        key="study_timer_start_main",
+    ):
         st.session_state.study_timer_started_at = time.monotonic()
         st.session_state.study_timer_running = True
         st.rerun()
 
 with button_col2:
-    if st.button("⏸️ Pause", disabled=not st.session_state.study_timer_running, key="study_timer_pause"):
+    if st.button(
+        "⏸️ Pause",
+        disabled=not st.session_state.study_timer_running,
+        key="study_timer_pause_main",
+    ):
         st.session_state.study_timer_elapsed_before_pause = elapsed_seconds
         st.session_state.study_timer_running = False
         st.session_state.study_timer_started_at = None
         st.rerun()
 
 with button_col3:
-    if st.button("🔄 Reset", key="study_timer_reset"):
+    if st.button("🔄 Reset", key="study_timer_reset_main"):
         st.session_state.study_timer_running = False
         st.session_state.study_timer_started_at = None
         st.session_state.study_timer_elapsed_before_pause = 0.0
@@ -1345,7 +1479,7 @@ else:
         data=pdf_data,
         file_name="study_session_report.pdf",
         mime="application/pdf",
-        key="pdf_session_report",
+        key="pdf_session_report_main",
     )
 
     st.caption("Phone-Free Score = 100 − Phone Visible Percentage. This indicates phone visibility only; it does not measure actual concentration or study quality.")
