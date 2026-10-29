@@ -250,6 +250,92 @@ if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
 # ============================================================
+# AUTO SOUND WARNING SYSTEM
+# ============================================================
+
+# This is the function that actually makes the warning sound play automatically.
+# Browsers may block autoplay until the user clicks once, so this is best-effort.
+def play_auto_warning_sound(volume=0.75, sound_mode="female"):
+    safe_volume = max(0.0, min(1.0, float(volume)))
+    if sound_mode == "female":
+        message = "Attention! Attention! Phone detected! Please put your phone away and focus on studying!"
+    else:
+        message = "Phone detected. Please focus on your studies."
+
+    js = f"""
+    <script>
+    try {{
+        const speech = window.speechSynthesis;
+        if (speech) {{
+            speech.cancel();
+            const utterance = new SpeechSynthesisUtterance("{message}");
+            utterance.volume = {safe_volume};
+            utterance.rate = 0.95;
+            utterance.pitch = 1.15;
+
+            const voices = speech.getVoices();
+            const preferred = voices.find(v =>
+                /female|zira|samantha|aria|jenny|hazel/i.test((v.name || "") + " " + (v.voiceURI || ""))
+            );
+
+            if (preferred) {{
+                utterance.voice = preferred;
+            }}
+
+            utterance.onend = () => {{
+                console.log("Warning sound finished");
+            }};
+
+            speech.speak(utterance);
+        }}
+    }} catch (e) {{
+        console.log("Auto speech warning failed:", e);
+    }}
+    </script>
+    """
+    components.html(js, height=0)
+
+# This is the main alert call used by the app
+def show_phone_alert(preview=False):
+    """
+    Show a user-facing warning and try automatic sound playback.
+    Browsers usually block autoplay until a click happens once, but this function
+    still makes the best-effort automatic attempt.
+    """
+    if not preview:
+        st.warning("📱 Phone detected repeatedly! Please check whether you need your phone for studying.")
+
+    # Try automatic warning sound first
+    play_auto_warning_sound(volume=volume_level, sound_mode="female")
+
+    # If browser blocked it, show a button fallback
+    fallback_html = """
+    <div style="margin-top: 10px;">
+        <button id="manual-phone-warning-button"
+            style="padding: 10px 16px; background: #8b5cf6; color: white; border: none; border-radius: 10px; cursor: pointer;">
+            🔊 Play warning sound
+        </button>
+    </div>
+    <script>
+    document.getElementById("manual-phone-warning-button")?.addEventListener("click", function() {
+        try {
+            const speech = window.speechSynthesis;
+            if (!speech) return;
+            speech.cancel();
+            const msg = new SpeechSynthesisUtterance("Attention! Attention! Phone detected! Please put your phone away and focus on studying!");
+            msg.volume = 0.75;
+            msg.rate = 0.95;
+            msg.pitch = 1.15;
+            speech.speak(msg);
+        } catch (e) {
+            console.log("Manual warning failed:", e);
+        }
+    });
+    </script>
+    """
+    components.html(fallback_html, height=70)
+
+# ============================================================
 # ALERT SETTINGS
 # ============================================================
 
@@ -292,200 +378,6 @@ if alert_choice == "5. Custom MP3/WAV File":
     if uploaded_audio is not None:
         custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
         custom_audio_type = uploaded_audio.type or "audio/mpeg"
-
-def speak_phone_warning(volume=0.70):
-    """Attempt automatic browser speech and keep a manual fallback."""
-    try:
-        safe_volume = max(0.0, min(1.0, float(volume)))
-        speech_html = f"""
-        <div style="font-family:Arial,sans-serif;">
-            <button id="speakWarning" style="padding:10px 16px;cursor:pointer;">🔊 Play Female Spoken Warning</button>
-            <span id="speechStatus" style="margin-left:8px;"></span>
-        </div>
-
-        <script>
-        (function() {{
-            const button = document.getElementById("speakWarning");
-            const status = document.getElementById("speechStatus");
-
-            function speakWarning() {{
-                if (!("speechSynthesis" in window)) {{
-                    status.textContent = "Speech is not supported.";
-                    return;
-                }}
-
-                window.speechSynthesis.cancel();
-
-                const message = new SpeechSynthesisUtterance(
-                    "Attention! Attention! Phone detected! Please put your phone away and focus on studying!"
-                );
-
-                message.volume = {safe_volume};
-                message.rate = 0.95;
-                message.pitch = 1.15;
-
-                const voices = window.speechSynthesis.getVoices();
-                const femaleVoice = voices.find(voice =>
-                    /female|zira|samantha|aria|jenny|hazel/i.test(
-                        voice.name + " " + voice.voiceURI
-                    )
-                );
-
-                if (femaleVoice) {{
-                    message.voice = femaleVoice;
-                }}
-
-                message.onstart = () => {{
-                    status.textContent = "Speaking...";
-                }};
-
-                message.onend = () => {{
-                    status.textContent = "Warning finished.";
-                }};
-
-                message.onerror = (event) => {{
-                    status.textContent = "Speech failed: " + event.error;
-                }};
-
-                window.speechSynthesis.resume();
-                window.speechSynthesis.speak(message);
-            }}
-
-            button.addEventListener("click", speakWarning);
-            window.addEventListener("load", () => {{
-                setTimeout(speakWarning, 300);
-            }});
-        }})();
-        </script>
-        """
-        components.html(speech_html, height=65)
-    except Exception as error:
-        st.error(f"Speech warning could not start: {error}")
-
-def show_phone_alert(preview=False):
-    """Display a warning and play the selected alert."""
-    if not preview:
-        st.warning("📱 Phone detected repeatedly! Please check whether you need your phone for studying.")
-
-    if alert_choice == "1. Female Spoken Warning":
-        speak_phone_warning(volume_level)
-        if preview:
-            st.info("Female spoken warning requested.")
-        return
-
-    if alert_choice == "5. Custom MP3/WAV File":
-        if not custom_audio:
-            st.info("Upload an MP3 or WAV file before testing the custom alert.")
-            return
-
-        audio_html = f"""
-        <audio controls autoplay style="width:100%;">
-            <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
-            Your browser does not support this audio file.
-        </audio>
-        <script>
-        const player = document.querySelector("audio");
-        player.volume = {volume_level};
-        player.play().catch(() => {{
-            console.log("Press Play on the audio player.");
-        }});
-        </script>
-        """
-        components.html(audio_html, height=75)
-        return
-
-    if alert_choice == "2. Gentle Notification Chime":
-        mode = "chime"
-    elif alert_choice == "3. Rising Emergency Siren":
-        mode = "siren"
-    else:
-        mode = "retro"
-
-    config = json.dumps({"mode": mode, "volume": volume_level})
-
-    sound_html = """
-    <div style="font-family:Arial,sans-serif;">
-      <button id="playPreview" style="padding:9px 15px; cursor:pointer;">▶ Play Sound Preview</button>
-      <span id="soundStatus" style="margin-left:8px;"></span>
-    </div>
-
-    <script>
-    const config = CONFIG_PLACEHOLDER;
-    const button = document.getElementById("playPreview");
-    const status = document.getElementById("soundStatus");
-
-    async function playSound() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        await ctx.resume();
-
-        function tone(freq, start, duration, peak, type) {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-
-          osc.type = type || "sine";
-          osc.frequency.setValueAtTime(freq, start);
-          gain.gain.setValueAtTime(0.001, start);
-          gain.gain.linearRampToValueAtTime(peak * config.volume, start + 0.025);
-          gain.gain.linearRampToValueAtTime(0.001, start + duration);
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(start);
-          osc.stop(start + duration + 0.02);
-        }
-
-        const now = ctx.currentTime;
-
-        if (config.mode === "chime") {
-          tone(659.25, now, 0.22, 0.22);
-          tone(783.99, now + 0.24, 0.30, 0.22);
-        } else if (config.mode === "siren") {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-
-          osc.type = "sawtooth";
-          osc.frequency.setValueAtTime(520, now);
-          osc.frequency.linearRampToValueAtTime(1050, now + 0.65);
-          osc.frequency.linearRampToValueAtTime(520, now + 1.30);
-          osc.frequency.linearRampToValueAtTime(1050, now + 1.95);
-          osc.frequency.linearRampToValueAtTime(520, now + 2.60);
-
-          gain.gain.setValueAtTime(0.001, now);
-          gain.gain.linearRampToValueAtTime(0.10 * config.volume, now + 0.10);
-          gain.gain.linearRampToValueAtTime(0.001, now + 2.70);
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(now);
-          osc.stop(now + 2.75);
-        } else {
-          const notes = [
-            [523.25, 0.00], [659.25, 0.14],
-            [783.99, 0.28], [1046.50, 0.42],
-            [783.99, 0.60], [1046.50, 0.78]
-          ];
-
-          for (const note of notes) {
-            tone(note[0], now + note[1], 0.11, 0.20, "square");
-          }
-        }
-
-        status.textContent = "Sound playing";
-        setTimeout(() => ctx.close(), 3200);
-      } catch (error) {
-        status.textContent = "Browser blocked playback; use the preview button.";
-        console.log(error);
-      }
-    }
-
-    button.addEventListener("click", playSound);
-    setTimeout(playSound, 300);
-    </script>
-    """
-
-    sound_html = sound_html.replace("CONFIG_PLACEHOLDER", config)
-    components.html(sound_html, height=55)
 
 if st.button("🔊 Test Selected Sound", key="test_phone_alert"):
     show_phone_alert(preview=True)
@@ -724,6 +616,9 @@ def analyze_video(uploaded_file):
         live_detections_metric = live_col3.empty()
         live_visibility_metric = live_col4.empty()
 
+        consecutive_phone_frames = 0
+        last_alert_time = 0.0
+
         while True:
             success, frame = capture.read()
             if not success:
@@ -790,6 +685,9 @@ def analyze_video(uploaded_file):
                 phone_found = phones_in_frame > 0
                 if phone_found:
                     frames_with_phone += 1
+                    consecutive_phone_frames += 1
+                else:
+                    consecutive_phone_frames = 0
 
                 elapsed_seconds = frame_index / fps if fps > 0 else None
                 timeline.append({
@@ -799,6 +697,13 @@ def analyze_video(uploaded_file):
                     "phone_detections": phones_in_frame,
                     "max_confidence": frame_best_confidence if phone_found else None,
                 })
+
+                if consecutive_phone_frames >= REQUIRED_CONSECUTIVE_DETECTIONS:
+                    current_time = time.monotonic()
+                    if current_time - last_alert_time >= ALERT_COOLDOWN:
+                        show_phone_alert()
+                        last_alert_time = current_time
+                        consecutive_phone_frames = 0
 
                 annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
                 last_annotated_rgb = annotated_rgb
@@ -1027,6 +932,11 @@ class LivePhoneDetector(VideoProcessorBase):
                 2,
                 cv2.LINE_AA,
             )
+            try:
+                # trigger sound again when live detection sees a phone
+                play_auto_warning_sound(volume=volume_level, sound_mode="female")
+            except Exception:
+                pass
         else:
             cv2.rectangle(image, (0, 0), (width, 42), (25, 110, 25), -1)
             cv2.putText(
