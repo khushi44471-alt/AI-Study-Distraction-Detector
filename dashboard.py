@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import av
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,6 +29,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
 
 # ============================================================
@@ -268,14 +270,16 @@ if "study_timer_elapsed_before_pause" not in st.session_state:
 if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
-if "camera_on" not in st.session_state:
-    st.session_state.camera_on = False
+if "live_phone_detected" not in st.session_state:
+    st.session_state.live_phone_detected = False
+if "last_live_warning_time" not in st.session_state:
+    st.session_state.last_live_warning_time = 0.0
 
 # ============================================================
 # ALERT SOUND SETTINGS
 # ============================================================
 
-ALERT_COOLDOWN = 25
+ALERT_COOLDOWN = 20
 REQUIRED_CONSECUTIVE_DETECTIONS = 3
 
 alert_choice = st.selectbox(
@@ -354,14 +358,46 @@ def play_female_warning(volume=0.8):
 def play_warning_tone(mode, volume=0.75):
     vol = max(0.0, min(1.0, float(volume)))
     configs = {
-        "siren": {"pattern": [420, 520, 620, 760, 620, 520, 420], "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60], "type": "sawtooth"},
-        "pulse": {"pattern": [520, 560, 610, 660, 610, 560, 520, 450], "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55], "type": "triangle"},
-        "sweep": {"pattern": [390, 470, 560, 700, 560, 470, 390], "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65], "type": "sawtooth"},
-        "bell": {"pattern": [880, 770, 660, 770, 660, 560], "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50], "type": "triangle"},
-        "warning": {"pattern": [700, 760, 820, 760, 700, 680], "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42], "type": "sine"},
-        "urgent": {"pattern": [950, 900, 980, 900, 980, 860, 980, 820], "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42], "type": "square"},
-        "digital": {"pattern": [650, 720, 800, 860, 800, 720, 650], "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28], "type": "triangle"},
-        "voice": {"pattern": [430, 520, 610, 520, 610, 520, 430], "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50], "type": "sine"},
+        "siren": {
+            "pattern": [420, 520, 620, 760, 620, 520, 420],
+            "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60],
+            "type": "sawtooth",
+        },
+        "pulse": {
+            "pattern": [520, 560, 610, 660, 610, 560, 520, 450],
+            "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55],
+            "type": "triangle",
+        },
+        "sweep": {
+            "pattern": [390, 470, 560, 700, 560, 470, 390],
+            "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65],
+            "type": "sawtooth",
+        },
+        "bell": {
+            "pattern": [880, 770, 660, 770, 660, 560],
+            "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50],
+            "type": "triangle",
+        },
+        "warning": {
+            "pattern": [700, 760, 820, 760, 700, 680],
+            "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42],
+            "type": "sine",
+        },
+        "urgent": {
+            "pattern": [950, 900, 980, 900, 980, 860, 980, 820],
+            "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42],
+            "type": "square",
+        },
+        "digital": {
+            "pattern": [650, 720, 800, 860, 800, 720, 650],
+            "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28],
+            "type": "triangle",
+        },
+        "voice": {
+            "pattern": [430, 520, 610, 520, 610, 520, 430],
+            "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50],
+            "type": "sine",
+        },
     }
 
     cfg = configs.get(mode, configs["warning"])
@@ -539,6 +575,7 @@ with st.sidebar:
     st.markdown("[🎬 Video analysis](#ai-video-analysis)")
     st.markdown("[📈 Latest results](#detection-results)")
     st.markdown("[⏱️ Study timer](#study-session-timer)")
+    st.markdown("[📷 Live webcam](#live-webcam-detection)")
     st.markdown("---")
     with st.expander("ℹ️ About this project", expanded=False):
         st.write("**Objective:** identify visible phone appearances in sampled study-video frames.")
@@ -657,7 +694,7 @@ def create_pdf_report(analysis):
     story.append(PDFImage(chart_buffer, width=6 * inch, height=3.2 * inch))
     story.append(Spacer(1, 12))
     story.append(Paragraph(
-        "<b>Interpretation:</b> The Phone-Free Score is calculated as 100 minus the phone-visible percentage. Phone visibility does not prove distraction, and this score is not a validated measure of concentration or study quality.",
+        "<b>Interpretation:</b> The Phone-Free Score is calculated as 100 minus the phone-visible percentage. Phone visibility does not prove distraction, and this score is not a validated measurement of concentration or study quality.",
         styles["BodyText"],
     ))
 
@@ -672,6 +709,115 @@ def create_pdf_report(analysis):
 @st.cache_resource(show_spinner=False)
 def load_yolo_model(model_path: str):
     return YOLO(model_path)
+
+# ============================================================
+# LIVE DETECTION
+# ============================================================
+
+class LivePhoneDetector(VideoProcessorBase):
+    def __init__(self):
+        self.model = load_yolo_model(str(ensure_model_exists()))
+        self.last_detection_time = 0.0
+
+    def recv(self, frame):
+        image = frame.to_ndarray(format="bgr24")
+
+        try:
+            result = self.model.predict(
+                source=image,
+                imgsz=640,
+                conf=0.18,
+                verbose=False,
+                max_det=20,
+            )[0]
+
+            detections = []
+            if result.boxes is not None:
+                for box in result.boxes:
+                    class_id = int(box.cls[0].item())
+                    class_name = self.model.names[class_id] if not isinstance(self.model.names, dict) else self.model.names.get(class_id, "")
+                    class_name = str(class_name).strip().lower()
+
+                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                        x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                        conf = float(box.conf[0].item())
+                        detections.append((x1, y1, x2, y2, conf))
+
+            if detections:
+                st.session_state.live_phone_detected = True
+                now = time.monotonic()
+                if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
+                    st.session_state.last_live_warning_time = now
+                for x1, y1, x2, y2, conf in detections:
+                    cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                    cv2.putText(
+                        image,
+                        f"PHONE {conf:.0%}",
+                        (x1, max(20, y1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 0, 255),
+                        2,
+                        cv2.LINE_AA,
+                    )
+                cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
+                cv2.putText(
+                    image,
+                    "PHONE DETECTED LIVE",
+                    (20, 35),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            else:
+                st.session_state.live_phone_detected = False
+                cv2.rectangle(image, (0, 0), (image.shape[1], 42), (25, 110, 25), -1)
+                cv2.putText(
+                    image,
+                    "NO PHONE DETECTED",
+                    (18, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+        except Exception:
+            st.session_state.live_phone_detected = False
+
+        return av.VideoFrame.from_ndarray(image, format="bgr24")
+
+# ============================================================
+# LIVE WEBRTC SECTION
+# ============================================================
+
+st.divider()
+st.subheader("📷 Live Webcam Detection")
+st.caption("Use Chrome and allow camera access. This is the real-time live detector and warns immediately if a phone is detected.")
+
+webrtc_streamer(
+    key="live_phone_detector",
+    video_processor_factory=LivePhoneDetector,
+    media_stream_constraints={
+        "video": {
+            "frameRate": 12,
+            "width": 640,
+            "height": 480,
+            "facingMode": "user",
+        },
+        "audio": False,
+    },
+    rtc_configuration={
+        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+    },
+    async_processing=True,
+)
+
+if st.session_state.get("live_phone_detected", False):
+    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
+    show_phone_alert(preview=False)
 
 # ============================================================
 # VIDEO ANALYSIS
@@ -985,68 +1131,6 @@ else:
 st.caption("Class 12 AI Project | Phone visibility analysis only; not a validated attention measurement.")
 
 # ============================================================
-# LIVE WEBCAM / MANUAL CAMERA DETECTION
-# ============================================================
-
-st.divider()
-st.subheader("📷 Live Webcam / Manual Camera Detection")
-st.caption("Use Chrome browser. Click Start camera and allow access. This is the safe webcam version and avoids unstable WebRTC.")
-
-col_start, col_stop = st.columns(2)
-with col_start:
-    if st.button("▶️ Start camera", key="start_live_camera_button"):
-        st.session_state.camera_on = True
-with col_stop:
-    if st.button("⏹️ Stop camera", key="stop_live_camera_button"):
-        st.session_state.camera_on = False
-
-if st.session_state.camera_on:
-    camera_image = st.camera_input("Use your browser camera", key="manual_camera_input")
-
-    if camera_image is not None:
-        image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
-        model = load_yolo_model(str(ensure_model_exists()))
-        result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
-
-        detected = False
-        boxes = []
-
-        if result.boxes is not None:
-            for box in result.boxes:
-                class_id = int(box.cls[0].item())
-                class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
-                class_name = str(class_name).strip().lower()
-
-                if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                    detected = True
-                    x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-                    conf = float(box.conf[0].item())
-                    boxes.append((x1, y1, x2, y2, conf))
-
-        if detected:
-            st.error("📱 Phone detected in live camera.")
-            show_phone_alert(preview=False)
-        else:
-            st.success("✅ No phone detected in this live camera frame.")
-
-        if boxes:
-            for x1, y1, x2, y2, conf in boxes:
-                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(
-                    image,
-                    f"PHONE {conf:.0%}",
-                    (x1, max(20, y1 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 0, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-            st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
-else:
-    st.info("Click Start camera to use the browser webcam. This is the stable camera style for Chrome on localhost.")
-
-# ============================================================
 # VIDEO UPLOAD
 # ============================================================
 
@@ -1291,11 +1375,10 @@ with about3:
     )
 
 st.markdown("#### Technology stack")
-st.write("Python · Streamlit · Ultralytics YOLO · OpenCV · Pandas · Matplotlib · ReportLab")
+st.write("Python · Streamlit · Ultralytics YOLO · OpenCV · Pandas · Matplotlib · ReportLab · WebRTC")
 
 st.markdown("#### Important limitations")
 st.warning(
     "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
-
