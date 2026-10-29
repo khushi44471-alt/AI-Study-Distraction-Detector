@@ -474,10 +474,6 @@ def add_warning_message(message: str):
         "message": message,
     })
 
-def limit_snapshots():
-    if len(st.session_state.detection_snapshots) > 5:
-        st.session_state.detection_snapshots = st.session_state.detection_snapshots[-5:]
-
 def detect_phone_in_frame(frame, confidence_threshold):
     model = load_yolo_model(str(ensure_model_exists()))
     detections = []
@@ -1136,11 +1132,12 @@ if st.session_state.get("live_warning_triggered", False):
 # ============================================================
 
 st.subheader("📊 Live Camera Statistics")
-
 live_camera = st.camera_input("Capture a live frame for quick detection stats", key="camera_stats_input")
+
 if live_camera is not None:
     frame = np.array(live_camera)
     live_result = detect_phone_in_frame(frame, st.session_state.detection_confidence)
+
     st.session_state.live_stats = {
         "status": "PHONE DETECTED" if live_result["phone_detected"] else "NO PHONE DETECTED",
         "phone_detected": live_result["phone_detected"],
@@ -1161,6 +1158,34 @@ if live_camera is not None:
         st.success("✅ No phone visible in the live camera sample.")
 
     st.image(live_result["annotated_frame"], channels="BGR", use_container_width=True)
+
+# ============================================================
+# Controls
+# ============================================================
+
+st.divider()
+st.subheader("🔧 Detection Controls")
+
+confidence_threshold = st.slider(
+    "Adjust detection confidence",
+    min_value=0.05,
+    max_value=0.60,
+    value=0.18,
+    step=0.01,
+    key="conf_slider",
+)
+st.session_state.detection_confidence = confidence_threshold
+
+sample_interval = st.slider(
+    "Frame sampling interval",
+    min_value=1,
+    max_value=15,
+    value=5,
+    step=1,
+    help="Analyze every Nth frame to keep performance efficient.",
+    key="sample_slider",
+)
+st.session_state.frame_sample_interval = sample_interval
 
 # ============================================================
 # Video analysis
@@ -1274,7 +1299,7 @@ def analyze_video(uploaded_file):
                     "frame_index": frame_index,
                     "phone_detected": True,
                     "phone_count": phone_count,
-                    "confidence": float(np.max([float(box.conf[0].item()) for box in prediction.boxes if any(keyword in str(model.names[int(box.cls[0].item())]).lower() for keyword in PHONE_KEYWORDS)])) if prediction.boxes is not None else 0.0,
+                    "confidence": max(float(box.conf[0].item()) for box in prediction.boxes if any(keyword in str(model.names[int(box.cls[0].item())]).lower() for keyword in PHONE_KEYWORDS)) if prediction.boxes is not None else 0.0,
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 focus_streak = update_focus_streak(focus_streak, True)
@@ -1478,7 +1503,7 @@ if uploaded_video is not None:
                 st.error(f"The analysis finished, but the report could not be saved: {error}")
 
 # ============================================================
-# Detection Results section restored
+# Detection Results section restored and fixed
 # ============================================================
 
 if st.session_state.get("last_analysis") is not None:
@@ -1552,16 +1577,6 @@ if st.session_state.get("last_analysis") is not None:
     else:
         st.info("No session snapshots saved yet.")
 
-    # Download PDF
-    pdf_data = create_pdf_report(saved_analysis)
-    st.download_button(
-        "Download PDF Report",
-        data=pdf_data,
-        file_name="study_session_report.pdf",
-        mime="application/pdf",
-        key="download_pdf_report_main",
-    )
-
     st.subheader("🧾 Detection Events")
     detection_events = pd.DataFrame(saved_analysis.get("detection_events", []))
     if not detection_events.empty:
@@ -1583,6 +1598,15 @@ if st.session_state.get("last_analysis") is not None:
             st.image(image, channels="BGR", use_container_width=True, caption=f"Snapshot {idx}")
     else:
         st.info("No detection snapshots saved yet.")
+
+    pdf_data = create_pdf_report(saved_analysis)
+    st.download_button(
+        "Download PDF Report",
+        data=pdf_data,
+        file_name="study_session_report.pdf",
+        mime="application/pdf",
+        key="download_pdf_report_main",
+    )
 
 # ============================================================
 # Warning log
@@ -1712,6 +1736,5 @@ st.warning(
     "A detected phone does not prove distraction. The model can miss objects or misclassify things. This app should be used as a study-support tool, not as a final judgment."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
-    )
 
 
