@@ -9,7 +9,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import av
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,7 +28,6 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
 
 # ============================================================
@@ -233,7 +231,7 @@ def ensure_model_exists() -> Path:
 
     raise FileNotFoundError(
         f"Could not find {MODEL_NAME}. Please install ultralytics and run: "
-        "python -c \"from ultralytics import YOLO; YOLO('yolo11m.pt')\""
+        "python -c \"from ultralytics import YOLO; YOLO('yolo11n.pt')\""
     )
 
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -269,13 +267,6 @@ if "study_timer_elapsed_before_pause" not in st.session_state:
     st.session_state.study_timer_elapsed_before_pause = 0.0
 if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
-
-if "live_phone_detected" not in st.session_state:
-    st.session_state.live_phone_detected = False
-if "last_live_warning_time" not in st.session_state:
-    st.session_state.last_live_warning_time = 0.0
-if "webcam_started" not in st.session_state:
-    st.session_state.webcam_started = False
 
 # ============================================================
 # ALERT SOUND SETTINGS
@@ -541,17 +532,6 @@ PHONE_KEYWORDS = [
     "cellphone",
 ]
 
-def detect_network_issue():
-    return """
-    Camera connection might be blocked by:
-    - network restrictions
-    - Wi‑Fi NAT/firewall
-    - missing TURN server
-    - browser permission denial
-    - mobile data restrictions
-    Try: same network, allow camera, reset browser, use localhost or HTTPS.
-    """
-
 def should_alert_user(phone_count, last_alert_time, current_time):
     if phone_count <= 0:
         return False
@@ -589,7 +569,6 @@ with st.sidebar:
     st.markdown("[📈 Latest results](#detection-results)")
     st.markdown("[⏱️ Study timer](#study-session-timer)")
     st.markdown("[📍 Detection timeline](#distraction-timeline)")
-    st.markdown("[📷 Live webcam](#live-webcam-detection)")
     st.markdown("---")
     with st.expander("ℹ️ About this project", expanded=False):
         st.write("**Objective:** identify visible phone appearances in sampled study-video frames.")
@@ -1041,223 +1020,9 @@ st.caption("Class 12 AI Project | Phone visibility analysis only; not a validate
 
 st.divider()
 st.subheader("📷 Live Webcam / Phone Camera Detection")
-st.caption("Use your browser camera. For phones, use Chrome or Edge and allow camera permission.")
+st.caption("This feature is optional and may not work on restricted school computers.")
 
-@st.cache_resource(show_spinner=False)
-def load_webcam_model():
-    try:
-        return load_yolo_model(str(ensure_model_exists()))
-    except Exception as exc:
-        st.error(f"Model error: {exc}")
-        raise
-
-class LivePhoneDetector(VideoProcessorBase):
-    def __init__(self):
-        self.model = load_webcam_model()
-        self.last_detections = []
-        self.phone_warning = False
-
-    def recv(self, frame):
-        image = frame.to_ndarray(format="bgr24")
-
-        try:
-            image_for_model = cv2.resize(image, (640, 480))
-            image_for_model = cv2.convertScaleAbs(image_for_model, alpha=1.2, beta=15)
-
-            result = self.model.predict(
-                source=image_for_model,
-                imgsz=640,
-                conf=0.18,
-                verbose=False,
-                device="cpu",
-                max_det=20,
-            )[0]
-
-            detections = []
-            if result.boxes is not None:
-                for box in result.boxes:
-                    class_id = int(box.cls[0].item())
-                    class_name = self.model.names[class_id] if not isinstance(self.model.names, dict) else self.model.names.get(class_id, "")
-                    class_name = str(class_name).strip().lower()
-                    if not any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                        continue
-
-                    x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-                    confidence = float(box.conf[0].item())
-                    detections.append((x1, y1, x2, y2, confidence))
-
-            self.last_detections = detections
-            self.phone_warning = bool(detections)
-
-        except Exception:
-            self.last_detections = []
-            self.phone_warning = False
-
-        for x1, y1, x2, y2, confidence in self.last_detections:
-            x1 = int(x1 * image.shape[1] / 640)
-            y1 = int(y1 * image.shape[0] / 480)
-            x2 = int(x2 * image.shape[1] / 640)
-            y2 = int(y2 * image.shape[0] / 480)
-
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
-            cv2.putText(
-                image,
-                f"PHONE {confidence:.0%}",
-                (x1, max(25, y1 - 10)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 0, 255),
-                2,
-                cv2.LINE_AA,
-            )
-
-        if self.phone_warning:
-            banner = "PHONE DETECTED LIVE - PLEASE PUT IT AWAY"
-            cv2.rectangle(image, (0, 0), image.shape[1], 52, (0, 0, 210), -1)
-            cv2.putText(
-                image,
-                banner,
-                (12, 34),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                max(0.45, min(0.75, image.shape[1] / 1000)),
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-            st.session_state.live_phone_detected = True
-        else:
-            cv2.rectangle(image, (0, 0), image.shape[1], 42, (25, 110, 25), -1)
-            cv2.putText(
-                image,
-                "LIVE DETECTION ACTIVE - NO PHONE DETECTED",
-                (12, 28),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                max(0.4, min(0.7, image.shape[1] / 1100)),
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-            st.session_state.live_phone_detected = False
-
-        return av.VideoFrame.from_ndarray(image, format="bgr24")
-
-col_start, col_stop = st.columns(2)
-with col_start:
-    if st.button("▶️ Start live camera", key="start_live_camera_button"):
-        st.session_state.webcam_started = True
-with col_stop:
-    if st.button("⏹️ Stop live camera", key="stop_live_camera_button"):
-        st.session_state.webcam_started = False
-
-if st.session_state.get("live_phone_detected", False):
-    now = time.monotonic()
-    if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
-        st.session_state.last_live_warning_time = now
-        st.error("📱 LIVE PHONE DETECTED! Put the phone away now.")
-        show_phone_alert(preview=False)
-elif st.session_state.webcam_started:
-    st.success("Live detection is active and no phone is currently detected.")
-
-if st.button("▶️ Start webcam manually", key="manual_webcam_start"):
-    st.session_state.webcam_started = True
-
-if st.session_state.webcam_started:
-    st.info("Webcam started manually. Please allow camera access.")
-    camera_image = st.camera_input("Take a photo", key="manual_camera_test")
-    
-    if camera_image is not None:
-        image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
-        model = load_webcam_model()
-        result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
-
-        detected = False
-        if result.boxes is not None:
-            for box in result.boxes:
-                class_id = int(box.cls[0].item())
-                class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
-                class_name = str(class_name).strip().lower()
-                if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                    detected = True
-                    break
-
-        if detected:
-            st.error("📱 Phone detected.")
-            show_phone_alert(preview=False)
-        else:
-            st.success("No phone detected in this frame.")
-            key="study_phone_webcam_live_warning_single",
-            video_processor_factory=LivePhoneDetector,
-            media_stream_constraints={
-                "video": {
-                    "frameRate": 12,
-                    "width": 640,
-                    "height": 480,
-                    "facingMode": "user",
-                },
-                "audio": False,
-            },
-            rtc_configuration={
-                "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-            },
-            async_processing=True,
-        )
-
-        if getattr(webcam_ctx.state, "playing", False):
-            st.success("WebRTC webcam connected and monitoring.")
-        else:
-            st.warning("WebRTC camera not ready. Using browser camera fallback below.")
-            camera_image = st.camera_input("Use your phone camera", key="phone_camera_fallback")
-            if camera_image is not None:
-                image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
-                model = load_webcam_model()
-                result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
-
-                detected = False
-                if result.boxes is not None:
-                    for box in result.boxes:
-                        class_id = int(box.cls[0].item())
-                        class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
-                        class_name = str(class_name).strip().lower()
-                        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                            detected = True
-                            break
-
-                if detected:
-                    st.error("📱 Phone detected from live phone camera.")
-                    show_phone_alert(preview=False)
-                else:
-                    st.success("Live camera active — no phone detected.")
-    except Exception:
-        st.warning("WebRTC failed. Using browser camera fallback.")
-        camera_image = st.camera_input("Use your phone camera", key="phone_camera_fallback_2")
-        if camera_image is not None:
-            image = cv2.cvtColor(np.array(camera_image), cv2.COLOR_RGB2BGR)
-            model = load_webcam_model()
-            result = model.predict(source=image, imgsz=640, conf=0.18, verbose=False, max_det=20)[0]
-
-            detected = False
-            if result.boxes is not None:
-                for box in result.boxes:
-                    class_id = int(box.cls[0].item())
-                    class_name = model.names[class_id] if not isinstance(model.names, dict) else model.names.get(class_id, "")
-                    class_name = str(class_name).strip().lower()
-                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                        detected = True
-                        break
-
-            if detected:
-                st.error("📱 Phone detected from live phone camera.")
-                show_phone_alert(preview=False)
-            else:
-                st.success("Live camera active — no phone detected.")
-else:
-    st.info("Click Start live camera once. On mobile, use Chrome or Edge and allow camera access. If WebRTC fails, the fallback camera will still work.")
-
-if st.button("🔄 Reset live connection", key="webcam_reset_main", help="Use this after a failed or stuck connection"):
-    st.session_state.webcam_started = False
-    st.rerun()
-
-st.caption("This live detection warns instantly in real time. It does not wait for a video file to finish analyzing.")
+st.info("Live webcam detection is disabled for stability. Please use the uploaded video analysis for the reliable project workflow.")
 
 # ============================================================
 # VIDEO UPLOAD
@@ -1291,7 +1056,6 @@ if uploaded_video is not None:
 
                 st.session_state["last_analysis"] = analysis_result
                 st.success("Analysis completed and session results were saved to the report.")
-                st.rerun()
             except Exception as error:
                 st.error(f"The analysis finished, but the report could not be saved: {error}")
 
@@ -1456,7 +1220,6 @@ with button_col1:
     ):
         st.session_state.study_timer_started_at = time.monotonic()
         st.session_state.study_timer_running = True
-        st.rerun()
 
 with button_col2:
     if st.button(
@@ -1467,7 +1230,6 @@ with button_col2:
         st.session_state.study_timer_elapsed_before_pause = elapsed_seconds
         st.session_state.study_timer_running = False
         st.session_state.study_timer_started_at = None
-        st.rerun()
 
 with button_col3:
     if st.button("🔄 Reset", key="study_timer_reset_main"):
@@ -1475,13 +1237,12 @@ with button_col3:
         st.session_state.study_timer_started_at = None
         st.session_state.study_timer_elapsed_before_pause = 0.0
         st.session_state.study_timer_finished = False
-        st.rerun()
 
 if st.session_state.study_timer_finished:
     st.success("🎉 Study session completed! Take a short break.")
 elif st.session_state.study_timer_running:
     st.info("Your study timer is running.")
-   
+
 # ============================================================
 # TIMELINE
 # ============================================================
@@ -1564,11 +1325,10 @@ with about3:
     )
 
 st.markdown("#### Technology stack")
-st.write("Python · Streamlit · Ultralytics YOLO · OpenCV · Pandas · Matplotlib · ReportLab · WebRTC")
+st.write("Python · Streamlit · Ultralytics YOLO · OpenCV · Pandas · Matplotlib · ReportLab")
 
 st.markdown("#### Important limitations")
 st.warning(
     "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
-
