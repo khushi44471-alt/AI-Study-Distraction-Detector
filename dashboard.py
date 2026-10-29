@@ -208,7 +208,7 @@ BASE_DIR = Path(__file__).resolve().parent
 REPORT_DIR = BASE_DIR / "reports"
 REPORT_FILE = REPORT_DIR / "session_summary.csv"
 
-MODEL_NAME = "yolo11m.pt"
+MODEL_NAME = "yolo11n.pt"
 MODEL_FILE = BASE_DIR / MODEL_NAME
 
 def ensure_model_exists() -> Path:
