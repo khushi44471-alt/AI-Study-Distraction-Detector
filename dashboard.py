@@ -230,7 +230,7 @@ NUMERIC_COLUMNS = [
 ]
 
 # ============================================================
-# STUDY TIMER
+# TIMER
 # ============================================================
 
 if "study_timer_duration" not in st.session_state:
@@ -249,7 +249,7 @@ if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
 # ============================================================
-# ALARM SECTION ONLY: FEMALE + CUSTOM
+# WARNING SOUND SETTINGS
 # ============================================================
 
 ALERT_COOLDOWN = 30
@@ -259,7 +259,15 @@ alert_choice = st.selectbox(
     "🔔 Choose Phone Alert Sound",
     [
         "1. Female Spoken Warning",
+        "2. Gentle Warning Siren",
+        "3. Deep Warning Pulse",
+        "4. Emergency Warning Sweep",
         "5. Custom MP3/WAV File",
+        "6. Soft Warning Bell",
+        "7. Urgent Warning Tone",
+        "8. Warning Chime",
+        "9. Digital Warning Signal",
+        "10. Safety Warning Voice",
     ],
     key="phone_alert_choice_main",
 )
@@ -270,7 +278,7 @@ alert_volume = st.slider(
     max_value=100,
     value=75,
     step=5,
-    help="Controls the alert volume where supported.",
+    help="Controls the warning volume.",
     key="phone_alert_volume_main",
 )
 
@@ -321,6 +329,104 @@ def play_female_warning(volume=0.8):
     """
     components.html(js, height=0)
 
+def play_warning_tone(mode, volume=0.75):
+    vol = max(0.0, min(1.0, float(volume)))
+    configs = {
+        "siren": {
+            "pattern": [420, 520, 620, 760, 620, 520, 420],
+            "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60],
+            "type": "sawtooth",
+        },
+        "pulse": {
+            "pattern": [520, 560, 610, 660, 610, 560, 520, 450],
+            "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55],
+            "type": "triangle",
+        },
+        "sweep": {
+            "pattern": [390, 470, 560, 700, 560, 470, 390],
+            "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65],
+            "type": "sawtooth",
+        },
+        "bell": {
+            "pattern": [880, 770, 660, 770, 660, 560],
+            "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50],
+            "type": "triangle",
+        },
+        "warning": {
+            "pattern": [700, 760, 820, 760, 700, 680],
+            "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42],
+            "type": "sine",
+        },
+        "urgent": {
+            "pattern": [950, 900, 980, 900, 980, 860, 980, 820],
+            "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42],
+            "type": "square",
+        },
+        "digital": {
+            "pattern": [650, 720, 800, 860, 800, 720, 650],
+            "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28],
+            "type": "triangle",
+        },
+        "voice": {
+            "pattern": [430, 520, 610, 520, 610, 520, 430],
+            "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50],
+            "type": "sine",
+        },
+    }
+
+    cfg = configs.get(mode, configs["warning"])
+    pattern = cfg["pattern"]
+    durations = cfg["durations"]
+    tone_type = cfg["type"]
+
+    js = f"""
+    <script>
+    (function() {{
+      try {{
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+        const vol = {vol};
+        const pattern = {json.dumps(pattern)};
+        const durations = {json.dumps(durations)};
+        const toneType = "{tone_type}";
+
+        pattern.forEach((freq, index) => {{
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = toneType;
+          osc.frequency.setValueAtTime(freq, now + index * 0.22);
+
+          const start = now + index * 0.22;
+          const duration = durations[index] || 0.35;
+          const peak = 0.08 + (index % 3) * 0.03;
+
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.linearRampToValueAtTime(vol * peak, start + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(start);
+          osc.stop(start + duration + 0.04);
+        }});
+
+        setTimeout(() => {{
+          try {{ ctx.close(); }} catch (e) {{}}
+        }}, 7000);
+
+      }} catch (e) {{
+        console.log("Warning tone failed:", e);
+      }}
+    }})();
+    </script>
+    """
+    components.html(js, height=0)
+
 def play_custom_warning_audio():
     if custom_audio is None:
         st.info("Upload a custom MP3 or WAV file first.")
@@ -335,11 +441,11 @@ def play_custom_warning_audio():
     const player = document.querySelector("audio");
     player.volume = {volume_level};
     player.play().catch(() => {{
-        console.log("Custom audio autoplay blocked by browser.");
+        console.log("Custom warning autoplay blocked by browser.");
     }});
     </script>
     """
-    components.html(audio_html, height=75)
+    components.html(audio_html, height=90)
 
 def show_phone_alert(preview=False):
     if not preview:
@@ -347,8 +453,24 @@ def show_phone_alert(preview=False):
 
     if alert_choice == "1. Female Spoken Warning":
         play_female_warning(volume=volume_level)
-    else:
+    elif alert_choice == "2. Gentle Warning Siren":
+        play_warning_tone("siren", volume=volume_level)
+    elif alert_choice == "3. Deep Warning Pulse":
+        play_warning_tone("pulse", volume=volume_level)
+    elif alert_choice == "4. Emergency Warning Sweep":
+        play_warning_tone("sweep", volume=volume_level)
+    elif alert_choice == "5. Custom MP3/WAV File":
         play_custom_warning_audio()
+    elif alert_choice == "6. Soft Warning Bell":
+        play_warning_tone("bell", volume=volume_level)
+    elif alert_choice == "7. Urgent Warning Tone":
+        play_warning_tone("urgent", volume=volume_level)
+    elif alert_choice == "8. Warning Chime":
+        play_warning_tone("warning", volume=volume_level)
+    elif alert_choice == "9. Digital Warning Signal":
+        play_warning_tone("digital", volume=volume_level)
+    else:
+        play_warning_tone("voice", volume=volume_level)
 
     fallback_html = """
     <div style="margin-top: 12px;">
@@ -380,7 +502,7 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
 # ============================================================
-# HELPER FUNCTIONS
+# HELPERS
 # ============================================================
 
 def detect_network_issue():
@@ -559,7 +681,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 # ============================================================
-# YOLO MODEL
+# MODEL LOADING
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
@@ -799,7 +921,7 @@ def analyze_video(uploaded_file):
                 pass
 
 # ============================================================
-# DASHBOARD
+# MAIN DASHBOARD
 # ============================================================
 
 st.divider()
@@ -863,7 +985,7 @@ else:
 st.caption("Class 12 AI Project | Phone visibility analysis only; not a validated attention measurement.")
 
 # ============================================================
-# LIVE WEBCAM DETECTION
+# LIVE WEBCAM
 # ============================================================
 
 st.divider()
@@ -1084,7 +1206,7 @@ if uploaded_video is not None:
                 st.error(f"The analysis finished, but the report could not be saved: {error}")
 
 # ============================================================
-# LAST ANALYSIS RESULTS
+# LAST ANALYSIS
 # ============================================================
 
 if "last_analysis" in st.session_state:
@@ -1376,6 +1498,7 @@ st.warning(
     "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+       
 
 
 
