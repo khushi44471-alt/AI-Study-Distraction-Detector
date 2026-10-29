@@ -202,7 +202,7 @@ st.markdown(
 )
 
 # ============================================================
-# DATA FILES
+# PROJECT FILE LOCATIONS
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -249,7 +249,7 @@ if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
 # ============================================================
-# LIVE WARNING STATE
+# LIVE DETECTION STATE
 # ============================================================
 
 if "live_phone_detected" not in st.session_state:
@@ -258,11 +258,11 @@ if "live_phone_detected" not in st.session_state:
 if "last_live_warning_time" not in st.session_state:
     st.session_state.last_live_warning_time = 0.0
 
-if "live_warning_count" not in st.session_state:
-    st.session_state.live_warning_count = 0
+if "webcam_connection_attempt" not in st.session_state:
+    st.session_state.webcam_connection_attempt = 1
 
 # ============================================================
-# ALERTS
+# WARNING SETTINGS
 # ============================================================
 
 ALERT_COOLDOWN = 25
@@ -515,8 +515,16 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
 # ============================================================
-# LIVE WARNING HELPERS
+# LIVE DETECTION HELPERS
 # ============================================================
+
+PHONE_KEYWORDS = [
+    "cell phone",
+    "mobile phone",
+    "phone",
+    "smartphone",
+    "cellphone",
+]
 
 def detect_network_issue():
     return """
@@ -694,7 +702,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 # ============================================================
-# YOLO MODEL
+# MODEL LOADING
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
@@ -702,7 +710,7 @@ def load_yolo_model(model_path: str):
     return YOLO(model_path)
 
 # ============================================================
-# VIDEO ANALYSIS (kept)
+# VIDEO ANALYSIS
 # ============================================================
 
 def analyze_video(uploaded_file):
@@ -785,7 +793,13 @@ def analyze_video(uploaded_file):
                     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
                     blur_values.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
 
-                prediction = model.predict(source=frame, imgsz=640, conf=0.25, verbose=False)[0]
+                prediction = model.predict(
+                    source=frame,
+                    imgsz=640,
+                    conf=0.12,
+                    verbose=False,
+                    max_det=20,
+                )[0]
                 annotated = frame.copy()
                 phones_in_frame = 0
                 frame_best_confidence = -1.0
@@ -797,13 +811,13 @@ def analyze_video(uploaded_file):
                             class_name = model.names.get(class_id, "Unknown")
                         else:
                             class_name = model.names[class_id]
-                        class_name = str(class_name).strip()
+                        class_name = str(class_name).strip().lower()
 
                         object_counts[class_name] = object_counts.get(class_name, 0) + 1
                         confidence = float(box.conf[0].item())
                         x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
 
-                        is_phone = class_name.lower() in ("cell phone", "mobile phone")
+                        is_phone = any(keyword in class_name for keyword in PHONE_KEYWORDS)
 
                         if is_phone:
                             box_color = (0, 210, 0)
@@ -1024,13 +1038,33 @@ class LivePhoneDetector(VideoProcessorBase):
         image = frame.to_ndarray(format="bgr24")
         self.frame_count += 1
 
+        # Improve image before detection
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
+        if blur_score < 40:
+            # if frame is too blurry, still show clarity warning but don't force false detection
+            cv2.putText(
+                image,
+                "Frame is blurry - detection may be weak",
+                (20, image.shape[0] - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 0),
+                2,
+                cv2.LINE_AA,
+            )
+        # light preprocessing for better phone detection
+        image_for_model = cv2.resize(image, (640, 480))
+        image_for_model = cv2.convertScaleAbs(image_for_model, alpha=1.2, beta=15)
+
         try:
             result = self.model.predict(
-                source=image,
-                imgsz=320,
-                conf=0.25,
+                source=image_for_model,
+                imgsz=640,
+                conf=0.12,
                 verbose=False,
                 device="cpu",
+                max_det=20,
             )[0]
 
             detections = []
@@ -1042,7 +1076,8 @@ class LivePhoneDetector(VideoProcessorBase):
                     else:
                         class_name = self.model.names[class_id]
 
-                    if str(class_name).strip().lower() not in ("cell phone", "mobile phone"):
+                    class_name = str(class_name).strip().lower()
+                    if not any(keyword in class_name for keyword in PHONE_KEYWORDS):
                         continue
 
                     x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
@@ -1057,7 +1092,13 @@ class LivePhoneDetector(VideoProcessorBase):
             self.phone_warning = False
             logging.getLogger("streamlit_webrtc").exception("Live phone detection failed")
 
+        # Draw boxes on original image using resized coordinates
         for x1, y1, x2, y2, confidence in self.last_detections:
+            x1 = int(x1 * image.shape[1] / 640)
+            y1 = int(y1 * image.shape[0] / 480)
+            x2 = int(x2 * image.shape[1] / 640)
+            y2 = int(y2 * image.shape[0] / 480)
+
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
             cv2.putText(
                 image,
@@ -1070,80 +1111,62 @@ class LivePhoneDetector(VideoProcessorBase):
                 cv2.LINE_AA,
             )
 
-        height, width = image.shape[:2]
         if self.phone_warning:
             banner = "PHONE DETECTED LIVE - PLEASE PUT IT AWAY"
-            cv2.rectangle(image, (0, 0), (width, 52), (0, 0, 210), -1)
+            cv2.rectangle(image, (0, 0), image.shape[1], 52, (0, 0, 210), -1)
             cv2.putText(
                 image,
                 banner,
                 (12, 34),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                max(0.45, min(0.75, width / 1000)),
+                max(0.45, min(0.75, image.shape[1] / 1000)),
                 (255, 255, 255),
                 2,
                 cv2.LINE_AA,
             )
+            st.session_state.live_phone_detected = True
         else:
-            cv2.rectangle(image, (0, 0), (width, 42), (25, 110, 25), -1)
+            cv2.rectangle(image, (0, 0), image.shape[1], 42, (25, 110, 25), -1)
             cv2.putText(
                 image,
                 "LIVE DETECTION ACTIVE - NO PHONE DETECTED",
                 (12, 28),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                max(0.4, min(0.7, width / 1100)),
+                max(0.4, min(0.7, image.shape[1] / 1100)),
                 (255, 255, 255),
                 2,
                 cv2.LINE_AA,
             )
-
-        st.session_state.live_phone_detected = self.phone_warning
+            st.session_state.live_phone_detected = False
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
-# Live warning logic
-if "webcam_connection_attempt" not in st.session_state:
-    st.session_state.webcam_connection_attempt = 1
+# Live detection warning trigger
+if st.session_state.get("live_phone_detected", False):
+    now = time.monotonic()
+    if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
+        st.session_state.last_live_warning_time = now
+        st.error("📱 LIVE PHONE DETECTED! Put the phone away now.")
+        show_phone_alert(preview=False)
+else:
+    st.success("Live detection is active and no phone is currently detected.")
 
-reset_col, help_col = st.columns([1, 2])
-with reset_col:
-    if st.button(
-        "🔄 Reset live connection",
-        key="webcam_reset_main",
-        help="Use this only after the live connection fails or gets stuck.",
-    ):
-        st.session_state.webcam_connection_attempt += 1
-        st.rerun()
-
-with help_col:
-    st.caption(f"Connection attempt: {st.session_state.webcam_connection_attempt}")
-
-WEBRTC_RTC_CONFIGURATION = {
-    "iceServers": [
-        {
-            "urls": [
-                "stun:stun.l.google.com:19302",
-                "stun:stun1.l.google.com:19302",
-                "stun:stun2.l.google.com:19302",
-                "stun:stun3.l.google.com:19302",
-                "stun:stun4.l.google.com:19302",
-            ]
-        },
-        {"urls": ["stun:stun.cloudflare.com:3478"]},
-        {
-            "urls": ["turn:your-turn-server.com:3478"],
-            "username": "your_username",
-            "credential": "your_password"
-        },
-    ]
-}
-
+# Webcam startup
 try:
     webcam_ctx = webrtc_streamer(
         key=f"study_phone_webcam_live_warning_{st.session_state.webcam_connection_attempt}",
         video_processor_factory=LivePhoneDetector,
         media_stream_constraints={"video": True, "audio": False},
-        rtc_configuration=WEBRTC_RTC_CONFIGURATION,
+        rtc_configuration={
+            "iceServers": [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {"urls": ["stun:stun1.l.google.com:19302"]},
+                {"urls": ["stun:stun2.l.google.com:19302"]},
+                {"urls": ["stun:stun3.l.google.com:19302"]},
+                {"urls": ["stun:stun4.l.google.com:19302"]},
+                {"urls": ["stun:stun.cloudflare.com:3478"]},
+            ]
+        },
         async_processing=True,
     )
 
@@ -1152,7 +1175,7 @@ try:
     else:
         st.info(
             "Click START above and allow camera access. "
-            "If the stream hangs, press Reset live connection and try again."
+            "If it hangs, this is usually a network or webcam permission issue."
         )
         st.warning(detect_network_issue())
 except Exception as webcam_error:
@@ -1160,18 +1183,12 @@ except Exception as webcam_error:
     st.code(f"{type(webcam_error).__name__}: {webcam_error}")
     st.warning(detect_network_issue())
 
-# Trigger real-time warning outside the webcam loop
-if st.session_state.get("live_phone_detected", False):
-    st.error("📱 LIVE PHONE DETECTED! Put the phone away now.")
-    now = time.monotonic()
-    if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
-        st.session_state.last_live_warning_time = now
-        st.session_state.live_warning_count += 1
-        show_phone_alert(preview=False)
-else:
-    st.success("Live detection is active and no phone is currently detected.")
+# Reset button
+if st.button("🔄 Reset live connection", key="webcam_reset_main", help="Use this after a failed or stuck connection"):
+    st.session_state.webcam_connection_attempt += 1
+    st.rerun()
 
-st.caption("This live detection warns instantly in real time while the webcam is running. It does not wait for a recorded video to finish analyzing.")
+st.caption("This live detection warns instantly in real time. It does not wait for a video file to finish analyzing.")
 
 # ============================================================
 # VIDEO UPLOAD
@@ -1487,7 +1504,6 @@ st.warning(
     "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
-
 
 
 
