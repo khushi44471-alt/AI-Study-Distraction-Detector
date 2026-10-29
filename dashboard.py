@@ -1076,6 +1076,116 @@ st.caption(
     "not a validated attention measurement."
 )
 
+# ============================================================
+# LIVE WEBCAM DETECTION
+# ============================================================
+
+import av
+import threading
+
+st.divider()
+st.subheader("📷 Live AI Camera Detection")
+
+st.caption(
+    "Use your laptop webcam or phone camera to detect "
+    "visible mobile phones in real time."
+)
+
+if MODEL_FILE.exists():
+
+    @st.cache_resource(show_spinner=False)
+    def load_live_camera_model():
+        return YOLO(str(MODEL_FILE))
+
+    live_model = load_live_camera_model()
+    live_model_lock = threading.Lock()
+
+    class PhoneCameraProcessor(VideoProcessorBase):
+
+        def recv(self, frame):
+            image = frame.to_ndarray(format="bgr24")
+
+            with live_model_lock:
+                result = live_model.predict(
+                    source=image,
+                    imgsz=640,
+                    conf=0.25,
+                    verbose=False,
+                )[0]
+
+            annotated = image.copy()
+
+            if result.boxes is not None:
+                for detected_box in result.boxes:
+
+                    class_id = int(detected_box.cls[0].item())
+                    class_name = str(
+                        live_model.names[class_id]
+                    ).lower()
+
+                    if class_name not in (
+                        "cell phone",
+                        "mobile phone",
+                    ):
+                        continue
+
+                    confidence = float(
+                        detected_box.conf[0].item()
+                    )
+
+                    x1, y1, x2, y2 = [
+                        int(value)
+                        for value in detected_box.xyxy[0].tolist()
+                    ]
+
+                    cv2.rectangle(
+                        annotated,
+                        (x1, y1),
+                        (x2, y2),
+                        (0, 255, 0),
+                        3,
+                    )
+
+                    cv2.putText(
+                        annotated,
+                        f"Phone {confidence:.0%}",
+                        (x1, max(25, y1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (0, 255, 0),
+                        2,
+                    )
+
+            return av.VideoFrame.from_ndarray(
+                annotated,
+                format="bgr24",
+            )
+
+    webrtc_streamer(
+        key="study-phone-live-camera",
+        mode=WebRtcMode.SENDRECV,
+        video_processor_factory=PhoneCameraProcessor,
+        media_stream_constraints={
+            "video": {
+                "facingMode": "user",
+            },
+            "audio": False,
+        },
+        async_processing=True,
+    )
+
+    st.caption(
+        "Press START and allow camera access. "
+        "Green boxes indicate detected phones. "
+        "Detection does not measure attention."
+    )
+
+else:
+    st.error(
+        "The YOLO model file is missing. "
+        "Check that yolo11n.pt exists in your repository."
+    )
+
 
 # ============================================================
 # VIDEO UPLOAD AND ANALYSIS
