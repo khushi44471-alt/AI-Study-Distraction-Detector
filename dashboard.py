@@ -350,6 +350,11 @@ alert_choice = st.selectbox(
         "3. Rising Emergency Siren",
         "4. Retro 8-Bit Game Melody",
         "5. Custom MP3/WAV File",
+        "6. Soft Bell Ring",
+        "7. Sharp Beep",
+        "8. Urgent Alarm Pulse",
+        "9. Digital Notification",
+        "10. School Bell",
     ],
     key="phone_alert_choice",
 )
