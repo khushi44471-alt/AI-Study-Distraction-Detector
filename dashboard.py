@@ -202,7 +202,7 @@ st.markdown(
 )
 
 # ============================================================
-# APP FILES
+# FILES
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -230,7 +230,7 @@ NUMERIC_COLUMNS = [
 ]
 
 # ============================================================
-# STUDY TIMER STATE
+# STUDY TIMER
 # ============================================================
 
 if "study_timer_duration" not in st.session_state:
@@ -249,7 +249,7 @@ if "study_timer_finished" not in st.session_state:
     st.session_state.study_timer_finished = False
 
 # ============================================================
-# ALARM SETTINGS AND SOUND SYSTEM
+# ALARM SECTION ONLY: FEMALE + CUSTOM
 # ============================================================
 
 ALERT_COOLDOWN = 30
@@ -259,15 +259,7 @@ alert_choice = st.selectbox(
     "🔔 Choose Phone Alert Sound",
     [
         "1. Female Spoken Warning",
-        "2. Gentle Notification Chime",
-        "3. Rising Emergency Siren",
-        "4. Retro 8-Bit Game Melody",
         "5. Custom MP3/WAV File",
-        "6. Soft Bell Ring",
-        "7. Sharp Beep",
-        "8. Urgent Alarm Pulse",
-        "9. Digital Notification",
-        "10. School Bell",
     ],
     key="phone_alert_choice_main",
 )
@@ -276,7 +268,7 @@ alert_volume = st.slider(
     "🔊 Alert Volume",
     min_value=0,
     max_value=100,
-    value=70,
+    value=75,
     step=5,
     help="Controls the alert volume where supported.",
     key="phone_alert_volume_main",
@@ -289,7 +281,7 @@ custom_audio_type = None
 
 if alert_choice == "5. Custom MP3/WAV File":
     uploaded_audio = st.file_uploader(
-        "Upload your alert sound",
+        "Upload your warning sound",
         type=["mp3", "wav"],
         key="custom_phone_alert_audio_main",
     )
@@ -297,12 +289,9 @@ if alert_choice == "5. Custom MP3/WAV File":
         custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
         custom_audio_type = uploaded_audio.type or "audio/mpeg"
 
-def play_auto_warning_sound(volume=0.75, sound_mode="female"):
+def play_female_warning(volume=0.8):
     safe_volume = max(0.0, min(1.0, float(volume)))
     message = "Attention! Attention! Phone detected! Please put your phone away and focus on studying!"
-    if sound_mode != "female":
-        message = "Phone detected. Please focus on your studies."
-
     js = f"""
     <script>
     try {{
@@ -311,7 +300,7 @@ def play_auto_warning_sound(volume=0.75, sound_mode="female"):
             speech.cancel();
             const utterance = new SpeechSynthesisUtterance("{message}");
             utterance.volume = {safe_volume};
-            utterance.rate = 0.95;
+            utterance.rate = 0.9;
             utterance.pitch = 1.15;
 
             const voices = speech.getVoices();
@@ -323,178 +312,60 @@ def play_auto_warning_sound(volume=0.75, sound_mode="female"):
                 utterance.voice = preferred;
             }}
 
-            utterance.onend = () => {{
-                console.log("Warning sound finished");
-            }};
-
             speech.speak(utterance);
         }}
     }} catch (e) {{
-        console.log("Auto speech warning failed:", e);
+        console.log("Female warning failed:", e);
     }}
     </script>
     """
     components.html(js, height=0)
 
-def play_audio_pattern(mode: str, volume: float = 0.75):
-    """
-    Better sounding alarm generator.
-    Each sound now lasts longer (around 5-7 seconds) and feels more like an alarm.
-    """
-    sound_config = {
-        "chime": {
-            "pattern": [523.25, 659.25, 783.99, 659.25, 523.25, 392.0],
-            "durations": [0.28, 0.28, 0.35, 0.28, 0.30, 0.45],
-            "type": "triangle",
-        },
-        "siren": {
-            "pattern": [420, 520, 640, 790, 640, 520, 420],
-            "durations": [0.55, 0.58, 0.62, 0.60, 0.62, 0.58, 0.65],
-            "type": "sawtooth",
-        },
-        "retro": {
-            "pattern": [330, 392, 523, 659, 523, 392, 330, 293],
-            "durations": [0.18, 0.18, 0.18, 0.22, 0.18, 0.18, 0.22, 0.30],
-            "type": "square",
-        },
-        "bell": {
-            "pattern": [880, 740, 660, 740, 660, 523],
-            "durations": [0.28, 0.30, 0.34, 0.30, 0.35, 0.52],
-            "type": "triangle",
-        },
-        "beep": {
-            "pattern": [1200, 1200, 1500, 1500, 1800, 1800],
-            "durations": [0.22, 0.18, 0.22, 0.18, 0.25, 0.35],
-            "type": "square",
-        },
-        "alarm": {
-            "pattern": [980, 920, 980, 900, 980, 860, 980, 820],
-            "durations": [0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.18, 0.22],
-            "type": "sawtooth",
-        },
-        "digital": {
-            "pattern": [660, 780, 880, 1040, 880, 780, 660],
-            "durations": [0.14, 0.12, 0.12, 0.18, 0.12, 0.12, 0.24],
-            "type": "square",
-        },
-        "schoolbell": {
-            "pattern": [740, 740, 660, 660, 590, 590, 660],
-            "durations": [0.25, 0.25, 0.30, 0.26, 0.30, 0.30, 0.42],
-            "type": "triangle",
-        },
-    }
+def play_custom_warning_audio():
+    if custom_audio is None:
+        st.info("Upload a custom MP3 or WAV file first.")
+        return
 
-    cfg = sound_config.get(mode, sound_config["alarm"])
-    pattern = cfg["pattern"]
-    durations = cfg["durations"]
-    tone_type = cfg["type"]
-
-    js = f"""
+    audio_html = f"""
+    <audio controls autoplay style="width:100%;">
+        <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
+        Your browser does not support this audio file.
+    </audio>
     <script>
-    (function() {{
-      try {{
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-        const vol = {float(volume)};
-        const pattern = {json.dumps(pattern)};
-        const durations = {json.dumps(durations)};
-        const toneType = "{tone_type}";
-
-        pattern.forEach((freq, index) => {{
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-
-          osc.type = toneType;
-          osc.frequency.setValueAtTime(freq, now + index * 0.15);
-
-          const start = now + index * 0.15;
-          const duration = durations[index] || 0.25;
-          const peak = 0.08 + (index % 3) * 0.03;
-
-          gain.gain.setValueAtTime(0.0001, start);
-          gain.gain.linearRampToValueAtTime(vol * peak, start + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-
-          osc.start(start);
-          osc.stop(start + duration + 0.03);
-        }});
-
-        setTimeout(() => {{
-          try {{ ctx.close(); }} catch (e) {{}}
-        }}, 7000);
-
-      }} catch (e) {{
-        console.log("Alarm generator failed:", e);
-      }}
-    }})();
+    const player = document.querySelector("audio");
+    player.volume = {volume_level};
+    player.play().catch(() => {{
+        console.log("Custom audio autoplay blocked by browser.");
+    }});
     </script>
     """
-    components.html(js, height=0)
+    components.html(audio_html, height=75)
 
 def show_phone_alert(preview=False):
     if not preview:
         st.warning("📱 Phone detected repeatedly! Please check whether you need your phone for studying.")
 
     if alert_choice == "1. Female Spoken Warning":
-        play_auto_warning_sound(volume=volume_level, sound_mode="female")
-    elif alert_choice == "2. Gentle Notification Chime":
-        play_audio_pattern("chime", volume=volume_level)
-    elif alert_choice == "3. Rising Emergency Siren":
-        play_audio_pattern("siren", volume=volume_level)
-    elif alert_choice == "4. Retro 8-Bit Game Melody":
-        play_audio_pattern("retro", volume=volume_level)
-    elif alert_choice == "5. Custom MP3/WAV File":
-        if custom_audio is None:
-            st.info("Upload a custom audio file before testing the alert.")
-            return
-        audio_html = f"""
-        <audio controls autoplay style="width:100%;">
-            <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
-            Your browser does not support this audio file.
-        </audio>
-        <script>
-        const player = document.querySelector("audio");
-        player.volume = {volume_level};
-        player.play().catch(() => {{
-            console.log("Custom audio autoplay was blocked by browser.");
-        }});
-        </script>
-        """
-        components.html(audio_html, height=75)
-        return
-    elif alert_choice == "6. Soft Bell Ring":
-        play_audio_pattern("bell", volume=volume_level)
-    elif alert_choice == "7. Sharp Beep":
-        play_audio_pattern("beep", volume=volume_level)
-    elif alert_choice == "8. Urgent Alarm Pulse":
-        play_audio_pattern("alarm", volume=volume_level)
-    elif alert_choice == "9. Digital Notification":
-        play_audio_pattern("digital", volume=volume_level)
+        play_female_warning(volume=volume_level)
     else:
-        play_audio_pattern("schoolbell", volume=volume_level)
+        play_custom_warning_audio()
 
     fallback_html = """
-    <div style="margin-top: 10px;">
-        <button id="manual-phone-warning-button"
+    <div style="margin-top: 12px;">
+        <button id="manual-warning-button"
             style="padding: 10px 16px; background: #8b5cf6; color: white; border: none; border-radius: 10px; cursor: pointer;">
             🔊 Play warning sound
         </button>
     </div>
     <script>
-    document.getElementById("manual-phone-warning-button")?.addEventListener("click", function() {
+    document.getElementById("manual-warning-button")?.addEventListener("click", function() {
         try {
             const speech = window.speechSynthesis;
             if (!speech) return;
             speech.cancel();
             const msg = new SpeechSynthesisUtterance("Attention! Attention! Phone detected! Please put your phone away and focus on studying!");
-            msg.volume = 0.75;
-            msg.rate = 0.95;
+            msg.volume = 0.8;
+            msg.rate = 0.9;
             msg.pitch = 1.15;
             speech.speak(msg);
         } catch (e) {
@@ -522,12 +393,6 @@ def detect_network_issue():
     - mobile data restrictions
     Try: same network, allow camera, reset browser, use localhost or HTTPS.
     """
-
-def reset_live_stream():
-    if "webcam_connection_attempt" not in st.session_state:
-        st.session_state.webcam_connection_attempt = 1
-    st.session_state.webcam_connection_attempt += 1
-    st.rerun()
 
 def should_alert_user(phone_count, last_alert_time, current_time):
     if phone_count <= 0:
@@ -575,7 +440,7 @@ with st.sidebar:
         st.caption("This prototype does not measure attention and may miss or misidentify phones.")
 
 # ============================================================
-# REPORT FUNCTIONS
+# REPORT HELPERS
 # ============================================================
 
 def load_report() -> pd.DataFrame:
@@ -694,7 +559,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 # ============================================================
-# MODEL LOADING
+# YOLO MODEL
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
@@ -851,9 +716,10 @@ def analyze_video(uploaded_file):
                     "max_confidence": frame_best_confidence if phone_found else None,
                 })
 
-                if should_alert_user(consecutive_phone_frames, last_alert_time, time.monotonic()):
+                current_time = time.monotonic()
+                if should_alert_user(consecutive_phone_frames, last_alert_time, current_time):
                     show_phone_alert()
-                    last_alert_time = time.monotonic()
+                    last_alert_time = current_time
                     consecutive_phone_frames = 0
 
                 annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
@@ -933,7 +799,7 @@ def analyze_video(uploaded_file):
                 pass
 
 # ============================================================
-# DASHBOARD LAYOUT
+# DASHBOARD
 # ============================================================
 
 st.divider()
@@ -1086,7 +952,7 @@ class LivePhoneDetector(VideoProcessorBase):
             )
 
             try:
-                play_auto_warning_sound(volume=volume_level, sound_mode="female")
+                play_female_warning(volume=volume_level)
             except Exception:
                 pass
         else:
@@ -1145,9 +1011,7 @@ WEBRTC_RTC_CONFIGURATION = {
     ]
 }
 
-st.caption(
-    "If your phone camera keeps spinning, this usually means WebRTC networking/STUN-TURN issue, not a broken camera."
-)
+st.caption("If your phone camera keeps spinning, this usually means WebRTC networking/STUN-TURN issue, not a broken camera.")
 
 try:
     webcam_ctx = webrtc_streamer(
@@ -1182,7 +1046,7 @@ st.write(
 )
 
 # ============================================================
-# VIDEO UPLOAD AND ANALYSIS
+# VIDEO UPLOAD
 # ============================================================
 
 st.divider()
@@ -1334,7 +1198,7 @@ if "last_analysis" in st.session_state:
     st.caption("This is a phone-visibility-based indicator, not a measured attention or concentration score. A phone may be used for studying, and the AI may miss or misidentify phones.")
 
 # ============================================================
-# STUDY SESSION TIMER
+# TIMER
 # ============================================================
 
 st.divider()
@@ -1423,7 +1287,7 @@ elif st.session_state.study_timer_running:
 st.caption("The timer tracks your study session independently of video analysis. Phone detection is based on the analyzed video, not live monitoring.")
 
 # ============================================================
-# DISTRACTION TIMELINE
+# TIMELINE
 # ============================================================
 
 st.divider()
@@ -1512,6 +1376,9 @@ st.warning(
     "The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
+
+
+
 
 
 
