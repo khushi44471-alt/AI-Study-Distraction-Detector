@@ -213,6 +213,32 @@ REPORT_FILE = REPORT_DIR / "session_summary.csv"
 MODEL_NAME = "yolo11m.pt"
 MODEL_FILE = BASE_DIR / MODEL_NAME
 
+# Auto-download helper for the model if it is missing.
+def ensure_model_exists() -> Path:
+    candidate_paths = [
+        MODEL_FILE,
+        BASE_DIR.parent / MODEL_NAME,
+        BASE_DIR.parent / "yolo11s.pt",
+        BASE_DIR.parent / "yolo11n.pt",
+    ]
+    for candidate in candidate_paths:
+        if candidate.exists():
+            return candidate
+
+    try:
+        # Try to auto-download the model if it is missing.
+        _ = YOLO(MODEL_NAME)
+        for candidate in candidate_paths:
+            if candidate.exists():
+                return candidate
+    except Exception:
+        pass
+
+    raise FileNotFoundError(
+        f"Could not find {MODEL_NAME}. Please install ultralytics and run: "
+        "python -c \"from ultralytics import YOLO; YOLO('yolo11m.pt')\""
+    )
+
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 CSV_COLUMNS = [
@@ -313,6 +339,7 @@ if alert_choice == "5. Custom MP3/WAV File":
         custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
         custom_audio_type = uploaded_audio.type or "audio/mpeg"
 
+
 def play_female_warning(volume=0.8):
     safe_volume = max(0.0, min(1.0, float(volume)))
     message = "Attention! Attention! Phone detected! Please put your phone away and focus on studying!"
@@ -344,6 +371,7 @@ def play_female_warning(volume=0.8):
     </script>
     """
     components.html(js, height=0)
+
 
 def play_warning_tone(mode, volume=0.75):
     vol = max(0.0, min(1.0, float(volume)))
@@ -443,6 +471,7 @@ def play_warning_tone(mode, volume=0.75):
     """
     components.html(js, height=0)
 
+
 def play_custom_warning_audio():
     if custom_audio is None:
         st.info("Upload a custom MP3 or WAV file first.")
@@ -462,6 +491,7 @@ def play_custom_warning_audio():
     </script>
     """
     components.html(audio_html, height=90)
+
 
 def show_phone_alert(preview=False):
     if not preview:
@@ -514,6 +544,7 @@ def show_phone_alert(preview=False):
     """
     components.html(fallback_html, height=70)
 
+
 if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
@@ -529,6 +560,7 @@ PHONE_KEYWORDS = [
     "cellphone",
 ]
 
+
 def detect_network_issue():
     return """
     Camera connection might be blocked by:
@@ -539,6 +571,7 @@ def detect_network_issue():
     - mobile data restrictions
     Try: same network, allow camera, reset browser, use localhost or HTTPS.
     """
+
 
 def should_alert_user(phone_count, last_alert_time, current_time):
     if phone_count <= 0:
@@ -589,6 +622,7 @@ with st.sidebar:
 # REPORT HELPERS
 # ============================================================
 
+
 def load_report() -> pd.DataFrame:
     if not REPORT_FILE.exists() or REPORT_FILE.stat().st_size == 0:
         report_df = pd.DataFrame(columns=CSV_COLUMNS)
@@ -607,6 +641,7 @@ def load_report() -> pd.DataFrame:
 
     return report_df[CSV_COLUMNS]
 
+
 def save_session(video_name, resolution, frames_processed, frames_with_phone, percentage, detections):
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     file_has_content = REPORT_FILE.exists() and REPORT_FILE.stat().st_size > 0
@@ -624,6 +659,7 @@ def save_session(video_name, resolution, frames_processed, frames_with_phone, pe
             round(float(percentage), 2),
             int(detections),
         ])
+
 
 def create_pdf_report(analysis):
     pdf_buffer = io.BytesIO()
@@ -716,12 +752,15 @@ def load_yolo_model(model_path: str):
 # VIDEO ANALYSIS (kept)
 # ============================================================
 
+
 def analyze_video(uploaded_file):
     temp_path = None
     capture = None
 
-    if not MODEL_FILE.exists():
-        st.error(f"Missing {MODEL_NAME}. Place it beside dashboard.py or install ultralytics so it can auto-download it.")
+    try:
+        resolved_model_path = ensure_model_exists()
+    except FileNotFoundError as exc:
+        st.error(str(exc))
         return None
 
     try:
@@ -756,7 +795,7 @@ def analyze_video(uploaded_file):
             quality_warnings.append("Very short video (under 5 seconds): results may not represent a session.")
 
         with st.spinner("Loading stronger AI model..."):
-            model = load_yolo_model(str(MODEL_FILE))
+            model = load_yolo_model(str(resolved_model_path))
 
         sampled_frames = frames_with_phone = total_detections = 0
         object_counts = {}
@@ -1024,16 +1063,13 @@ st.caption("This works in real time. It warns instantly when a phone is visible 
 
 @st.cache_resource(show_spinner=False)
 def load_webcam_model():
-    possible_paths = [
-        MODEL_FILE,
-        BASE_DIR.parent / MODEL_NAME,
-        BASE_DIR.parent / "yolo11s.pt",
-        BASE_DIR.parent / "yolo11n.pt",
-    ]
-    for model_path in possible_paths:
-        if model_path.exists():
-            return load_yolo_model(str(model_path))
-    raise FileNotFoundError(f"Could not find {MODEL_NAME} beside dashboard.py or in the repository parent folder.")
+    try:
+        resolved_model_path = ensure_model_exists()
+        return load_yolo_model(str(resolved_model_path))
+    except Exception as exc:
+        st.error(f"Model error: {exc}")
+        raise
+
 
 class LivePhoneDetector(VideoProcessorBase):
     def __init__(self):
@@ -1145,6 +1181,7 @@ class LivePhoneDetector(VideoProcessorBase):
             st.session_state.live_phone_detected = False
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
+
 
 if st.session_state.get("live_phone_detected", False):
     now = time.monotonic()
@@ -1507,8 +1544,3 @@ st.warning(
     "A phone detection does not prove that a student is distracted. The model can miss phones or detect objects incorrectly. The displayed Phone-Free Score is a simple calculation from phone visibility; it is not a validated concentration score."
 )
 st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
-
-
-
-
-
