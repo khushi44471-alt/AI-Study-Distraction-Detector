@@ -426,6 +426,38 @@ def generate_timeline(detection_flags):
         for idx, flag in enumerate(detection_flags)
     ]
 
+def generate_session_insight(analysis):
+    phone_pct = float(analysis.get("percentage", 0.0))
+    focus_score = float(analysis.get("focus_score", 0.0))
+    detections = int(analysis.get("detections", 0))
+    frames = int(analysis.get("frames_processed", 0))
+    phone_frames = int(analysis.get("frames_with_phone", 0))
+
+    if phone_pct >= 50:
+        risk_text = "Very high phone visibility"
+        recommendation = "The session shows a strong phone presence. Consider taking a short break and removing phone distractions before continuing."
+    elif phone_pct >= 20:
+        risk_text = "Moderate phone visibility"
+        recommendation = "There were several detected phone appearances; you may want to keep the phone out of reach for the next study block."
+    elif phone_pct > 0:
+        risk_text = "Low phone visibility"
+        recommendation = "A few phone detections were found. This is not severe, but staying fully off-phone would improve focus further."
+    else:
+        risk_text = "No phone detected"
+        recommendation = "No phone visibility was observed in the sampled frames. Keep this focus pattern going for a longer session."
+
+    summary = (
+        f"Across {frames} sampled frames, phone visibility was detected in {phone_frames} frames "
+        f"({phone_pct:.1f}%), producing a focus score of {focus_score:.1f}%. "
+        f"Total detected phone events: {detections}."
+    )
+
+    return {
+        "risk_text": risk_text,
+        "recommendation": recommendation,
+        "summary": summary,
+    }
+
 def build_phone_heatmap(detection_events):
     if not detection_events:
         return None
@@ -449,26 +481,42 @@ def build_phone_heatmap(detection_events):
     df["bucket"] = pd.cut(df["frame_index"], bins=bins, include_lowest=True, right=False)
     grouped = df.groupby("bucket", observed=False)["phone_detected"].mean().fillna(0)
 
+    # Build a 2-column heatmap: [phone detected, no phone] for each sampled window
     matrix = np.column_stack([
         grouped.to_numpy(),
         1.0 - grouped.to_numpy(),
     ])
 
-    labels = [f"Window {i+1}" for i in range(len(grouped))]
+    labels = [f"Window {i + 1}" for i in range(len(grouped))]
 
     fig = px.imshow(
         matrix,
         x=["Phone Detected", "No Phone"],
         y=labels,
-        color_continuous_scale="YlOrRd",
+        color_continuous_scale=[
+            [0.0, "#0b1220"],   # dark navy
+            [0.25, "#1d4ed8"], # blue
+            [0.5, "#fbbf24"],  # amber
+            [0.75, "#f97316"], # orange
+            [1.0, "#ef4444"],  # red
+        ],
+        zmin=0,
+        zmax=1,
         aspect="auto",
-        title="Phone Detection Heatmap by Frame Window",
+        title="Phone Visibility Heatmap",
     )
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=40, b=20),
+        margin=dict(l=20, r=20, t=50, b=20),
+        title_font_size=18,
+    )
+    fig.update_xaxes(title_text="Phone State")
+    fig.update_yaxes(title_text="Frame Windows")
+    fig.update_coloraxes(colorbar_title="Phone Presence")
+    fig.update_traces(
+        hovertemplate="<b>%{y}</b><br>%{x}<br>value: %{z:.2f}<extra></extra>"
     )
     return fig
 
@@ -1659,6 +1707,12 @@ if st.session_state.get("last_analysis") is not None:
     col2.metric("Phone Visibility", f"{phone_percentage:.1f}%")
     col3.metric("Alert Level", saved_analysis["alert_level"])
     col4.metric("Study Status", saved_analysis["study_status"])
+
+    st.subheader("💡 Session Insight")
+    insight = generate_session_insight(saved_analysis)
+    st.info(insight["risk_text"])
+    st.write(insight["summary"])
+    st.write(insight["recommendation"])
 
     st.subheader("📉 Distraction Timeline")
     timeline_df = pd.DataFrame(saved_analysis["timeline"])
