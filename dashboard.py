@@ -33,7 +33,7 @@ from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
 
 # ============================================================
-# STREAMLIT CONFIG
+# Streamlit config
 # ============================================================
 
 st.set_page_config(
@@ -43,7 +43,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# STYLING
+# Styling
 # ============================================================
 
 st.markdown(
@@ -201,7 +201,7 @@ st.markdown(
 )
 
 # ============================================================
-# FILE PATHS
+# Paths
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -231,7 +231,7 @@ NUMERIC_COLUMNS = [
 ]
 
 # ============================================================
-# MODEL LOADER
+# Model loader
 # ============================================================
 
 def ensure_model_exists() -> Path:
@@ -264,7 +264,7 @@ def load_yolo_model(model_path: str):
     return YOLO(model_path)
 
 # ============================================================
-# SESSION STATE
+# Session state
 # ============================================================
 
 if "study_timer_duration" not in st.session_state:
@@ -344,7 +344,7 @@ if "last_live_alert_key" not in st.session_state:
     st.session_state.last_live_alert_key = None
 
 # ============================================================
-# GLOBAL HELPERS
+# Utility functions
 # ============================================================
 
 PHONE_KEYWORDS = [
@@ -426,14 +426,6 @@ def generate_timeline(detection_flags):
         for idx, flag in enumerate(detection_flags)
     ]
 
-def make_timeline_df(events):
-    if not events:
-        return pd.DataFrame(columns=["frame_index", "phone_detected"])
-    df = pd.DataFrame(events)
-    if "frame_index" not in df.columns:
-        return pd.DataFrame(columns=["frame_index", "phone_detected"])
-    return df[["frame_index", "phone_detected"]].copy()
-
 def build_phone_heatmap(detection_events):
     if not detection_events:
         return None
@@ -445,26 +437,32 @@ def build_phone_heatmap(detection_events):
     df = df[["frame_index", "phone_detected"]].copy()
     df["phone_detected"] = df["phone_detected"].astype(int)
 
-    if len(df) <= 1:
-        heat = np.array([df["phone_detected"].tolist()])
-        x_labels = [0]
-        y_labels = ["Frame window"]
-    else:
-        max_index = max(int(df["frame_index"].max()), 1)
-        bucket_count = min(20, len(df))
-        bins = np.linspace(0, max_index, bucket_count + 1)
-        df["bucket"] = pd.cut(df["frame_index"], bins=bins, include_lowest=True)
-        heat_series = df.groupby("bucket", observed=False)["phone_detected"].mean().fillna(0)
-        heat = np.array([heat_series.tolist()])
-        x_labels = [str(x) for x in range(len(heat_series))]
-        y_labels = ["Phone presence"]
+    if df.empty:
+        return None
+
+    max_frame = max(int(df["frame_index"].max()), 1)
+    bucket_count = min(20, len(df))
+    if bucket_count < 2:
+        bucket_count = 2
+
+    bins = np.linspace(0, max_frame, bucket_count + 1)
+    df["bucket"] = pd.cut(df["frame_index"], bins=bins, include_lowest=True, right=False)
+    grouped = df.groupby("bucket", observed=False)["phone_detected"].mean().fillna(0)
+
+    matrix = np.column_stack([
+        grouped.to_numpy(),
+        1.0 - grouped.to_numpy(),
+    ])
+
+    labels = [f"Window {i+1}" for i in range(len(grouped))]
 
     fig = px.imshow(
-        heat,
+        matrix,
+        x=["Phone Detected", "No Phone"],
+        y=labels,
         color_continuous_scale="YlOrRd",
-        labels={"x": "Frame windows", "y": "Detection band"},
         aspect="auto",
-        title="Phone Visibility Heatmap",
+        title="Phone Detection Heatmap by Frame Window",
     )
     fig.update_layout(
         template="plotly_dark",
@@ -472,13 +470,7 @@ def build_phone_heatmap(detection_events):
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=40, b=20),
     )
-    fig.update_xaxes(tickvals=np.arange(len(x_labels)), ticktext=x_labels)
-    fig.update_yaxes(tickvals=[0], ticktext=y_labels)
     return fig
-
-# ============================================================
-# VIDEO DETECTION
-# ============================================================
 
 def detect_phone_in_frame(frame, confidence_threshold):
     model = load_yolo_model(str(ensure_model_exists()))
@@ -667,7 +659,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 # ============================================================
-# ALERT AUDIO
+# Alert audio functions
 # ============================================================
 
 ALERT_COOLDOWN = 20
@@ -817,7 +809,7 @@ def speak_warning():
     components.html(js, height=0)
 
 # ============================================================
-# ALERT UI
+# Alert UI
 # ============================================================
 
 alert_choice = st.selectbox(
@@ -936,7 +928,7 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
 # ============================================================
-# WEBCAM DETECTOR
+# Webcam detection
 # ============================================================
 
 class WebcamPhoneDetector(VideoProcessorBase):
@@ -1048,7 +1040,7 @@ def trigger_live_warning_once():
         st.session_state.live_warning_triggered = False
 
 # ============================================================
-# LIVE VIDEO PROCESSING
+# Process uploaded video with live detection overlay
 # ============================================================
 
 def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshold, sample_interval):
@@ -1079,8 +1071,8 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
             st.error("The uploaded video has no valid frame size.")
             return None
 
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as out:
-            temp_output_path = Path(out.name)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_out:
+            temp_output_path = Path(temp_out.name)
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(str(temp_output_path), fourcc, fps, (width, height))
@@ -1097,7 +1089,6 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
         last_annotated_frame = None
 
         frame_index = 0
-
         while True:
             success, frame = capture.read()
             if not success:
@@ -1173,7 +1164,6 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
 
             writer.write(frame)
             last_annotated_frame = frame.copy()
-
             progress.progress(min((frame_index + 1) / max(total_frames, 1), 1.0))
             status.write(f"Processing live detection: {analyzed_frames} sampled frames")
 
@@ -1185,7 +1175,7 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
         phone_percentage = compute_phone_percentage(frames_with_phone, analyzed_frames)
         focus_score = get_focus_score(phone_percentage)
 
-        summary = {
+        return {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
             "frames_processed": analyzed_frames,
@@ -1203,8 +1193,6 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
             "annotated_frame": last_annotated_frame,
         }
 
-        return summary
-
     except Exception as exc:
         st.error(f"Live processing failed: {exc}")
         return None
@@ -1221,7 +1209,7 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
                 pass
 
 # ============================================================
-# ANALYZE VIDEO
+# Analyze uploaded video
 # ============================================================
 
 def analyze_video(uploaded_file):
@@ -1345,7 +1333,6 @@ def analyze_video(uploaded_file):
             st.session_state.detection_snapshots = snapshots
 
             last_annotated_frame = frame.copy()
-
             if total_frames > 0:
                 progress.progress(min((frame_index + 1) / total_frames, 1.0))
             status.write(f"Analyzing sampled frames... {sampled_frames}")
@@ -1407,7 +1394,7 @@ def analyze_video(uploaded_file):
                 pass
 
 # ============================================================
-# HERO SECTION
+# Hero section
 # ============================================================
 
 st.markdown(
@@ -1415,7 +1402,7 @@ st.markdown(
     <div class="hero-panel">
       <span class="hero-chip">Class 12 Artificial Intelligence Project</span>
       <h1>📱 AI Study Distraction Detector</h1>
-      <p>Computer vision for monitoring phone visibility during study sessions, with live webcam detection, uploaded video processing, focus scoring, warnings, and downloadable reports.</p>
+      <p>Computer vision for monitoring phone visibility during study sessions, with live webcam detection, uploaded video analysis, focus scoring, warnings, and downloadable reports.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -1432,9 +1419,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Quick navigation")
     st.markdown("[📹 Webcam stream](#live-webcam-detection)")
-    st.markdown("[📼 Uploaded video detection](#live-video-detection-of-uploaded-video)")
-    st.markdown("[📊 Session dashboard](#study-session-dashboard)")
     st.markdown("[🎬 AI video analysis](#ai-video-analysis)")
+    st.markdown("[📊 Session dashboard](#study-session-dashboard)")
     st.markdown("[📈 Detection results](#detection-results)")
     st.markdown("[⏱️ Study timer](#study-session-timer)")
     st.markdown("---")
@@ -1445,12 +1431,12 @@ with st.sidebar:
         st.caption("This is a prototype and may miss or misidentify objects.")
 
 # ============================================================
-# WEBCAM PANEL
+# Live webcam detection
 # ============================================================
 
 st.divider()
 st.subheader("📹 Live Webcam Detection")
-st.caption("This is a real webcam stream with live phone detection overlay.")
+st.caption("This is a real webcam stream with a live phone detection overlay.")
 
 webrtc_streamer(
     key="webcam_phone_detector",
@@ -1505,54 +1491,68 @@ stat3.metric("Max Confidence", f"{live_stats['confidence']:.1%}")
 stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
 
 # ============================================================
-# UPLOADED VIDEO LIVE DETECTION
+# AI video analysis section
 # ============================================================
 
 st.divider()
-st.subheader("📼 Live Video Detection of Uploaded Video")
-st.caption("Upload a video and generate a processed version with phone detection overlay. The processed preview appears under the uploaded video, not in a separate column.")
+st.subheader("🎬 AI Video Analysis")
+st.caption("Upload a study video, run the AI detector, and view the processed live detection preview directly here.")
 
-uploaded_video = st.file_uploader(
-    "Choose a study video to process",
+uploaded_video_analysis = st.file_uploader(
+    "Choose a study video",
     type=["mp4", "mov", "avi"],
-    key="uploaded_live_video_main",
+    key="uploaded_video_main",
 )
 
-if uploaded_video is not None:
-    st.video(uploaded_video)
+if uploaded_video_analysis is not None:
+    st.video(uploaded_video_analysis)
 
-    if st.button("Start Live Detection Preview", type="primary", key="start_live_detect_button"):
-        live_result = process_uploaded_video_for_live_detection(
-            uploaded_file=uploaded_video,
+    if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
+        st.session_state.analysis_warning_triggered = False
+
+        live_preview = process_uploaded_video_for_live_detection(
+            uploaded_video_analysis,
             confidence_threshold=float(st.session_state.detection_confidence),
             sample_interval=int(st.session_state.frame_sample_interval),
         )
 
-        if live_result is not None:
-            st.session_state.generated_live_detected_video = live_result["output_video_path"]
-            st.session_state.last_analysis = {
-                "video_name": live_result["video_name"],
-                "resolution": live_result["resolution"],
-                "frames_processed": live_result["frames_processed"],
-                "frames_with_phone": live_result["frames_with_phone"],
-                "percentage": live_result["percentage"],
-                "detections": live_result["detections"],
-                "focus_score": live_result["focus_score"],
-                "alert_level": live_result["alert_level"],
-                "study_status": live_result["study_status"],
-                "risk_band": live_result["risk_band"],
-                "timeline": live_result["timeline"],
-                "detection_events": live_result["detection_events"],
-                "snapshots": live_result["snapshots"],
-                "annotated_frame": live_result["annotated_frame"],
-            }
+        analysis_result = analyze_video(uploaded_video_analysis)
 
-            st.success("Live detection preview generated successfully.")
-            st.subheader("📽️ Detected Video Preview")
-            st.video(st.session_state.generated_live_detected_video)
+        if analysis_result is not None:
+            try:
+                save_session_record(
+                    analysis_result["video_name"],
+                    analysis_result["resolution"],
+                    analysis_result["frames_processed"],
+                    analysis_result["frames_with_phone"],
+                    analysis_result["percentage"],
+                    analysis_result["detections"],
+                )
+
+                st.session_state["last_analysis"] = analysis_result
+                st.success("AI video analysis completed and saved to the report.")
+            except Exception as error:
+                st.error(f"The analysis finished, but the report could not be saved: {error}")
+
+        if live_preview is not None and live_preview.get("output_video_path"):
+            st.subheader("📽️ Processed Video Preview")
+            st.video(live_preview["output_video_path"])
+
+            processed_col1, processed_col2 = st.columns(2)
+            processed_col1.metric("Frames Processed", live_preview["frames_processed"])
+            processed_col2.metric("Frames With Phone", live_preview["frames_with_phone"])
+
+            if live_preview.get("annotated_frame") is not None:
+                st.subheader("📸 Sample Processed Frame")
+                st.image(
+                    cv2.cvtColor(live_preview["annotated_frame"], cv2.COLOR_BGR2RGB),
+                    channels="RGB",
+                    use_container_width=True,
+                    caption="Example processed frame",
+                )
 
 # ============================================================
-# DASHBOARD SUMMARY
+# Dashboard summary
 # ============================================================
 
 st.divider()
@@ -1599,7 +1599,7 @@ else:
     )
 
 # ============================================================
-# WARNING SUMMARY
+# Warning summary
 # ============================================================
 
 st.subheader("🧾 Recent Warning Summary")
@@ -1614,7 +1614,7 @@ else:
     st.info("No warnings yet.")
 
 # ============================================================
-# CONTROLS
+# Detection controls
 # ============================================================
 
 st.divider()
@@ -1642,43 +1642,7 @@ sample_interval = st.slider(
 st.session_state.frame_sample_interval = sample_interval
 
 # ============================================================
-# AI VIDEO ANALYSIS
-# ============================================================
-
-st.divider()
-st.subheader("🎬 AI Video Analysis")
-st.caption("Upload a study video to measure phone visibility during the session.")
-
-uploaded_video_analysis = st.file_uploader(
-    "Choose a study video",
-    type=["mp4", "mov", "avi"],
-    key="uploaded_video_main",
-)
-
-if uploaded_video_analysis is not None:
-    st.video(uploaded_video_analysis)
-
-    if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
-        st.session_state.analysis_warning_triggered = False
-        analysis_result = analyze_video(uploaded_video_analysis)
-        if analysis_result is not None:
-            try:
-                save_session_record(
-                    analysis_result["video_name"],
-                    analysis_result["resolution"],
-                    analysis_result["frames_processed"],
-                    analysis_result["frames_with_phone"],
-                    analysis_result["percentage"],
-                    analysis_result["detections"],
-                )
-
-                st.session_state["last_analysis"] = analysis_result
-                st.success("Analysis completed and saved to the report.")
-            except Exception as error:
-                st.error(f"The analysis finished, but the report could not be saved: {error}")
-
-# ============================================================
-# DETECTION RESULTS
+# Detection results
 # ============================================================
 
 if st.session_state.get("last_analysis") is not None:
@@ -1782,7 +1746,7 @@ if st.session_state.get("last_analysis") is not None:
     )
 
 # ============================================================
-# WARNING LOG
+# Warning log
 # ============================================================
 
 st.divider()
@@ -1795,7 +1759,7 @@ else:
     st.info("No warnings recorded.")
 
 # ============================================================
-# TIMER
+# Timer
 # ============================================================
 
 st.divider()
@@ -1877,7 +1841,7 @@ elif st.session_state.study_timer_running:
     st.info("Your study timer is running.")
 
 # ============================================================
-# ABOUT SECTION
+# About section
 # ============================================================
 
 st.divider()
