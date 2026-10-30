@@ -481,7 +481,6 @@ def build_phone_heatmap(detection_events):
     df["bucket"] = pd.cut(df["frame_index"], bins=bins, include_lowest=True, right=False)
     grouped = df.groupby("bucket", observed=False)["phone_detected"].mean().fillna(0)
 
-    # Build a 2-column heatmap: [phone detected, no phone] for each sampled window
     matrix = np.column_stack([
         grouped.to_numpy(),
         1.0 - grouped.to_numpy(),
@@ -494,11 +493,11 @@ def build_phone_heatmap(detection_events):
         x=["Phone Detected", "No Phone"],
         y=labels,
         color_continuous_scale=[
-            [0.0, "#0b1220"],   # dark navy
-            [0.25, "#1d4ed8"], # blue
-            [0.5, "#fbbf24"],  # amber
-            [0.75, "#f97316"], # orange
-            [1.0, "#ef4444"],  # red
+            [0.0, "#0b1220"],
+            [0.25, "#1d4ed8"],
+            [0.5, "#fbbf24"],
+            [0.75, "#f97316"],
+            [1.0, "#ef4444"],
         ],
         zmin=0,
         zmax=1,
@@ -519,6 +518,37 @@ def build_phone_heatmap(detection_events):
         hovertemplate="<b>%{y}</b><br>%{x}<br>value: %{z:.2f}<extra></extra>"
     )
     return fig
+
+# ============================================================
+# Bounding-box helper for video frames
+# ============================================================
+
+def draw_phone_boxes(frame, detections, color=(0, 0, 255), thickness=3):
+    if not detections:
+        return frame
+
+    for det in detections:
+        if not isinstance(det, dict):
+            continue
+        if "bbox" not in det:
+            continue
+
+        x1, y1, x2, y2 = det["bbox"]
+        conf = det.get("confidence", 0.0)
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+        cv2.putText(
+            frame,
+            f"PHONE {conf:.0%}",
+            (x1, max(20, y1 - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+
+    return frame
 
 def detect_phone_in_frame(frame, confidence_threshold):
     model = load_yolo_model(str(ensure_model_exists()))
@@ -571,24 +601,14 @@ def detect_phone_in_frame(frame, confidence_threshold):
             })
             max_conf = max(max_conf, conf)
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-            cv2.putText(
-                frame,
-                f"PHONE {conf:.0%}",
-                (x1, max(20, y1 - 10)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 0, 255),
-                2,
-                cv2.LINE_AA,
-            )
+    annotated = draw_phone_boxes(frame.copy(), detections, color=(0, 0, 255), thickness=3)
 
     return {
         "phone_detected": len(detections) > 0,
         "phone_count": len(detections),
         "confidence": float(max_conf),
         "detections": detections,
-        "annotated_frame": frame.copy(),
+        "annotated_frame": annotated,
     }
 
 def load_report() -> pd.DataFrame:
@@ -1156,6 +1176,7 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
             )[0]
 
             phone_count = 0
+            phone_detections = []
 
             if prediction.boxes is not None:
                 for box in prediction.boxes:
@@ -1173,6 +1194,11 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
 
                         x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
                         conf = float(box.conf[0].item())
+                        phone_detections.append({
+                            "class": class_name,
+                            "confidence": conf,
+                            "bbox": [x1, y1, x2, y2],
+                        })
 
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                         cv2.putText(
@@ -1317,6 +1343,7 @@ def analyze_video(uploaded_file):
                 continue
 
             sampled_frames += 1
+
             prediction = model.predict(
                 source=frame,
                 imgsz=640,
@@ -1324,7 +1351,9 @@ def analyze_video(uploaded_file):
                 verbose=False,
                 max_det=20,
             )[0]
+
             phone_count = 0
+            phone_detections = []
 
             if prediction.boxes is not None:
                 for box in prediction.boxes:
@@ -1341,7 +1370,15 @@ def analyze_video(uploaded_file):
                         phone_count += 1
                         total_detections += 1
                         detection_confidences.append(float(box.conf[0].item()))
+
                         x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                        conf = float(box.conf[0].item())
+                        phone_detections.append({
+                            "class": class_name,
+                            "confidence": conf,
+                            "bbox": [x1, y1, x2, y2],
+                        })
+
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                         cv2.putText(
                             frame,
@@ -1362,7 +1399,7 @@ def analyze_video(uploaded_file):
                     "frame_index": frame_index,
                     "phone_detected": True,
                     "phone_count": phone_count,
-                    "confidence": max(float(box.conf[0].item()) for box in prediction.boxes if any(keyword in str(model.names[int(box.cls[0].item())]).lower() for keyword in PHONE_KEYWORDS)) if prediction.boxes is not None else 0.0,
+                    "confidence": max(float(item["confidence"]) for item in phone_detections) if phone_detections else 0.0,
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 snapshots.append(frame.copy())
@@ -1381,6 +1418,7 @@ def analyze_video(uploaded_file):
             st.session_state.detection_snapshots = snapshots
 
             last_annotated_frame = frame.copy()
+
             if total_frames > 0:
                 progress.progress(min((frame_index + 1) / total_frames, 1.0))
             status.write(f"Analyzing sampled frames... {sampled_frames}")
@@ -1596,7 +1634,7 @@ if uploaded_video_analysis is not None:
                     cv2.cvtColor(live_preview["annotated_frame"], cv2.COLOR_BGR2RGB),
                     channels="RGB",
                     use_container_width=True,
-                    caption="Example processed frame",
+                    caption="Example processed frame with phone bounding box",
                 )
 
 # ============================================================
