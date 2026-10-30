@@ -331,8 +331,20 @@ if "warning_log" not in st.session_state:
 if "last_analysis" not in st.session_state:
     st.session_state.last_analysis = None
 
+if "generated_live_detected_video" not in st.session_state:
+    st.session_state.generated_live_detected_video = None
+
+if "analysis_run_counter" not in st.session_state:
+    st.session_state.analysis_run_counter = 0
+
+if "last_analysis_alert_key" not in st.session_state:
+    st.session_state.last_analysis_alert_key = None
+
+if "last_live_alert_key" not in st.session_state:
+    st.session_state.last_live_alert_key = None
+
 # ============================================================
-# Utility functions
+# Utilities
 # ============================================================
 
 PHONE_KEYWORDS = [
@@ -358,13 +370,6 @@ def get_alert_level(focus_score):
         return "Warning"
     return "Critical"
 
-def get_confidence_label(confidence):
-    if confidence >= 0.8:
-        return "High"
-    elif confidence >= 0.5:
-        return "Medium"
-    return "Low"
-
 def get_study_status(focus_score):
     if focus_score >= 80:
         return "Excellent focus"
@@ -373,19 +378,6 @@ def get_study_status(focus_score):
     elif focus_score >= 40:
         return "Moderate distraction"
     return "High distraction"
-
-def append_warning_log(log_list, message):
-    log_list.append({
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "message": message,
-    })
-    return log_list
-
-def generate_timeline(detection_flags):
-    return [
-        {"frame": idx, "phone_visible": 1 if flag else 0}
-        for idx, flag in enumerate(detection_flags)
-    ]
 
 def get_risk_band(focus_score):
     if focus_score >= 80:
@@ -401,52 +393,21 @@ def update_focus_streak(current_streak, phone_visible):
         return 0
     return current_streak + 1
 
-def summarize_warning_events(warning_log, max_entries=10):
-    if not warning_log:
-        return {
-            "warning_count": 0,
-            "last_warning": "No warning yet",
-            "recent_events": [],
-        }
+def calculate_focus_streak_label(streak_value):
+    if streak_value >= 50:
+        return "Excellent focus streak"
+    elif streak_value >= 20:
+        return "Strong focus streak"
+    elif streak_value >= 5:
+        return "Steady focus"
+    return "Build focus streak"
 
-    recent = warning_log[-max_entries:]
-    return {
-        "warning_count": len(warning_log),
-        "last_warning": recent[-1]["time"],
-        "recent_events": recent,
-    }
-
-def build_session_summary(video_name, total_frames, phone_frames, phone_percentage, focus_score):
-    return {
-        "video_name": video_name,
-        "total_frames": int(total_frames),
-        "phone_frames": int(phone_frames),
-        "phone_percentage": round(float(phone_percentage), 2),
-        "focus_score": round(float(focus_score), 2),
-        "risk_band": get_risk_band(focus_score),
-        "status": get_study_status(focus_score),
-    }
-
-def update_session_snapshot(summary_dict):
-    if "session_snapshots" not in st.session_state:
-        st.session_state.session_snapshots = []
-
-    st.session_state.session_snapshots.append(summary_dict)
-    if len(st.session_state.session_snapshots) > 20:
-        st.session_state.session_snapshots = st.session_state.session_snapshots[-20:]
-
-def get_live_status(phone_detected):
-    if phone_detected:
-        return "PHONE DETECTED"
-    return "FOCUSED / NO PHONE"
-
-def compute_alert_snapshot(phone_percentage, focus_score):
-    return {
-        "phone_percentage": round(float(phone_percentage), 2),
-        "focus_score": round(float(focus_score), 2),
-        "risk_band": get_risk_band(focus_score),
-        "status": get_study_status(focus_score),
-    }
+def append_warning_log(log_list, message):
+    log_list.append({
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "message": message,
+    })
+    return log_list
 
 def append_warning_summary(summary_dict, message):
     summary_dict["warning_count"] += 1
@@ -459,20 +420,47 @@ def append_warning_summary(summary_dict, message):
         summary_dict["recent_events"] = summary_dict["recent_events"][-10:]
     return summary_dict
 
-def calculate_focus_streak_label(streak_value):
-    if streak_value >= 50:
-        return "Excellent focus streak"
-    elif streak_value >= 20:
-        return "Strong focus streak"
-    elif streak_value >= 5:
-        return "Steady focus"
-    return "Build focus streak"
+def generate_timeline(detection_flags):
+    return [
+        {"frame": idx, "phone_visible": 1 if flag else 0}
+        for idx, flag in enumerate(detection_flags)
+    ]
 
-def add_warning_message(message: str):
-    st.session_state.warning_log.append({
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "message": message,
-    })
+def build_phone_heatmap(detection_events):
+    if not detection_events:
+        return None
+
+    df = pd.DataFrame(detection_events)
+    if df.empty or "phone_detected" not in df.columns:
+        return None
+
+    df = df[["frame_index", "phone_detected"]].copy()
+    df["phone_detected"] = df["phone_detected"].astype(int)
+
+    if len(df) <= 1:
+        heat = np.array([df["phone_detected"].tolist()])
+    else:
+        max_index = max(int(df["frame_index"].max()), 1)
+        bucket_count = min(30, len(df))
+        buckets = np.linspace(0, max_index, bucket_count + 1)
+        df["bucket"] = pd.cut(df["frame_index"], bins=buckets, include_lowest=True)
+        heat_series = df.groupby("bucket", observed=False)["phone_detected"].mean().fillna(0)
+        heat = np.array([heat_series.tolist()])
+
+    fig = px.imshow(
+        heat,
+        color_continuous_scale="YlOrRd",
+        title="Phone Visibility Heatmap",
+        labels={"x": "Sample bucket", "y": "Frame band"},
+        aspect="auto",
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=40, b=20),
+    )
+    return fig
 
 def detect_phone_in_frame(frame, confidence_threshold):
     model = load_yolo_model(str(ensure_model_exists()))
@@ -930,10 +918,10 @@ if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
 # ============================================================
-# Live webcam detection
+# Webcam detection
 # ============================================================
 
-class LivePhoneDetector(VideoProcessorBase):
+class WebcamPhoneDetector(VideoProcessorBase):
     def __init__(self):
         self.model = load_yolo_model(str(ensure_model_exists()))
         self.last_warn_time = 0.0
@@ -985,11 +973,15 @@ class LivePhoneDetector(VideoProcessorBase):
                     st.session_state.last_live_warning_time = now
                     st.session_state.live_warning_triggered = True
                     st.session_state.live_phone_detected = True
-                    st.session_state.last_warning_reason = "Phone detected in live webcam"
+                    st.session_state.last_warning_reason = "Phone detected in webcam"
                     st.session_state.warning_summary = append_warning_summary(
                         st.session_state.warning_summary,
                         st.session_state.last_warning_reason
                     )
+                    st.session_state.warning_log.append({
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "message": "Phone detected in webcam"
+                    })
 
                 cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
                 cv2.putText(
@@ -1016,18 +1008,30 @@ class LivePhoneDetector(VideoProcessorBase):
                     cv2.LINE_AA,
                 )
 
+            st.session_state.live_stats = {
+                "status": "PHONE DETECTED" if detections else "NO PHONE DETECTED",
+                "phone_detected": bool(detections),
+                "phone_count": len(detections),
+                "confidence": max([round(float(item[4]), 4) for item in detections], default=0.0),
+                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+            st.session_state.live_status = "PHONE DETECTED" if detections else "FOCUSED / NO PHONE"
+
         except Exception:
             st.session_state.live_phone_detected = False
+            st.session_state.live_status = "FOCUSED / NO PHONE"
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
 # ============================================================
-# TURN config
+# Modifier for webcam warning to avoid duplicates
 # ============================================================
 
-TURN_SERVER = "turn:your-turn-server.example.com:3478"
-TURN_USERNAME = "your_turn_username"
-TURN_PASSWORD = "your_turn_password"
+def trigger_live_warning_once():
+    if st.session_state.get("live_warning_triggered", False):
+        show_phone_alert(preview=False)
+        st.session_state.live_warning_triggered = False
 
 # ============================================================
 # Hero section
@@ -1038,7 +1042,7 @@ st.markdown(
     <div class="hero-panel">
       <span class="hero-chip">Class 12 Artificial Intelligence Project</span>
       <h1>📱 AI Study Distraction Detector</h1>
-      <p>Computer vision for monitoring phone visibility during study sessions, with live detection, focus scoring, warning alerts, and downloadable reports.</p>
+      <p>Computer vision for monitoring phone visibility during study sessions, with live webcam detection, uploaded video analysis, focus scoring, warnings, and downloadable reports.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -1054,29 +1058,30 @@ with st.sidebar:
     st.caption("AI project workspace")
     st.markdown("---")
     st.markdown("### Quick navigation")
+    st.markdown("[📹 Webcam stream](#live-webcam-detection)")
+    st.markdown("[📼 Uploaded video detection](#live-video-detection-of-uploaded-video)")
     st.markdown("[📊 Session dashboard](#study-session-dashboard)")
-    st.markdown("[📷 Live webcam](#live-webcam-detection)")
-    st.markdown("[🎬 Video analysis](#ai-video-analysis)")
+    st.markdown("[🎬 AI video analysis](#ai-video-analysis)")
     st.markdown("[📈 Detection results](#detection-results)")
     st.markdown("[⏱️ Study timer](#study-session-timer)")
     st.markdown("---")
     with st.expander("ℹ️ About this project", expanded=False):
-        st.write("**Objective:** detect visible phone appearances in study-session videos.")
+        st.write("**Objective:** detect visible phone appearances during study sessions.")
         st.write("**Technology:** Python, Streamlit, OpenCV, YOLO, Pandas, Plotly.")
-        st.write("**Output:** focus score, detection timeline, warnings, and report downloads.")
+        st.write("**Output:** focus score, timeline, warnings, and downloadable reports.")
         st.caption("This is a prototype and may miss or misidentify objects.")
 
 # ============================================================
-# Live webcam section
+# Live webcam detection
 # ============================================================
 
 st.divider()
-st.subheader("📷 Live Webcam Detection")
-st.caption("Use Chrome and allow camera access. This section gives immediate detection and warning.")
+st.subheader("📹 Live Webcam Detection")
+st.caption("This is a real webcam stream with live phone detection overlay.")
 
 webrtc_streamer(
-    key="live_phone_detector",
-    video_processor_factory=LivePhoneDetector,
+    key="webcam_phone_detector",
+    video_processor_factory=WebcamPhoneDetector,
     media_stream_constraints={
         "video": {
             "frameRate": 10,
@@ -1091,18 +1096,16 @@ webrtc_streamer(
             {"urls": ["stun:stun.l.google.com:19302"]},
             {"urls": ["stun:stun1.l.google.com:19302"]},
             {"urls": ["stun:stun2.l.google.com:19302"]},
-            {
-                "urls": [TURN_SERVER],
-                "username": TURN_USERNAME,
-                "credential": TURN_PASSWORD,
-            },
         ]
     },
     async_processing=True,
 )
 
+if st.session_state.get("live_warning_triggered", False):
+    trigger_live_warning_once()
+
 live_detected = st.session_state.get("live_phone_detected", False)
-st.session_state.live_status = get_live_status(live_detected)
+st.session_state.live_status = "PHONE DETECTED" if live_detected else "FOCUSED / NO PHONE"
 
 risk_score = 100.0 if not live_detected else max(0.0, 100.0 - 60.0)
 risk_band = get_risk_band(risk_score)
@@ -1117,129 +1120,63 @@ st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_stat
 
 if live_detected:
     st.session_state.live_focus_streak = 0
-    st.session_state.live_warning_triggered = True
 else:
     st.session_state.live_focus_streak = update_focus_streak(st.session_state.live_focus_streak, False)
-    st.session_state.live_warning_triggered = False
-
-if st.session_state.get("live_warning_triggered", False):
-    st.session_state.live_warning_triggered = False
-    st.error("📱 LIVE PHONE DETECTED! Put your phone away now.")
-    speak_warning()
-
-# ============================================================
-# Live camera stats panel
-# ============================================================
 
 st.subheader("📊 Live Camera Statistics")
-live_camera = st.camera_input("Capture a live frame for quick detection stats", key="camera_stats_input")
-
-if live_camera is not None:
-    frame = np.array(live_camera)
-    live_result = detect_phone_in_frame(frame, st.session_state.detection_confidence)
-
-    st.session_state.live_stats = {
-        "status": "PHONE DETECTED" if live_result["phone_detected"] else "NO PHONE DETECTED",
-        "phone_detected": live_result["phone_detected"],
-        "phone_count": live_result["phone_count"],
-        "confidence": live_result["confidence"],
-        "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-
-    stat1, stat2, stat3, stat4 = st.columns(4)
-    stat1.metric("Status", st.session_state.live_stats["status"])
-    stat2.metric("Phones Found", st.session_state.live_stats["phone_count"])
-    stat3.metric("Max Confidence", f"{st.session_state.live_stats['confidence']:.1%}")
-    stat4.metric("Last Check", st.session_state.live_stats["last_check"])
-
-    if live_result["phone_detected"]:
-        st.warning("📱 Phone was detected in the live camera sample.")
-    else:
-        st.success("✅ No phone visible in the live camera sample.")
-
-    st.image(live_result["annotated_frame"], channels="BGR", use_container_width=True)
+live_stats = st.session_state.live_stats
+stat1, stat2, stat3, stat4 = st.columns(4)
+stat1.metric("Status", live_stats["status"])
+stat2.metric("Phones Found", live_stats["phone_count"])
+stat3.metric("Max Confidence", f"{live_stats['confidence']:.1%}")
+stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
 
 # ============================================================
-# Controls
+# Live detection of uploaded video
 # ============================================================
 
-st.divider()
-st.subheader("🔧 Detection Controls")
+def create_live_detected_video(uploaded_file, confidence_threshold, sample_interval):
+    model = load_yolo_model(str(ensure_model_exists()))
 
-confidence_threshold = st.slider(
-    "Adjust detection confidence",
-    min_value=0.05,
-    max_value=0.60,
-    value=0.18,
-    step=0.01,
-    key="conf_slider",
-)
-st.session_state.detection_confidence = confidence_threshold
-
-sample_interval = st.slider(
-    "Frame sampling interval",
-    min_value=1,
-    max_value=15,
-    value=5,
-    step=1,
-    help="Analyze every Nth frame to keep performance efficient.",
-    key="sample_slider",
-)
-st.session_state.frame_sample_interval = sample_interval
-
-# ============================================================
-# Video analysis
-# ============================================================
-
-def analyze_video(uploaded_file):
-    temp_path = None
+    temp_video_path = None
+    temp_output_path = None
     capture = None
-    warning_log = []
-    detection_events = []
-    snapshots = []
+    writer = None
 
     try:
-        resolved_model_path = ensure_model_exists()
-    except FileNotFoundError as exc:
-        st.error(str(exc))
-        return None
-
-    try:
-        extension = Path(uploaded_file.name).suffix.lower() or ".mp4"
-        with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
+        suffix = Path(uploaded_file.name).suffix.lower() or ".mp4"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
             temp_file.write(uploaded_file.getvalue())
-            temp_path = Path(temp_file.name)
+            temp_video_path = Path(temp_file.name)
 
-        capture = cv2.VideoCapture(str(temp_path))
+        capture = cv2.VideoCapture(str(temp_video_path))
         if not capture.isOpened():
-            st.error("Unable to open this video. Try another MP4, MOV, or AVI file.")
+            st.error("The uploaded video could not be opened.")
             return None
 
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = float(capture.get(cv2.CAP_PROP_FPS)) or 24.0
         total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = float(capture.get(cv2.CAP_PROP_FPS))
 
         if width <= 0 or height <= 0:
-            st.error("Video dimensions could not be read. Try another video.")
+            st.error("The uploaded video has no valid frame size.")
             return None
 
-        model = load_yolo_model(str(resolved_model_path))
-        sample_interval = int(st.session_state.frame_sample_interval)
-        confidence_threshold = float(st.session_state.detection_confidence)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as out_file:
+            temp_output_path = Path(out_file.name)
 
-        sampled_frames = 0
-        frames_with_phone = 0
-        total_detections = 0
-        object_counts = {}
-        detection_confidences = []
-        detection_flags = []
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(temp_output_path), fourcc, fps, (width, height))
+
         progress = st.progress(0.0)
         status = st.empty()
-        last_alert_time = 0.0
-        phone_frame_counter = 0
-        focus_streak = 0
-        last_annotated_frame = None
+        analyzed_frames = 0
+        detected_frames = 0
+        total_phone_hits = 0
+        detection_events = []
+        detection_flags = []
+        snapshots = []
 
         frame_index = 0
         while True:
@@ -1251,7 +1188,7 @@ def analyze_video(uploaded_file):
                 frame_index += 1
                 continue
 
-            sampled_frames += 1
+            analyzed_frames += 1
             prediction = model.predict(
                 source=frame,
                 imgsz=640,
@@ -1259,6 +1196,7 @@ def analyze_video(uploaded_file):
                 verbose=False,
                 max_det=20,
             )[0]
+
             phone_count = 0
 
             if prediction.boxes is not None:
@@ -1270,18 +1208,17 @@ def analyze_video(uploaded_file):
                         else model.names.get(cls_id, "")
                     )
                     class_name = str(class_name).strip().lower()
-                    object_counts[class_name] = object_counts.get(class_name, 0) + 1
 
                     if any(keyword in class_name for keyword in PHONE_KEYWORDS):
                         phone_count += 1
-                        total_detections += 1
-                        detection_confidences.append(float(box.conf[0].item()))
-
+                        total_phone_hits += 1
                         x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                        conf = float(box.conf[0].item())
+
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                         cv2.putText(
                             frame,
-                            f"PHONE {box.conf[0].item():.0%}",
+                            f"PHONE {conf:.0%}",
                             (x1, max(20, y1 - 10)),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.7,
@@ -1291,118 +1228,119 @@ def analyze_video(uploaded_file):
                         )
 
             if phone_count > 0:
-                frames_with_phone += 1
-                phone_frame_counter += 1
+                detected_frames += 1
                 detection_flags.append(True)
-                warning_log = append_warning_log(warning_log, "Phone detected in sampled frame")
                 detection_events.append({
                     "frame_index": frame_index,
                     "phone_detected": True,
                     "phone_count": phone_count,
-                    "confidence": max(float(box.conf[0].item()) for box in prediction.boxes if any(keyword in str(model.names[int(box.cls[0].item())]).lower() for keyword in PHONE_KEYWORDS)) if prediction.boxes is not None else 0.0,
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
-                focus_streak = update_focus_streak(focus_streak, True)
-                snapshots.append(frame.copy())
             else:
-                phone_frame_counter = 0
                 detection_flags.append(False)
                 detection_events.append({
                     "frame_index": frame_index,
                     "phone_detected": False,
                     "phone_count": 0,
-                    "confidence": 0.0,
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
-                focus_streak = update_focus_streak(focus_streak, False)
 
-            last_annotated_frame = frame.copy()
+            if len(snapshots) < 5:
+                snapshots.append(frame.copy())
+            else:
+                snapshots.pop(0)
+                snapshots.append(frame.copy())
 
-            current_time = time.monotonic()
-            if phone_frame_counter >= 3 and current_time - last_alert_time >= ALERT_COOLDOWN:
-                last_alert_time = current_time
-                st.session_state.last_warning_reason = "Phone detected in video analysis"
-                st.session_state.warning_summary = append_warning_summary(
-                    st.session_state.warning_summary,
-                    st.session_state.last_warning_reason
-                )
-                show_phone_alert(preview=False)
-
-            if total_frames > 0:
-                progress.progress(min((frame_index + 1) / total_frames, 1.0))
-            status.write(f"Analyzed {sampled_frames} sampled frames...")
+            writer.write(frame)
+            progress.progress(min((frame_index + 1) / max(total_frames, 1), 1.0))
+            status.write(f"Processing video: {analyzed_frames} frames analyzed")
 
             frame_index += 1
 
-        phone_percentage = compute_phone_percentage(frames_with_phone, sampled_frames)
-        focus_score = get_focus_score(phone_percentage)
-        alert_level = get_alert_level(focus_score)
+        if writer is not None:
+            writer.release()
 
-        average_confidence = float(np.mean(detection_confidences)) if detection_confidences else 0.0
-        highest_confidence = float(np.max(detection_confidences)) if detection_confidences else 0.0
-        warning_count = len(warning_log)
+        percentage = compute_phone_percentage(detected_frames, analyzed_frames)
+        focus_score = get_focus_score(percentage)
 
-        if len(snapshots) > 5:
-            snapshots = snapshots[-5:]
-        st.session_state.detection_snapshots = snapshots
-
-        summary = build_session_summary(
-            uploaded_file.name,
-            sampled_frames,
-            frames_with_phone,
-            phone_percentage,
-            focus_score
-        )
-        update_session_snapshot(summary)
-
-        result = {
+        final_result = {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
-            "frames_processed": sampled_frames,
-            "frames_with_phone": frames_with_phone,
-            "percentage": round(float(phone_percentage), 2),
-            "detections": total_detections,
+            "frames_processed": analyzed_frames,
+            "frames_with_phone": detected_frames,
+            "percentage": round(float(percentage), 2),
+            "detections": total_phone_hits,
             "focus_score": focus_score,
-            "alert_level": alert_level,
-            "average_confidence": average_confidence,
-            "highest_confidence": highest_confidence,
-            "warnings": warning_log,
-            "warning_count": warning_count,
-            "timeline": generate_timeline(detection_flags),
-            "object_counts": object_counts,
-            "total_object_detections": sum(object_counts.values()),
-            "unique_object_classes": len(object_counts),
+            "alert_level": get_alert_level(focus_score),
             "study_status": get_study_status(focus_score),
             "risk_band": get_risk_band(focus_score),
-            "focus_streak": focus_streak,
-            "alert_snapshot": compute_alert_snapshot(phone_percentage, focus_score),
+            "timeline": generate_timeline(detection_flags),
             "detection_events": detection_events,
-            "annotated_frame": last_annotated_frame,
+            "snapshots": snapshots,
+            "output_video_path": str(temp_output_path),
         }
 
-        if result["warning_count"] > 0 and not st.session_state.analysis_warning_triggered:
-            st.session_state.analysis_warning_triggered = True
-            st.session_state.last_warning_reason = "Phone detected in video analysis"
-            st.session_state.warning_summary = append_warning_summary(
-                st.session_state.warning_summary,
-                st.session_state.last_warning_reason
-            )
-            show_phone_alert(preview=False)
+        return final_result
 
-        return result
-
-    except Exception as error:
-        st.error(f"Video analysis failed: {error}")
+    except Exception as exc:
+        st.error(f"Live video detection failed: {exc}")
         return None
 
     finally:
         if capture is not None:
             capture.release()
-        if temp_path is not None and temp_path.exists():
+        if writer is not None:
+            writer.release()
+        if temp_video_path is not None and temp_video_path.exists():
             try:
-                temp_path.unlink()
-            except OSError:
+                temp_video_path.unlink(missing_ok=True)
+            except Exception:
                 pass
+
+st.divider()
+st.subheader("📼 Live Video Detection of Uploaded Video")
+st.caption("Upload a video and generate a processed version with phone detection overlay.")
+
+uploaded_video = st.file_uploader(
+    "Choose a study video to process",
+    type=["mp4", "mov", "avi"],
+    key="uploaded_live_video_main",
+)
+
+if uploaded_video is not None:
+    st.video(uploaded_video)
+
+    if st.button("Start Live Detection Preview", type="primary", key="start_live_detect_button"):
+        live_result = create_live_detected_video(
+            uploaded_file=uploaded_video,
+            confidence_threshold=float(st.session_state.detection_confidence),
+            sample_interval=int(st.session_state.frame_sample_interval),
+        )
+
+        if live_result is not None:
+            st.session_state.generated_live_detected_video = live_result["output_video_path"]
+            st.session_state.last_analysis = {
+                "video_name": live_result["video_name"],
+                "resolution": live_result["resolution"],
+                "frames_processed": live_result["frames_processed"],
+                "frames_with_phone": live_result["frames_with_phone"],
+                "percentage": live_result["percentage"],
+                "detections": live_result["detections"],
+                "focus_score": live_result["focus_score"],
+                "alert_level": live_result["alert_level"],
+                "study_status": live_result["study_status"],
+                "risk_band": live_result["risk_band"],
+                "timeline": live_result["timeline"],
+                "detection_events": live_result["detection_events"],
+                "snapshots": live_result["snapshots"],
+                "annotated_frame": live_result["snapshots"][-1] if live_result["snapshots"] else None,
+            }
+
+            st.success("Live detection preview generated successfully.")
+
+            if st.session_state.generated_live_detected_video:
+                st.subheader("📽️ Detected Video Preview")
+                st.video(st.session_state.generated_live_detected_video)
 
 # ============================================================
 # Dashboard summary
@@ -1467,25 +1405,238 @@ else:
     st.info("No warnings yet.")
 
 # ============================================================
-# Video upload section
+# Controls
+# ============================================================
+
+st.divider()
+st.subheader("🔧 Detection Controls")
+
+confidence_threshold = st.slider(
+    "Adjust detection confidence",
+    min_value=0.05,
+    max_value=0.60,
+    value=0.18,
+    step=0.01,
+    key="conf_slider",
+)
+st.session_state.detection_confidence = confidence_threshold
+
+sample_interval = st.slider(
+    "Frame sampling interval",
+    min_value=1,
+    max_value=15,
+    value=5,
+    step=1,
+    help="Analyze every Nth frame to keep performance efficient.",
+    key="sample_slider",
+)
+st.session_state.frame_sample_interval = sample_interval
+
+# ============================================================
+# Video analysis function
+# ============================================================
+
+def analyze_video(uploaded_file):
+    temp_path = None
+    capture = None
+    warning_log = []
+    detection_events = []
+    snapshots = []
+
+    try:
+        resolved_model_path = ensure_model_exists()
+    except FileNotFoundError as exc:
+        st.error(str(exc))
+        return None
+
+    try:
+        extension = Path(uploaded_file.name).suffix.lower() or ".mp4"
+        with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
+            temp_file.write(uploaded_file.getvalue())
+            temp_path = Path(temp_file.name)
+
+        capture = cv2.VideoCapture(str(temp_path))
+        if not capture.isOpened():
+            st.error("Unable to open this video. Try another MP4, MOV, or AVI file.")
+            return None
+
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        if width <= 0 or height <= 0:
+            st.error("Video dimensions could not be read. Try another video.")
+            return None
+
+        model = load_yolo_model(str(resolved_model_path))
+        sample_interval = int(st.session_state.frame_sample_interval)
+        confidence_threshold = float(st.session_state.detection_confidence)
+
+        sampled_frames = 0
+        frames_with_phone = 0
+        total_detections = 0
+        object_counts = {}
+        detection_confidences = []
+        detection_flags = []
+        progress = st.progress(0.0)
+        status = st.empty()
+        last_annotated_frame = None
+        frame_index = 0
+
+        while True:
+            success, frame = capture.read()
+            if not success:
+                break
+
+            if frame_index % sample_interval != 0:
+                frame_index += 1
+                continue
+
+            sampled_frames += 1
+            prediction = model.predict(
+                source=frame,
+                imgsz=640,
+                conf=confidence_threshold,
+                verbose=False,
+                max_det=20,
+            )[0]
+            phone_count = 0
+
+            if prediction.boxes is not None:
+                for box in prediction.boxes:
+                    cls_id = int(box.cls[0].item())
+                    class_name = (
+                        model.names[cls_id]
+                        if not isinstance(model.names, dict)
+                        else model.names.get(cls_id, "")
+                    )
+                    class_name = str(class_name).strip().lower()
+                    object_counts[class_name] = object_counts.get(class_name, 0) + 1
+
+                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                        phone_count += 1
+                        total_detections += 1
+                        detection_confidences.append(float(box.conf[0].item()))
+                        x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                        cv2.putText(
+                            frame,
+                            f"PHONE {box.conf[0].item():.0%}",
+                            (x1, max(20, y1 - 10)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (0, 0, 255),
+                            2,
+                            cv2.LINE_AA,
+                        )
+
+            if phone_count > 0:
+                frames_with_phone += 1
+                detection_flags.append(True)
+                warning_log = append_warning_log(warning_log, "Phone detected in sampled frame")
+                detection_events.append({
+                    "frame_index": frame_index,
+                    "phone_detected": True,
+                    "phone_count": phone_count,
+                    "confidence": max(float(box.conf[0].item()) for box in prediction.boxes if any(keyword in str(model.names[int(box.cls[0].item())]).lower() for keyword in PHONE_KEYWORDS)) if prediction.boxes is not None else 0.0,
+                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                snapshots.append(frame.copy())
+            else:
+                detection_flags.append(False)
+                detection_events.append({
+                    "frame_index": frame_index,
+                    "phone_detected": False,
+                    "phone_count": 0,
+                    "confidence": 0.0,
+                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+
+            if len(snapshots) > 5:
+                snapshots = snapshots[-5:]
+            st.session_state.detection_snapshots = snapshots
+
+            last_annotated_frame = frame.copy()
+            if total_frames > 0:
+                progress.progress(min((frame_index + 1) / total_frames, 1.0))
+            status.write(f"Analyzing sampled frames... {sampled_frames}")
+
+            frame_index += 1
+
+        phone_percentage = compute_phone_percentage(frames_with_phone, sampled_frames)
+        focus_score = get_focus_score(phone_percentage)
+        average_confidence = float(np.mean(detection_confidences)) if detection_confidences else 0.0
+        highest_confidence = float(np.max(detection_confidences)) if detection_confidences else 0.0
+
+        result = {
+            "video_name": uploaded_file.name,
+            "resolution": f"{width}x{height}",
+            "frames_processed": sampled_frames,
+            "frames_with_phone": frames_with_phone,
+            "percentage": round(float(phone_percentage), 2),
+            "detections": total_detections,
+            "focus_score": focus_score,
+            "alert_level": get_alert_level(focus_score),
+            "average_confidence": average_confidence,
+            "highest_confidence": highest_confidence,
+            "warnings": warning_log,
+            "warning_count": len(warning_log),
+            "timeline": generate_timeline(detection_flags),
+            "object_counts": object_counts,
+            "detection_events": detection_events,
+            "annotated_frame": last_annotated_frame,
+            "study_status": get_study_status(focus_score),
+            "risk_band": get_risk_band(focus_score),
+        }
+
+        if result["warning_count"] > 0 and not st.session_state.analysis_warning_triggered:
+            st.session_state.analysis_warning_triggered = True
+            st.session_state.last_warning_reason = "Phone detected in video analysis"
+            st.session_state.warning_summary = append_warning_summary(
+                st.session_state.warning_summary,
+                st.session_state.last_warning_reason
+            )
+            st.session_state.warning_log.append({
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "message": "Phone detected in video analysis"
+            })
+            show_phone_alert(preview=False)
+
+        return result
+
+    except Exception as error:
+        st.error(f"Video analysis failed: {error}")
+        return None
+
+    finally:
+        if capture is not None:
+            capture.release()
+        if temp_path is not None and temp_path.exists():
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+# ============================================================
+# AI video analysis
 # ============================================================
 
 st.divider()
 st.subheader("🎬 AI Video Analysis")
 st.caption("Upload a study video to measure phone visibility during the session.")
 
-uploaded_video = st.file_uploader(
+uploaded_video_analysis = st.file_uploader(
     "Choose a study video",
     type=["mp4", "mov", "avi"],
     key="uploaded_video_main",
 )
 
-if uploaded_video is not None:
-    st.video(uploaded_video)
+if uploaded_video_analysis is not None:
+    st.video(uploaded_video_analysis)
 
     if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
         st.session_state.analysis_warning_triggered = False
-        analysis_result = analyze_video(uploaded_video)
+        analysis_result = analyze_video(uploaded_video_analysis)
         if analysis_result is not None:
             try:
                 save_session_record(
@@ -1503,7 +1654,7 @@ if uploaded_video is not None:
                 st.error(f"The analysis finished, but the report could not be saved: {error}")
 
 # ============================================================
-# Detection Results section restored and fixed
+# Detection results
 # ============================================================
 
 if st.session_state.get("last_analysis") is not None:
@@ -1541,6 +1692,13 @@ if st.session_state.get("last_analysis") is not None:
     else:
         st.info("No timeline is available yet.")
 
+    st.subheader("🔥 Phone Visibility Heatmap")
+    heatmap_chart = build_phone_heatmap(saved_analysis.get("detection_events", []))
+    if heatmap_chart is not None:
+        st.plotly_chart(heatmap_chart, use_container_width=True)
+    else:
+        st.info("No heatmap data yet.")
+
     st.subheader("🔒 Warning Log")
     warnings = saved_analysis.get("warnings", [])
     if warnings:
@@ -1569,14 +1727,6 @@ if st.session_state.get("last_analysis") is not None:
     else:
         st.info("No objects were detected in the sampled frames.")
 
-    st.subheader("📦 Session Snapshot")
-    session_snapshots = st.session_state.get("session_snapshots", [])
-    if session_snapshots:
-        snapshot_df = pd.DataFrame(session_snapshots)
-        st.dataframe(snapshot_df, use_container_width=True)
-    else:
-        st.info("No session snapshots saved yet.")
-
     st.subheader("🧾 Detection Events")
     detection_events = pd.DataFrame(saved_analysis.get("detection_events", []))
     if not detection_events.empty:
@@ -1599,10 +1749,9 @@ if st.session_state.get("last_analysis") is not None:
     else:
         st.info("No detection snapshots saved yet.")
 
-    pdf_data = create_pdf_report(saved_analysis)
     st.download_button(
         "Download PDF Report",
-        data=pdf_data,
+        data=create_pdf_report(saved_analysis),
         file_name="study_session_report.pdf",
         mime="application/pdf",
         key="download_pdf_report_main",
