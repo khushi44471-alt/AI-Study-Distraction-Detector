@@ -836,6 +836,7 @@ def trigger_live_warning_once():
 # ============================================================
 
 
+
 def process_uploaded_video_for_live_detection(
     uploaded_file, confidence_threshold, sample_interval
 ):
@@ -878,6 +879,10 @@ def process_uploaded_video_for_live_detection(
             (width, height),
         )
 
+        if not writer.isOpened():
+            st.error("Could not create the processed output video.")
+            return None
+
         st.subheader("🔴 Live AI Detection")
         video_display = st.empty()
         status_display = st.empty()
@@ -897,7 +902,6 @@ def process_uploaded_video_for_live_detection(
             if not success:
                 break
 
-            # Run YOLO on every frame for continuous detection.
             prediction = model.predict(
                 source=frame,
                 imgsz=640,
@@ -907,6 +911,7 @@ def process_uploaded_video_for_live_detection(
             )[0]
 
             phone_count = 0
+            detected_objects = []
 
             if prediction.boxes is not None:
                 for box in prediction.boxes:
@@ -919,34 +924,60 @@ def process_uploaded_video_for_live_detection(
                     )
 
                     class_name = str(class_name).strip().lower()
+                    confidence = float(box.conf[0].item())
 
-                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
+                    x1, y1, x2, y2 = [
+                        int(v) for v in box.xyxy[0].tolist()
+                    ]
+
+                    is_phone = any(
+                        keyword in class_name
+                        for keyword in PHONE_KEYWORDS
+                    )
+
+                    if is_phone:
                         phone_count += 1
                         total_phone_hits += 1
-
-                        x1, y1, x2, y2 = [
-                            int(v) for v in box.xyxy[0].tolist()
-                        ]
-                        confidence = float(box.conf[0].item())
-
-                        cv2.rectangle(
-                            frame,
-                            (x1, y1),
-                            (x2, y2),
-                            (0, 0, 255),
-                            3,
+                        box_color = (0, 0, 255)
+                    else:
+                        # Consistent, different colour for each object class.
+                        class_hash = sum(
+                            (index + 1) * ord(char)
+                            for index, char in enumerate(class_name)
+                        )
+                        box_color = (
+                            50 + (class_hash * 37) % 206,
+                            50 + (class_hash * 67) % 206,
+                            50 + (class_hash * 97) % 206,
                         )
 
-                        cv2.putText(
-                            frame,
-                            f"PHONE {confidence:.0%}",
-                            (x1, max(20, y1 - 10)),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7,
-                            (0, 0, 255),
-                            2,
-                            cv2.LINE_AA,
-                        )
+                    label = f"{class_name.upper()} {confidence:.0%}"
+
+                    cv2.rectangle(
+                        frame,
+                        (x1, y1),
+                        (x2, y2),
+                        box_color,
+                        3,
+                    )
+
+                    cv2.putText(
+                        frame,
+                        label,
+                        (x1, max(20, y1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        box_color,
+                        2,
+                        cv2.LINE_AA,
+                    )
+
+                    detected_objects.append({
+                        "class": class_name,
+                        "confidence": confidence,
+                        "bbox": [x1, y1, x2, y2],
+                        "is_phone": is_phone,
+                    })
 
             analyzed_frames += 1
             detected = phone_count > 0
@@ -963,10 +994,10 @@ def process_uploaded_video_for_live_detection(
                 "frame_index": frame_index,
                 "phone_detected": detected,
                 "phone_count": phone_count,
+                "objects": detected_objects,
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
 
-            # Display the processed frame immediately.
             video_display.image(
                 cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                 channels="RGB",
@@ -980,6 +1011,7 @@ def process_uploaded_video_for_live_detection(
                 progress.progress(
                     min((frame_index + 1) / total_frames, 1.0)
                 )
+
             frame_index += 1
 
         phone_percentage = compute_phone_percentage(
@@ -1002,7 +1034,7 @@ def process_uploaded_video_for_live_detection(
             "risk_band": get_risk_band(focus_score),
             "timeline": generate_timeline(detection_flags),
             "detection_events": detection_events,
-            "onotated_frame": last_annotated_frame,
+            "annotated_frame": last_annotated_frame,
             "output_video_path": str(temp_output_path),
         }
 
