@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import base64
@@ -9,7 +10,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-
+from reportlab.platypus import (
     Image as PDFImage,
     Paragraph,
     SimpleDocTemplate,
@@ -17,8 +18,10 @@ from pathlib import Path
     Table,
     TableStyle,
 )
+
 from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
+
 
 # ============================================================
 # Streamlit config
