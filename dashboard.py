@@ -1060,8 +1060,9 @@ def process_uploaded_video_for_live_detection(
 # Analyze uploaded video
 # ============================================================
 
+
 def build_phone_heatmap(detection_events):
-    """Build a visual heatmap of phone detections over time."""
+    """Build a modern heatmap of phone visibility over time."""
 
     if not detection_events:
         return None
@@ -1075,7 +1076,6 @@ def build_phone_heatmap(detection_events):
         heatmap_data.append({
             "Frame": frame_number,
             "Phone Visibility": 1 if detected else 0,
-            "Status": "Phone detected" if detected else "No phone detected",
         })
 
     heatmap_df = pd.DataFrame(heatmap_data)
@@ -1083,7 +1083,7 @@ def build_phone_heatmap(detection_events):
     if heatmap_df.empty:
         return None
 
-    # Group frames into 20-frame time blocks.
+    # Group frames into 20-frame intervals.
     heatmap_df["Time Block"] = (
         heatmap_df["Frame"] // 20
     ) * 20
@@ -1098,49 +1098,84 @@ def build_phone_heatmap(detection_events):
         grouped["Phone Visibility"] * 100
     ).round(1)
 
+    x_labels = [
+        f"{int(start)}–{int(start + 19)}"
+        for start in grouped["Time Block"]
+    ]
+
     fig = px.imshow(
         [grouped["Visibility (%)"].tolist()],
-        x=[
-            f"Frames {int(start)}–{int(start + 19)}"
-            for start in grouped["Time Block"]
-        ],
+        x=x_labels,
         y=["Phone visibility"],
         color_continuous_scale=[
-            [0.0, "#16A34A"],
-            [0.5, "#FACC15"],
-            [1.0, "#DC2626"],
+            [0.0, "#172554"],
+            [0.25, "#4338CA"],
+            [0.5, "#7C3AED"],
+            [0.75, "#C084FC"],
+            [1.0, "#F0ABFC"],
         ],
         zmin=0,
         zmax=100,
         aspect="auto",
         labels={
-            "x": "Video timeline",
+            "x": "Frame interval",
             "y": "",
-            "color": "Visibility (%)",
+            "color": "Visibility",
         },
+        text_auto=".1f",
+    )
+
+    fig.update_traces(
+        hovertemplate=(
+            "<b>Frames %{x}</b><br>"
+            "Phone visibility: %{z:.1f}%"
+            "<extra></extra>"
+        ),
+        xgap=5,
+        ygap=5,
     )
 
     fig.update_layout(
-        title="Phone Visibility Across the Video",
-        height=260,
-        margin=dict(l=20, r=20, t=65, b=65),
+        title={
+            "text": "📱 Phone Visibility Activity Map",
+            "x": 0.02,
+            "xanchor": "left",
+            "font": {"size": 20},
+        },
+        height=280,
+        margin=dict(l=25, r=25, t=70, b=65),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=12),
+        font=dict(
+            family="Arial",
+            size=12,
+            color="#CBD5E1",
+        ),
         coloraxis_colorbar=dict(
-            title="Phone visibility",
+            title="Visibility",
             ticksuffix="%",
+            thickness=12,
+            len=0.8,
+            outlinewidth=0,
         ),
     )
 
     fig.update_xaxes(
-        tickangle=-35,
+        title="Video timeline (frame intervals)",
+        tickangle=-30,
         showgrid=False,
+        zeroline=False,
+        tickfont=dict(size=10),
     )
 
-    fig.update_yaxes(showgrid=False)
+    fig.update_yaxes(
+        showgrid=False,
+        zeroline=False,
+        tickfont=dict(size=12),
+    )
 
     return fig
+
 
 def analyze_video(uploaded_file):
     temp_path = None
