@@ -677,7 +677,10 @@ def show_phone_alert(preview=False):
         st.warning("📱 Phone detected repeatedly! Please check whether you need your phone for studying.")
 
     if alert_choice == "1. Female Spoken Warning":
-        play_female_warning(volume=volume_level)
+       play_female_warning(
+    message="Phone detected during your study session. Please keep your phone aside.",
+    volume=volume_level
+)
     elif alert_choice == "2. Gentle Warning Siren":
         play_warning_tone("siren", volume=volume_level)
     elif alert_choice == "3. Deep Warning Pulse":
