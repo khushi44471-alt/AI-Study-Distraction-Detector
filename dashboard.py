@@ -1469,6 +1469,14 @@ def save_session_record(
     percentage,
     detections
 ):
+def save_session_record(
+    video_name,
+    resolution,
+    frames_processed,
+    frames_with_phone,
+    percentage,
+    detections
+):
     report_path = Path("reports/session_summary.csv")
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1486,10 +1494,7 @@ def save_session_record(
     if report_path.exists():
         try:
             old_records = pd.read_csv(report_path)
-            record = pd.concat(
-                [old_records, record],
-                ignore_index=True
-            )
+            record = pd.concat([old_records, record], ignore_index=True)
         except (pd.errors.EmptyDataError, pd.errors.ParserError):
             pass
 
