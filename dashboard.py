@@ -988,8 +988,7 @@ def process_uploaded_video_for_live_detection(
             analyzed_frames,
         )
 
-        focus_score = get_focus_score(phone_percentage)
-"output_video_path": str(temp_output_path),
+   
                    focus_score = get_focus_score(phone_percentage)
 
         return {
