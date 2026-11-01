@@ -681,28 +681,12 @@ def show_phone_alert(preview=False):
 
     fallback_html = """
     <div style="margin-top: 12px;">
-        <button id="manual-warning-button"
-            style="padding: 10px 16px; background: #8b5cf6; color: white; border: none; border-radius: 10px; cursor: pointer;">
-            🔊 Play warning sound
+        <button id="manual-warning-button">
+            Play warning sound
         </button>
     </div>
-    <script>
-    document.getElementById("manual-warning-button")?.addEventListener("click", function() {
-        try {
-            const speech = window.speechSynthesis;
-            if (!speech) return;
-            speech.cancel();
-            const msg = new SpeechSynthesisUtterance("Attention! Attention! Phone detected! Please put your phone away and focus on studying!");
-            msg.volume = 0.8;
-            msg.rate = 0.9;
-            msg.pitch = 1.15;
-            speech.speak(msg);
-        } catch (e) {
-            console.log("Manual warning failed:", e);
-        }
-    });
-    </script>
     """
+
     components.html(fallback_html, height=70)
 
 if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
