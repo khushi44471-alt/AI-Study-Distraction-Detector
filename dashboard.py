@@ -990,8 +990,24 @@ def process_uploaded_video_for_live_detection(
 
         focus_score = get_focus_score(phone_percentage)
 "output_video_path": str(temp_output_path),
-            "an
+                   focus_score = get_focus_score(phone_percentage)
+
         return {
+            "video_name": uploaded_file.name,
+            "resolution": f"{width}x{height}",
+            "frames_processed": analyzed_frames,
+            "frames_with_phone": frames_with_phone,
+            "percentage": round(float(phone_percentage), 2),
+            "detections": total_phone_hits,
+            "focus_score": focus_score,
+            "alert_level": get_alert_level(focus_score),
+            "study_status": get_study_status(focus_score),
+            "risk_band": get_risk_band(focus_score),
+            "timeline": generate_timeline(detection_flags),
+            "detection_events": detection_events,
+            "onotated_frame": last_annotated_frame,
+            "output_video_path": str(temp_output_path),
+        }
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
             "frames_processed": analyzed_frames,
