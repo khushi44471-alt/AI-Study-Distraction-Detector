@@ -449,6 +449,7 @@ def generate_session_insight(analysis):
         "summary": summary,
     }
 
+      js = f"""
     <script>
     try {{
         const speech = window.speechSynthesis;
@@ -458,10 +459,14 @@ def generate_session_insight(analysis):
             utterance.volume = {safe_volume};
             utterance.rate = 0.9;
             utterance.pitch = 1.15;
+
             const voices = speech.getVoices();
             const preferred = voices.find(v =>
-                /female|zira|samantha|aria|jenny|hazel/i.test((v.name || "") + " " + (v.voiceURI || ""))
+                /female|zira|samantha|aria|jenny|hazel/i.test(
+                    (v.name || "") + " " + (v.voiceURI || "")
+                )
             );
+
             if (preferred) utterance.voice = preferred;
             speech.speak(utterance);
         }}
@@ -470,8 +475,8 @@ def generate_session_insight(analysis):
     }}
     </script>
     """
-    components.html(js, height=0)
 
+    components.html(js, height=0)
 def play_warning_tone(mode="warning", volume=0.75):
     vol = max(0.0, min(1.0, float(volume)))
     configs = {
