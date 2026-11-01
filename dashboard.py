@@ -1484,7 +1484,7 @@ def save_session_record(
         "Total Phone Detections": detections
     }])
 
-   if report_path.exists():
+    if report_path.exists():
         try:
             old_records = pd.read_csv(report_path)
             record = pd.concat([old_records, record], ignore_index=True)
