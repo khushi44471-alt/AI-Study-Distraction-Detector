@@ -449,13 +449,23 @@ def generate_session_insight(analysis):
         "summary": summary,
     }
 
-       js = f"""
+def play_female_warning(message, volume=0.75):
+    safe_volume = max(0.0, min(1.0, float(volume)))
+
+    safe_message = (
+        str(message)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", " ")
+    )
+
+    js = f"""
     <script>
     try {{
         const speech = window.speechSynthesis;
         if (speech) {{
             speech.cancel();
-            const utterance = new SpeechSynthesisUtterance("{message}");
+            const utterance = new SpeechSynthesisUtterance("{safe_message}");
             utterance.volume = {safe_volume};
             utterance.rate = 0.9;
             utterance.pitch = 1.15;
