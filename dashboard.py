@@ -1285,7 +1285,7 @@ st.markdown(
     """
     <div class="hero-panel">
       <span class="hero-chip">Class 12 Artificial Intelligence Project</span>
-      <h1>📱 AI Study Distraction Detector</h1>
+     <h1>AI Study Distraction Detector</h1>
       <p>Computer vision for monitoring phone visibility during study sessions, with live webcam detection, uploaded video analysis, focus scoring, warnings, and downloadable reports.</p>
     </div>
     """,
