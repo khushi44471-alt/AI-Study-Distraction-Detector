@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import cv2
 import numpy as np
