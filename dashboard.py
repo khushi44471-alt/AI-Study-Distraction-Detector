@@ -1126,11 +1126,13 @@ def analyze_video(uploaded_file):
 
     try:
         extension = Path(uploaded_file.name).suffix.lower() or ".mp4"
+
         with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
             temp_file.write(uploaded_file.getvalue())
             temp_path = Path(temp_file.name)
 
         capture = cv2.VideoCapture(str(temp_path))
+
         if not capture.isOpened():
             st.error("Unable to open this video. Try another MP4, MOV, or AVI file.")
             return None
@@ -1144,7 +1146,7 @@ def analyze_video(uploaded_file):
             return None
 
         model = load_yolo_model(str(resolved_model_path))
-        sample_interval = int(st.session_state.frame_sample_interval)
+        sample_interval = max(1, int(st.session_state.frame_sample_interval))
         confidence_threshold = float(st.session_state.detection_confidence)
 
         sampled_frames = 0
@@ -1153,6 +1155,7 @@ def analyze_video(uploaded_file):
         object_counts = {}
         detection_confidences = []
         detection_flags = []
+
         progress = st.progress(0.0)
         status = st.empty()
         last_annotated_frame = None
@@ -1160,6 +1163,7 @@ def analyze_video(uploaded_file):
 
         while True:
             success, frame = capture.read()
+
             if not success:
                 break
 
@@ -1183,31 +1187,41 @@ def analyze_video(uploaded_file):
             if prediction.boxes is not None:
                 for box in prediction.boxes:
                     cls_id = int(box.cls[0].item())
+
                     class_name = (
                         model.names[cls_id]
                         if not isinstance(model.names, dict)
                         else model.names.get(cls_id, "")
                     )
+
                     class_name = str(class_name).strip().lower()
                     object_counts[class_name] = object_counts.get(class_name, 0) + 1
 
                     if any(keyword in class_name for keyword in PHONE_KEYWORDS):
                         phone_count += 1
                         total_detections += 1
-                        detection_confidences.append(float(box.conf[0].item()))
+                        confidence = float(box.conf[0].item())
+                        detection_confidences.append(confidence)
 
                         x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-                        conf = float(box.conf[0].item())
+
                         phone_detections.append({
                             "class": class_name,
-                            "confidence": conf,
+                            "confidence": confidence,
                             "bbox": [x1, y1, x2, y2],
                         })
 
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                        cv2.rectangle(
+                            frame,
+                            (x1, y1),
+                            (x2, y2),
+                            (0, 0, 255),
+                            3,
+                        )
+
                         cv2.putText(
                             frame,
-                            f"PHONE {box.conf[0].item():.0%}",
+                            f"PHONE {confidence:.0%}",
                             (x1, max(20, y1 - 10)),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.7,
@@ -1219,17 +1233,27 @@ def analyze_video(uploaded_file):
             if phone_count > 0:
                 frames_with_phone += 1
                 detection_flags.append(True)
-                warning_log = append_warning_log(warning_log, "Phone detected in sampled frame")
+
+                warning_log = append_warning_log(
+                    warning_log,
+                    "Phone detected in sampled frame",
+                )
+
                 detection_events.append({
                     "frame_index": frame_index,
                     "phone_detected": True,
                     "phone_count": phone_count,
-                    "confidence": max(float(item["confidence"]) for item in phone_detections) if phone_detections else 0.0,
+                    "confidence": max(
+                        item["confidence"] for item in phone_detections
+                    ),
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
+
                 snapshots.append(frame.copy())
+
             else:
                 detection_flags.append(False)
+
                 detection_events.append({
                     "frame_index": frame_index,
                     "phone_detected": False,
@@ -1240,20 +1264,38 @@ def analyze_video(uploaded_file):
 
             if len(snapshots) > 5:
                 snapshots = snapshots[-5:]
+
             st.session_state.detection_snapshots = snapshots
 
             last_annotated_frame = frame.copy()
 
             if total_frames > 0:
-                progress.progress(min((frame_index + 1) / total_frames, 1.0))
-            status.write(f"Analyzing sampled frames... {sampled_frames}")
+                progress.progress(
+                    min((frame_index + 1) / total_frames, 1.0)
+                )
+
+            status.write(
+                f"Analyzing sampled frames... {sampled_frames}"
+            )
 
             frame_index += 1
 
-        phone_percentage = compute_phone_percentage(frames_with_phone, sampled_frames)
+        phone_percentage = compute_phone_percentage(
+            frames_with_phone,
+            sampled_frames,
+        )
+
         focus_score = get_focus_score(phone_percentage)
-        average_confidence = float(np.mean(detection_confidences)) if detection_confidences else 0.0
-        highest_confidence = float(np.max(detection_confidences)) if detection_confidences else 0.0
+
+        average_confidence = (
+            float(np.mean(detection_confidences))
+            if detection_confidences else 0.0
+        )
+
+        highest_confidence = (
+            float(np.max(detection_confidences))
+            if detection_confidences else 0.0
+        )
 
         result = {
             "video_name": uploaded_file.name,
@@ -1276,17 +1318,25 @@ def analyze_video(uploaded_file):
             "risk_band": get_risk_band(focus_score),
         }
 
-        if result["warning_count"] > 0 and not st.session_state.analysis_warning_triggered:
+        if (
+            result["warning_count"] > 0
+            and not st.session_state.analysis_warning_triggered
+        ):
             st.session_state.analysis_warning_triggered = True
-            st.session_state.last_warning_reason = "Phone detected in video analysis"
+            st.session_state.last_warning_reason = (
+                "Phone detected in video analysis"
+            )
+
             st.session_state.warning_summary = append_warning_summary(
                 st.session_state.warning_summary,
-                st.session_state.last_warning_reason
+                st.session_state.last_warning_reason,
             )
+
             st.session_state.warning_log.append({
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "message": "Phone detected in video analysis"
+                "message": "Phone detected in video analysis",
             })
+
             show_phone_alert(preview=False)
 
         return result
@@ -1298,11 +1348,13 @@ def analyze_video(uploaded_file):
     finally:
         if capture is not None:
             capture.release()
+
         if temp_path is not None and temp_path.exists():
             try:
                 temp_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
                 
 def save_session_record(
     video_name,
