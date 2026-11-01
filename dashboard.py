@@ -23,7 +23,11 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
 
@@ -985,7 +989,8 @@ def process_uploaded_video_for_live_detection(
         )
 
         focus_score = get_focus_score(phone_percentage)
-
+utput_video_path": str(temp_output_path),
+            "an
         return {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
@@ -999,8 +1004,7 @@ def process_uploaded_video_for_live_detection(
             "risk_band": get_risk_band(focus_score),
             "timeline": generate_timeline(detection_flags),
             "detection_events": detection_events,
-            "output_video_path": str(temp_output_path),
-            "annotated_frame": last_annotated_frame,
+            "onotated_frame": last_annotated_frame,
         }
 
     except Exception as exc:
@@ -1331,6 +1335,92 @@ def save_session_record(
 
     record.to_csv(report_path, index=False)
 
+
+def create_pdf_report(analysis):
+    """Generate a PDF summary of one study video analysis."""
+
+    pdf_buffer = BytesIO()
+
+    document = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=A4,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph(
+        "AI Study Distraction Detector System",
+        styles["Title"]
+    ))
+    story.append(Spacer(1, 15))
+
+    story.append(Paragraph(
+        "Study Session Analysis Report",
+        styles["Heading2"]
+    ))
+    story.append(Spacer(1, 12))
+
+    report_data = [
+        ["Metric", "Result"],
+        ["Video Name", str(analysis.get("video_name", "N/A"))],
+        ["Resolution", str(analysis.get("resolution", "N/A"))],
+        ["Frames Processed", str(analysis.get("frames_processed", 0))],
+        ["Frames With Phone", str(analysis.get("frames_with_phone", 0))],
+        ["Phone Visibility", f'{analysis.get("percentage", 0):.2f}%'],
+        ["Total Phone Detections", str(analysis.get("detections", 0))],
+        ["Focus Score", f'{analysis.get("focus_score", 0):.2f}%'],
+        ["Alert Level", str(analysis.get("alert_level", "N/A"))],
+        ["Study Status", str(analysis.get("study_status", "N/A"))],
+        ["Risk Band", str(analysis.get("risk_band", "N/A"))],
+    ]
+
+    report_table = Table(report_data, colWidths=[210, 270])
+
+    report_table.setStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("PADDING", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ])
+
+    story.append(report_table)
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Analysis Summary", styles["Heading2"]))
+
+    insight = generate_session_insight(analysis)
+
+    story.append(Paragraph(
+        insight["summary"],
+        styles["BodyText"]
+    ))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Recommendation", styles["Heading2"]))
+
+    story.append(Paragraph(
+        insight["recommendation"],
+        styles["BodyText"]
+    ))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph(
+        "<b>Important note:</b> Phone visibility is an indicator only. "
+        "It does not directly measure a person's attention, concentration, "
+        "or actual distraction.",
+        styles["Italic"]
+    ))
+
+    document.build(story)
+
+    pdf_buffer.seek(0)
+    return pdf_buffer.getvalue()
 
 
 
