@@ -989,7 +989,7 @@ def process_uploaded_video_for_live_detection(
         )
 
         focus_score = get_focus_score(phone_percentage)
-utput_video_path": str(temp_output_path),
+"output_video_path": str(temp_output_path),
             "an
         return {
             "video_name": uploaded_file.name,
