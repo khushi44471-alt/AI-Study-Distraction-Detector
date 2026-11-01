@@ -9,19 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import av
-import cv2
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import plotly.express as px
-import streamlit as st
-import streamlit.components.v1 as components
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.platypus import (
+
     Image as PDFImage,
     Paragraph,
     SimpleDocTemplate,
@@ -458,284 +446,6 @@ def generate_session_insight(analysis):
         "summary": summary,
     }
 
-def build_phone_heatmap(detection_events):
-    if not detection_events:
-        return None
-
-    df = pd.DataFrame(detection_events)
-    if df.empty or "frame_index" not in df.columns or "phone_detected" not in df.columns:
-        return None
-
-    df = df[["frame_index", "phone_detected"]].copy()
-    df["phone_detected"] = df["phone_detected"].astype(int)
-
-    if df.empty:
-        return None
-
-    max_frame = max(int(df["frame_index"].max()), 1)
-    bucket_count = min(20, len(df))
-    if bucket_count < 2:
-        bucket_count = 2
-
-    bins = np.linspace(0, max_frame, bucket_count + 1)
-    df["bucket"] = pd.cut(df["frame_index"], bins=bins, include_lowest=True, right=False)
-    grouped = df.groupby("bucket", observed=False)["phone_detected"].mean().fillna(0)
-
-    matrix = np.column_stack([
-        grouped.to_numpy(),
-        1.0 - grouped.to_numpy(),
-    ])
-
-    labels = [f"Window {i + 1}" for i in range(len(grouped))]
-
-    fig = px.imshow(
-        matrix,
-        x=["Phone Detected", "No Phone"],
-        y=labels,
-        color_continuous_scale=[
-            [0.0, "#0b1220"],
-            [0.25, "#1d4ed8"],
-            [0.5, "#fbbf24"],
-            [0.75, "#f97316"],
-            [1.0, "#ef4444"],
-        ],
-        zmin=0,
-        zmax=1,
-        aspect="auto",
-        title="Phone Visibility Heatmap",
-    )
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=50, b=20),
-        title_font_size=18,
-    )
-    fig.update_xaxes(title_text="Phone State")
-    fig.update_yaxes(title_text="Frame Windows")
-    fig.update_coloraxes(colorbar_title="Phone Presence")
-    fig.update_traces(
-        hovertemplate="<b>%{y}</b><br>%{x}<br>value: %{z:.2f}<extra></extra>"
-    )
-    return fig
-
-# ============================================================
-# Bounding-box helper for video frames
-# ============================================================
-
-def draw_phone_boxes(frame, detections, color=(0, 0, 255), thickness=3):
-    if not detections:
-        return frame
-
-    for det in detections:
-        if not isinstance(det, dict):
-            continue
-        if "bbox" not in det:
-            continue
-
-        x1, y1, x2, y2 = det["bbox"]
-        conf = det.get("confidence", 0.0)
-
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-        cv2.putText(
-            frame,
-            f"PHONE {conf:.0%}",
-            (x1, max(20, y1 - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            color,
-            2,
-            cv2.LINE_AA,
-        )
-
-    return frame
-
-def detect_phone_in_frame(frame, confidence_threshold):
-    model = load_yolo_model(str(ensure_model_exists()))
-    detections = []
-    max_conf = 0.0
-
-    results = model.predict(
-        source=frame,
-        imgsz=640,
-        conf=confidence_threshold,
-        verbose=False,
-        max_det=20,
-    )
-
-    if not results or len(results) == 0:
-        return {
-            "phone_detected": False,
-            "phone_count": 0,
-            "confidence": 0.0,
-            "detections": [],
-            "annotated_frame": frame.copy(),
-        }
-
-    result = results[0]
-    if result.boxes is None:
-        return {
-            "phone_detected": False,
-            "phone_count": 0,
-            "confidence": 0.0,
-            "detections": [],
-            "annotated_frame": frame.copy(),
-        }
-
-    for box in result.boxes:
-        cls_id = int(box.cls[0].item())
-        class_name = (
-            model.names[cls_id]
-            if not isinstance(model.names, dict)
-            else model.names.get(cls_id, "")
-        )
-        class_name = str(class_name).strip().lower()
-
-        if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-            conf = float(box.conf[0].item())
-            detections.append({
-                "class": class_name,
-                "confidence": conf,
-                "bbox": [x1, y1, x2, y2],
-            })
-            max_conf = max(max_conf, conf)
-
-    annotated = draw_phone_boxes(frame.copy(), detections, color=(0, 0, 255), thickness=3)
-
-    return {
-        "phone_detected": len(detections) > 0,
-        "phone_count": len(detections),
-        "confidence": float(max_conf),
-        "detections": detections,
-        "annotated_frame": annotated,
-    }
-
-def load_report() -> pd.DataFrame:
-    if not REPORT_FILE.exists() or REPORT_FILE.stat().st_size == 0:
-        report_df = pd.DataFrame(columns=CSV_COLUMNS)
-    else:
-        try:
-            report_df = pd.read_csv(REPORT_FILE)
-        except pd.errors.EmptyDataError:
-            report_df = pd.DataFrame(columns=CSV_COLUMNS)
-
-    for column in CSV_COLUMNS:
-        if column not in report_df.columns:
-            report_df[column] = pd.NA
-
-    for column in NUMERIC_COLUMNS:
-        report_df[column] = pd.to_numeric(report_df[column], errors="coerce")
-
-    return report_df[CSV_COLUMNS]
-
-def save_session_record(video_name, resolution, frames_processed, frames_with_phone, percentage, detections):
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    file_has_content = REPORT_FILE.exists() and REPORT_FILE.stat().st_size > 0
-
-    with REPORT_FILE.open("a", newline="", encoding="utf-8") as report_file:
-        writer = csv.writer(report_file)
-        if not file_has_content:
-            writer.writerow(CSV_COLUMNS)
-        writer.writerow([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            video_name,
-            resolution,
-            int(frames_processed),
-            int(frames_with_phone),
-            round(float(percentage), 2),
-            int(detections),
-        ])
-
-def create_pdf_report(analysis):
-    pdf_buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        pdf_buffer,
-        pagesize=A4,
-        rightMargin=45,
-        leftMargin=45,
-        topMargin=45,
-        bottomMargin=45,
-    )
-
-    styles = getSampleStyleSheet()
-    story = []
-
-    video_name = str(analysis["video_name"])
-    resolution = str(analysis["resolution"])
-    frames = int(analysis["frames_processed"])
-    phone_frames = int(analysis["frames_with_phone"])
-    percentage = float(analysis["percentage"])
-    detections = int(analysis["detections"])
-    focus_score = max(0.0, min(100.0, 100.0 - percentage))
-
-    safe_video_name = video_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    story.append(Paragraph("AI Study Distraction Detector", styles["Title"]))
-    story.append(Paragraph("Study Session Report", styles["Heading2"]))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph(f"Report generated: {datetime.now().strftime('%d %B %Y, %I:%M %p')}", styles["Normal"]))
-    story.append(Spacer(1, 12))
-
-    table_data = [
-        ["Statistic", "Result"],
-        ["Video", safe_video_name],
-        ["Video Resolution", resolution],
-        ["Frames Analyzed", f"{frames:,}"],
-        ["Frames With Phone", f"{phone_frames:,}"],
-        ["Total Phone Detections", f"{detections:,}"],
-        ["Phone Visible Percentage", f"{percentage:.2f}%"],
-        ["Phone-Free Score", f"{focus_score:.0f}/100"],
-    ]
-
-    table = Table(table_data, colWidths=[230, 230], repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#24476B")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
-        ("PADDING", (0, 0), (-1, -1), 8),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-
-    story.append(table)
-    story.append(Spacer(1, 20))
-    story.append(Paragraph("Phone Visibility Chart", styles["Heading2"]))
-
-    chart_buffer = io.BytesIO()
-    fig, ax = plt.subplots(figsize=(6, 3.2))
-    ax.bar(["Phone Visible", "Phone Not Detected"], [percentage, 100.0 - percentage])
-    ax.set_ylabel("Percentage (%)")
-    ax.set_ylim(0, 100)
-    ax.set_title("Analyzed Video Frames")
-    ax.grid(axis="y", alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(chart_buffer, format="png", dpi=160, bbox_inches="tight")
-    plt.close(fig)
-    chart_buffer.seek(0)
-
-    story.append(PDFImage(chart_buffer, width=6 * inch, height=3.2 * inch))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph(
-        "<b>Interpretation:</b> The Phone-Free Score is calculated as 100 minus the phone-visible percentage. Phone visibility does not prove distraction; it is only a signal.",
-        styles["BodyText"],
-    ))
-
-    doc.build(story)
-    pdf_buffer.seek(0)
-    return pdf_buffer.getvalue()
-
-# ============================================================
-# Alert audio functions
-# ============================================================
-
-ALERT_COOLDOWN = 20
-
-def play_female_warning(volume=0.8):
-    safe_volume = max(0.0, min(1.0, float(volume)))
-    message = "Attention! Phone detected! Please put your phone away and focus on studying!"
-    js = f"""
     <script>
     try {{
         const speech = window.speechSynthesis;
@@ -1304,6 +1014,88 @@ def process_uploaded_video_for_live_detection(
 # ============================================================
 # Analyze uploaded video
 # ============================================================
+
+def build_phone_heatmap(detection_events):
+    """Build a visual heatmap of phone detections over time."""
+
+    if not detection_events:
+        return None
+
+    heatmap_data = []
+
+    for event in detection_events:
+        frame_number = event.get("frame_index", 0)
+        detected = bool(event.get("phone_detected", False))
+
+        heatmap_data.append({
+            "Frame": frame_number,
+            "Phone Visibility": 1 if detected else 0,
+            "Status": "Phone detected" if detected else "No phone detected",
+        })
+
+    heatmap_df = pd.DataFrame(heatmap_data)
+
+    if heatmap_df.empty:
+        return None
+
+    # Group frames into 20-frame time blocks.
+    heatmap_df["Time Block"] = (
+        heatmap_df["Frame"] // 20
+    ) * 20
+
+    grouped = (
+        heatmap_df.groupby("Time Block")["Phone Visibility"]
+        .mean()
+        .reset_index()
+    )
+
+    grouped["Visibility (%)"] = (
+        grouped["Phone Visibility"] * 100
+    ).round(1)
+
+    fig = px.imshow(
+        [grouped["Visibility (%)"].tolist()],
+        x=[
+            f"Frames {int(start)}–{int(start + 19)}"
+            for start in grouped["Time Block"]
+        ],
+        y=["Phone visibility"],
+        color_continuous_scale=[
+            [0.0, "#16A34A"],
+            [0.5, "#FACC15"],
+            [1.0, "#DC2626"],
+        ],
+        zmin=0,
+        zmax=100,
+        aspect="auto",
+        labels={
+            "x": "Video timeline",
+            "y": "",
+            "color": "Visibility (%)",
+        },
+    )
+
+    fig.update_layout(
+        title="Phone Visibility Across the Video",
+        height=260,
+        margin=dict(l=20, r=20, t=65, b=65),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12),
+        coloraxis_colorbar=dict(
+            title="Phone visibility",
+            ticksuffix="%",
+        ),
+    )
+
+    fig.update_xaxes(
+        tickangle=-35,
+        showgrid=False,
+    )
+
+    fig.update_yaxes(showgrid=False)
+
+    return fig
 
 def analyze_video(uploaded_file):
     temp_path = None
