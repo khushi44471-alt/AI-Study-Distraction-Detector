@@ -1476,7 +1476,7 @@ st.caption("Quick overview of completed analysis sessions.")
             pass
 
     record.to_csv(report_path, index=False)
-    def save_session_record(
+def save_session_record(
     video_name,
     resolution,
     frames_processed,
