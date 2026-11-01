@@ -1503,28 +1503,7 @@ st.subheader("📊 Study Session Dashboard")
 st.caption("Quick overview of completed analysis sessions.")
 
     
-    report_path = Path("reports/session_summary.csv")
-    report_path.parent.mkdir(parents=True, exist_ok=True)
 
-    record = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d"),
-        "Session Time": datetime.now().strftime("%H:%M:%S"),
-        "Video Name": video_name,
-        "Resolution": resolution,
-        "Frames Processed": frames_processed,
-        "Frames With Phone": frames_with_phone,
-        "Phone Visible Percentage": percentage,
-        "Total Phone Detections": detections
-    }])
-
-    if report_path.exists():
-        try:
-            old_records = pd.read_csv(report_path)
-            record = pd.concat([old_records, record], ignore_index=True)
-        except (pd.errors.EmptyDataError, pd.errors.ParserError):
-            pass
-
-    record.to_csv(report_path, index=False)
 def load_report():
     report_path = Path("reports/session_summary.csv")
 
@@ -1552,10 +1531,10 @@ else:
     col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A")
 
     st.subheader("📈 Session Comparison")
-    chart_df = report_df[["Video", "Phone Visible Percentage"]].dropna()
+    chart_df = report_df[["Video Name", "Phone Visible Percentage"]].dropna()\
     if not chart_df.empty:
         chart_df = chart_df.rename(columns={
-            "Video": "Study Video",
+          "Video Name": "Study Video",
             "Phone Visible Percentage": "Phone Visibility (%)",
         })
         st.bar_chart(chart_df.set_index("Study Video"))
