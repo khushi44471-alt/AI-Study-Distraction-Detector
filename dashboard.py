@@ -987,7 +987,7 @@ def process_uploaded_video_for_live_detection(
             frames_with_phone,
             analyzed_frames,
         )
-      focus_score = get_focus_score(phone_percentage)
+        focus_score = get_focus_score(phone_percentage)
 
         return {
             "video_name": uploaded_file.name,
