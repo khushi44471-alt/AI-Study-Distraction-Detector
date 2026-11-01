@@ -1111,7 +1111,10 @@ def trigger_live_warning_once():
 # Process uploaded video with live detection overlay
 # ============================================================
 
-def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshold, sample_interval):
+
+def process_uploaded_video_for_live_detection(
+    uploaded_file, confidence_threshold, sample_interval
+):
     model = load_yolo_model(str(ensure_model_exists()))
 
     temp_video_path = None
@@ -1121,11 +1124,13 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
 
     try:
         suffix = Path(uploaded_file.name).suffix.lower() or ".mp4"
+
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
             temp_file.write(uploaded_file.getvalue())
             temp_video_path = Path(temp_file.name)
 
         capture = cv2.VideoCapture(str(temp_video_path))
+
         if not capture.isOpened():
             st.error("The uploaded video could not be opened.")
             return None
@@ -1136,37 +1141,39 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
         total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
         if width <= 0 or height <= 0:
-            st.error("The uploaded video has no valid frame size.")
+            st.error("Invalid video dimensions.")
             return None
 
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_out:
             temp_output_path = Path(temp_out.name)
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(str(temp_output_path), fourcc, fps, (width, height))
+        writer = cv2.VideoWriter(
+            str(temp_output_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            (width, height),
+        )
 
+        st.subheader("🔴 Live AI Detection")
+        video_display = st.empty()
+        status_display = st.empty()
         progress = st.progress(0.0)
-        status = st.empty()
 
         analyzed_frames = 0
         frames_with_phone = 0
         total_phone_hits = 0
-        detection_events = []
         detection_flags = []
-        snapshots = []
+        detection_events = []
         last_annotated_frame = None
-
         frame_index = 0
+
         while True:
             success, frame = capture.read()
+
             if not success:
                 break
 
-            if frame_index % sample_interval != 0:
-                frame_index += 1
-                continue
-
-            analyzed_frames += 1
+            # Run YOLO on every frame for continuous detection.
             prediction = model.predict(
                 source=frame,
                 imgsz=640,
@@ -1176,34 +1183,39 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
             )[0]
 
             phone_count = 0
-            phone_detections = []
 
             if prediction.boxes is not None:
                 for box in prediction.boxes:
                     cls_id = int(box.cls[0].item())
+
                     class_name = (
                         model.names[cls_id]
                         if not isinstance(model.names, dict)
                         else model.names.get(cls_id, "")
                     )
+
                     class_name = str(class_name).strip().lower()
 
                     if any(keyword in class_name for keyword in PHONE_KEYWORDS):
                         phone_count += 1
                         total_phone_hits += 1
 
-                        x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-                        conf = float(box.conf[0].item())
-                        phone_detections.append({
-                            "class": class_name,
-                            "confidence": conf,
-                            "bbox": [x1, y1, x2, y2],
-                        })
+                        x1, y1, x2, y2 = [
+                            int(v) for v in box.xyxy[0].tolist()
+                        ]
+                        confidence = float(box.conf[0].item())
 
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                        cv2.rectangle(
+                            frame,
+                            (x1, y1),
+                            (x2, y2),
+                            (0, 0, 255),
+                            3,
+                        )
+
                         cv2.putText(
                             frame,
-                            f"PHONE {conf:.0%}",
+                            f"PHONE {confidence:.0%}",
                             (x1, max(20, y1 - 10)),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.7,
@@ -1212,41 +1224,46 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
                             cv2.LINE_AA,
                         )
 
-            if phone_count > 0:
-                frames_with_phone += 1
-                detection_flags.append(True)
-                detection_events.append({
-                    "frame_index": frame_index,
-                    "phone_detected": True,
-                    "phone_count": phone_count,
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                })
-            else:
-                detection_flags.append(False)
-                detection_events.append({
-                    "frame_index": frame_index,
-                    "phone_detected": False,
-                    "phone_count": 0,
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                })
+            analyzed_frames += 1
+            detected = phone_count > 0
 
-            if len(snapshots) < 5:
-                snapshots.append(frame.copy())
+            if detected:
+                frames_with_phone += 1
+                status_display.error("📱 PHONE DETECTED")
             else:
-                snapshots.pop(0)
-                snapshots.append(frame.copy())
+                status_display.success("✅ NO PHONE DETECTED")
+
+            detection_flags.append(detected)
+
+            detection_events.append({
+                "frame_index": frame_index,
+                "phone_detected": detected,
+                "phone_count": phone_count,
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            })
+
+            # Display the processed frame immediately.
+            video_display.image(
+                cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                channels="RGB",
+                use_container_width=True,
+            )
 
             writer.write(frame)
             last_annotated_frame = frame.copy()
-            progress.progress(min((frame_index + 1) / max(total_frames, 1), 1.0))
-            status.write(f"Processing live detection: {analyzed_frames} sampled frames")
+
+            if total_frames > 0:
+                progress.progress(
+                    min((frame_index + 1) / total_frames, 1.0)
+                )
 
             frame_index += 1
 
-        if writer is not None:
-            writer.release()
+        phone_percentage = compute_phone_percentage(
+            frames_with_phone,
+            analyzed_frames,
+        )
 
-        phone_percentage = compute_phone_percentage(frames_with_phone, analyzed_frames)
         focus_score = get_focus_score(phone_percentage)
 
         return {
@@ -1262,7 +1279,6 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
             "risk_band": get_risk_band(focus_score),
             "timeline": generate_timeline(detection_flags),
             "detection_events": detection_events,
-            "snapshots": snapshots,
             "output_video_path": str(temp_output_path),
             "annotated_frame": last_annotated_frame,
         }
@@ -1274,13 +1290,16 @@ def process_uploaded_video_for_live_detection(uploaded_file, confidence_threshol
     finally:
         if capture is not None:
             capture.release()
+
         if writer is not None:
             writer.release()
+
         if temp_video_path is not None and temp_video_path.exists():
             try:
                 temp_video_path.unlink(missing_ok=True)
-            except Exception:
+            except OSError:
                 pass
+
 
 # ============================================================
 # Analyze uploaded video
