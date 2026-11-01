@@ -1530,16 +1530,24 @@ else:
     col3.metric("Phone Detections", f"{total_detections:,}")
     col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A")
 
-    st.subheader("📈 Session Comparison")
-    chart_df = report_df[["Video Name", "Phone Visible Percentage"]].dropna()
-    if not chart_df.empty:
-        chart_df = chart_df.rename(columns={
-          "Video Name": "Study Video",
-            "Phone Visible Percentage": "Phone Visibility (%)",
-        })
-        st.bar_chart(chart_df.set_index("Study Video"))
+       st.subheader("📈 Session Comparison")
+
+    if "Video Name" not in report_df.columns and "Video" in report_df.columns:
+        report_df = report_df.rename(columns={"Video": "Video Name"})
+
+    if "Video Name" in report_df.columns and "Phone Visible Percentage" in report_df.columns:
+        chart_df = report_df[["Video Name", "Phone Visible Percentage"]].dropna()
+
+        if not chart_df.empty:
+            chart_df = chart_df.rename(columns={
+                "Video Name": "Study Video",
+                "Phone Visible Percentage": "Phone Visibility (%)",
+            })
+            st.bar_chart(chart_df.set_index("Study Video"))
+        else:
+            st.info("No visibility data yet.")
     else:
-        st.info("No visibility data yet.")
+        st.info("The report is missing the video name or phone visibility column.")
 
     st.subheader("📋 Session History")
     st.dataframe(report_df, use_container_width=True)
