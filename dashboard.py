@@ -1531,7 +1531,7 @@ else:
     col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A")
 
     st.subheader("📈 Session Comparison")
-    chart_df = report_df[["Video Name", "Phone Visible Percentage"]].dropna()\
+    chart_df = report_df[["Video Name", "Phone Visible Percentage"]].dropna()
     if not chart_df.empty:
         chart_df = chart_df.rename(columns={
           "Video Name": "Study Video",
