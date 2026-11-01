@@ -449,7 +449,7 @@ def generate_session_insight(analysis):
         "summary": summary,
     }
 
-      js = f"""
+       js = f"""
     <script>
     try {{
         const speech = window.speechSynthesis;
