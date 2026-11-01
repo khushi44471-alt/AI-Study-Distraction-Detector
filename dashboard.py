@@ -1518,6 +1518,7 @@ report_df = load_report()
 
 if report_df.empty:
     st.info("No completed sessions yet. Upload a study video to see the dashboard results.")
+
 else:
     total_sessions = len(report_df)
     total_frames = int(report_df["Frames Processed"].fillna(0).sum())
@@ -1525,12 +1526,16 @@ else:
     average_visibility = report_df["Phone Visible Percentage"].dropna().mean()
 
     col1, col2, col3, col4 = st.columns(4)
+
     col1.metric("Sessions Analyzed", total_sessions)
     col2.metric("Frames Processed", f"{total_frames:,}")
     col3.metric("Phone Detections", f"{total_detections:,}")
-    col4.metric("Average Phone Visibility", f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A")
+    col4.metric(
+        "Average Phone Visibility",
+        f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A"
+    )
 
-       st.subheader("📈 Session Comparison")
+    st.subheader("📈 Session Comparison")
 
     if "Video Name" not in report_df.columns and "Video" in report_df.columns:
         report_df = report_df.rename(columns={"Video": "Video Name"})
@@ -1541,7 +1546,7 @@ else:
         if not chart_df.empty:
             chart_df = chart_df.rename(columns={
                 "Video Name": "Study Video",
-                "Phone Visible Percentage": "Phone Visibility (%)",
+                "Phone Visible Percentage": "Phone Visibility (%)"
             })
             st.bar_chart(chart_df.set_index("Study Video"))
         else:
