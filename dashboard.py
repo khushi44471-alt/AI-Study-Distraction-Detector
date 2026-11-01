@@ -1457,7 +1457,16 @@ if uploaded_video_analysis is not None:
 st.divider()
 st.subheader("📊 Study Session Dashboard")
 st.caption("Quick overview of completed analysis sessions.")
+def load_report():
+    report_path = Path("reports/session_summary.csv")
 
+    if not report_path.exists():
+        return pd.DataFrame()
+
+    try:
+        return pd.read_csv(report_path)
+    except (pd.errors.EmptyDataError, pd.errors.ParserError):
+        return pd.DataFrame()
 report_df = load_report()
 
 if report_df.empty:
