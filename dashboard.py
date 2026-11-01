@@ -2,6 +2,7 @@
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
+import cv2
 import base64
 import csv
 import io
