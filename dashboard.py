@@ -5,6 +5,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 import cv2
 import numpy as np
+import plotly.express as px
 import base64
 import csv
 import io
