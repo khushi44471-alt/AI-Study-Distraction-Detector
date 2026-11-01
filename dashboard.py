@@ -1464,7 +1464,19 @@ if uploaded_video_analysis is not None:
 st.divider()
 st.subheader("📊 Study Session Dashboard")
 st.caption("Quick overview of completed analysis sessions.")
-def save_session_record(
+
+    if report_path.exists():
+        try:
+            old_records = pd.read_csv(report_path)
+            record = pd.concat(
+                [old_records, record],
+                ignore_index=True
+            )
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            pass
+
+    record.to_csv(report_path, index=False)
+    def save_session_record(
     video_name,
     resolution,
     frames_processed,
@@ -1489,10 +1501,7 @@ def save_session_record(
     if report_path.exists():
         try:
             old_records = pd.read_csv(report_path)
-            record = pd.concat(
-                [old_records, record],
-                ignore_index=True
-            )
+            record = pd.concat([old_records, record], ignore_index=True)
         except (pd.errors.EmptyDataError, pd.errors.ParserError):
             pass
 
