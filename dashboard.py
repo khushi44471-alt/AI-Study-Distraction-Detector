@@ -1464,6 +1464,39 @@ if uploaded_video_analysis is not None:
 st.divider()
 st.subheader("📊 Study Session Dashboard")
 st.caption("Quick overview of completed analysis sessions.")
+def save_session_record(
+    video_name,
+    resolution,
+    frames_processed,
+    frames_with_phone,
+    percentage,
+    detections
+):
+    report_path = Path("reports/session_summary.csv")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+
+    record = pd.DataFrame([{
+        "Date": datetime.now().strftime("%Y-%m-%d"),
+        "Session Time": datetime.now().strftime("%H:%M:%S"),
+        "Video Name": video_name,
+        "Resolution": resolution,
+        "Frames Processed": frames_processed,
+        "Frames With Phone": frames_with_phone,
+        "Phone Visible Percentage": percentage,
+        "Total Phone Detections": detections
+    }])
+
+    if report_path.exists():
+        try:
+            old_records = pd.read_csv(report_path)
+            record = pd.concat(
+                [old_records, record],
+                ignore_index=True
+            )
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            pass
+
+    record.to_csv(report_path, index=False)
 def load_report():
     report_path = Path("reports/session_summary.csv")
 
