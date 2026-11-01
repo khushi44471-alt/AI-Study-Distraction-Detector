@@ -980,10 +980,9 @@ def process_uploaded_video_for_live_detection(
                 progress.progress(
                     min((frame_index + 1) / total_frames, 1.0)
                 )
-
             frame_index += 1
 
-           phone_percentage = compute_phone_percentage(
+        phone_percentage = compute_phone_percentage(
             frames_with_phone,
             analyzed_frames,
         )
