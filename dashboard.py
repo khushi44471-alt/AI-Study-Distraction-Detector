@@ -48,7 +48,6 @@ from dashboard_enhancements import (
     TemporalPhoneFilter,
     get_study_level,
     render_professional_polish,
-    render_project_presentation_kit,
     render_smart_insights,
 )
 
@@ -5145,7 +5144,6 @@ with about3:
 st.markdown("#### Technology stack")
 st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab · WebRTC")
 
-render_project_presentation_kit(st)
 
 st.markdown("#### Important limitations")
 st.warning(
