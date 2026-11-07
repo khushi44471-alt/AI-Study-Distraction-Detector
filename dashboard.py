@@ -1199,10 +1199,12 @@ def trigger_live_warning_once():
 
 
 
+
 def process_uploaded_video_for_live_detection(
     uploaded_file, confidence_threshold, sample_interval
 ):
-    model = load_yolo_model(str(ensure_model_exists()))
+    model_path = ensure_model_exists()
+    model = load_yolo_model(str(model_path))
 
     temp_video_path = None
     temp_output_path = None
@@ -1210,9 +1212,14 @@ def process_uploaded_video_for_live_detection(
     writer = None
 
     try:
+        uploaded_file.seek(0)
+
         suffix = Path(uploaded_file.name).suffix.lower() or ".mp4"
 
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix,
+            delete=False,
+        ) as temp_file:
             temp_file.write(uploaded_file.getvalue())
             temp_video_path = Path(temp_file.name)
 
@@ -1231,7 +1238,13 @@ def process_uploaded_video_for_live_detection(
             st.error("Invalid video dimensions.")
             return None
 
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_out:
+        # Reduce inference resolution for faster processing.
+        inference_size = 480
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".mp4",
+            delete=False,
+        ) as temp_out:
             temp_output_path = Path(temp_out.name)
 
         writer = cv2.VideoWriter(
@@ -1246,20 +1259,34 @@ def process_uploaded_video_for_live_detection(
             return None
 
         st.subheader("🔴 Live AI Detection")
+
         video_display = st.empty()
         status_display = st.empty()
         progress = st.progress(0.0)
+
+        sample_interval = max(1, int(sample_interval))
 
         analyzed_frames = 0
         frames_with_phone = 0
         total_phone_hits = 0
         detection_flags = []
-               # Smart alert tracking
+        detection_events = []
+        detection_confidences = []
+        warning_log = []
+        object_counts = {}
+        snapshots = []
+
         consecutive_phone_frames = 0
         last_alert_time = 0.0
-        detection_events = []
+
         last_annotated_frame = None
+        last_display_frame = None
         frame_index = 0
+
+        # Only sampled frames are passed through YOLO.
+        # Intermediate frames reuse the previous detection result.
+        last_frame_detected = False
+        last_phone_count = 0
 
         while True:
             success, frame = capture.read()
@@ -1267,125 +1294,198 @@ def process_uploaded_video_for_live_detection(
             if not success:
                 break
 
-            prediction = model.predict(
-                source=frame,
-                imgsz=640,
-                conf=confidence_threshold,
-                verbose=False,
-                max_det=20,
-            )[0]
+            should_analyze = (
+                frame_index % sample_interval == 0
+            )
 
-            phone_count = 0
-            detected_objects = []
+            if should_analyze:
 
-            if prediction.boxes is not None:
-                for box in prediction.boxes:
-                    cls_id = int(box.cls[0].item())
+                prediction = model.predict(
+                    source=frame,
+                    imgsz=inference_size,
+                    conf=confidence_threshold,
+                    verbose=False,
+                    max_det=10,
+                )[0]
 
-                    class_name = (
-                        model.names[cls_id]
-                        if not isinstance(model.names, dict)
-                        else model.names.get(cls_id, "")
-                    )
+                phone_count = 0
+                detected_objects = []
+                phone_detections = []
 
-                    class_name = str(class_name).strip().lower()
-                    confidence = float(box.conf[0].item())
+                if prediction.boxes is not None:
 
-                    x1, y1, x2, y2 = [
-                        int(v) for v in box.xyxy[0].tolist()
-                    ]
+                    for box in prediction.boxes:
 
-                    is_phone = any(
-                        keyword in class_name
-                        for keyword in PHONE_KEYWORDS
-                    )
+                        cls_id = int(box.cls[0].item())
 
-                    if is_phone:
-                        phone_count += 1
-                        total_phone_hits += 1
-                        box_color = (0, 0, 255)
-                    else:
-                        # Consistent, different colour for each object class.
-                        class_hash = sum(
-                            (index + 1) * ord(char)
-                            for index, char in enumerate(class_name)
-                        )
-                        box_color = (
-                            50 + (class_hash * 37) % 206,
-                            50 + (class_hash * 67) % 206,
-                            50 + (class_hash * 97) % 206,
+                        class_name = (
+                            model.names[cls_id]
+                            if not isinstance(model.names, dict)
+                            else model.names.get(cls_id, "")
                         )
 
-                    label = f"{class_name.upper()} {confidence:.0%}"
+                        class_name = str(class_name).strip().lower()
+                        confidence = float(box.conf[0].item())
 
-                    cv2.rectangle(
-                        frame,
-                        (x1, y1),
-                        (x2, y2),
-                        box_color,
-                        3,
+                        x1, y1, x2, y2 = [
+                            int(v) for v in box.xyxy[0].tolist()
+                        ]
+
+                        object_counts[class_name] = (
+                            object_counts.get(class_name, 0) + 1
+                        )
+
+                        is_phone = any(
+                            keyword in class_name
+                            for keyword in PHONE_KEYWORDS
+                        )
+
+                        if is_phone:
+                            phone_count += 1
+                            total_phone_hits += 1
+                            detection_confidences.append(confidence)
+                            box_color = (0, 0, 255)
+
+                            phone_detections.append({
+                                "class": class_name,
+                                "confidence": confidence,
+                                "bbox": [x1, y1, x2, y2],
+                            })
+
+                        else:
+                            class_hash = sum(
+                                (index + 1) * ord(char)
+                                for index, char in enumerate(class_name)
+                            )
+
+                            box_color = (
+                                50 + (class_hash * 37) % 206,
+                                50 + (class_hash * 67) % 206,
+                                50 + (class_hash * 97) % 206,
+                            )
+
+                        cv2.rectangle(
+                            frame,
+                            (x1, y1),
+                            (x2, y2),
+                            box_color,
+                            3,
+                        )
+
+                        cv2.putText(
+                            frame,
+                            f"{class_name.upper()} {confidence:.0%}",
+                            (x1, max(20, y1 - 10)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            box_color,
+                            2,
+                            cv2.LINE_AA,
+                        )
+
+                        detected_objects.append({
+                            "class": class_name,
+                            "confidence": confidence,
+                            "bbox": [x1, y1, x2, y2],
+                            "is_phone": is_phone,
+                        })
+
+                analyzed_frames += 1
+
+                detected = phone_count > 0
+
+                last_frame_detected = detected
+                last_phone_count = phone_count
+
+                if detected:
+                    frames_with_phone += 1
+                    consecutive_phone_frames += 1
+
+                    warning_log = append_warning_log(
+                        warning_log,
+                        "Phone detected in sampled frame",
                     )
 
+                    current_time = time.monotonic()
+
+                    if (
+                        smart_alerts_enabled
+                        and consecutive_phone_frames >= alert_threshold
+                        and current_time - last_alert_time >= alert_cooldown
+                    ):
+                        show_phone_alert()
+                        last_alert_time = current_time
+
+                    snapshots.append(frame.copy())
+                    snapshots = snapshots[-5:]
+
+                else:
+                    consecutive_phone_frames = 0
+
+                detection_flags.append(detected)
+
+                confidence_values = [
+                    item["confidence"]
+                    for item in phone_detections
+                ]
+
+                detection_events.append({
+                    "frame_index": frame_index,
+                    "phone_detected": detected,
+                    "phone_count": phone_count,
+                    "confidence": (
+                        max(confidence_values)
+                        if confidence_values
+                        else 0.0
+                    ),
+                    "objects": detected_objects,
+                    "time": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                })
+
+                last_annotated_frame = frame.copy()
+
+                # Update the preview only for analyzed frames.
+                last_display_frame = frame.copy()
+
+                status_display.error(
+                    "📱 PHONE DETECTED"
+                ) if detected else status_display.success(
+                    "✅ NO PHONE DETECTED"
+                )
+
+            else:
+                # Keep the previous detection status between samples.
+                if last_frame_detected:
                     cv2.putText(
                         frame,
-                        label,
-                        (x1, max(20, y1 - 10)),
+                        "PHONE DETECTED - LAST SAMPLE",
+                        (20, 40),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        box_color,
+                        0.8,
+                        (0, 0, 255),
                         2,
                         cv2.LINE_AA,
                     )
 
-                    detected_objects.append({
-                        "class": class_name,
-                        "confidence": confidence,
-                        "bbox": [x1, y1, x2, y2],
-                        "is_phone": is_phone,
-                    })
-
-            analyzed_frames += 1
-            detected = phone_count > 0
-
-            if detected:
-                frames_with_phone += 1
-                consecutive_phone_frames += 1
-                status_display.error("📱 PHONE DETECTED")
-
-                current_time = time.monotonic()
-
-                if (
-                    smart_alerts_enabled
-                    and consecutive_phone_frames >= alert_threshold
-                    and current_time - last_alert_time >= alert_cooldown
-                ):
-                    show_phone_alert()
-                    last_alert_time = current_time
-
-            else:
-                consecutive_phone_frames = 0
-                status_display.success("✅ NO PHONE DETECTED")
-
-            detection_flags.append(detected)
-
-            detection_events.append({
-                "frame_index": frame_index,
-                "phone_detected": detected,
-                "phone_count": phone_count,
-                "objects": detected_objects,
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
-
-            video_display.image(
-                cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-                channels="RGB",
-                use_container_width=True,
-            )
+                last_display_frame = frame.copy()
 
             writer.write(frame)
-            last_annotated_frame = frame.copy()
 
-            if total_frames > 0:
+            # Refresh the Streamlit preview periodically, not every frame.
+            if frame_index % max(1, sample_interval * 3) == 0:
+
+                video_display.image(
+                    cv2.cvtColor(
+                        last_display_frame,
+                        cv2.COLOR_BGR2RGB,
+                    ),
+                    channels="RGB",
+                    use_container_width=True,
+                )
+
+            if total_frames > 0 and frame_index % 10 == 0:
                 progress.progress(
                     min((frame_index + 1) / total_frames, 1.0)
                 )
@@ -1399,6 +1499,22 @@ def process_uploaded_video_for_live_detection(
 
         focus_score = get_focus_score(phone_percentage)
 
+        average_confidence = (
+            float(np.mean(detection_confidences))
+            if detection_confidences
+            else 0.0
+        )
+
+        highest_confidence = (
+            float(np.max(detection_confidences))
+            if detection_confidences
+            else 0.0
+        )
+
+        st.session_state.detection_snapshots = snapshots
+
+        progress.progress(1.0)
+
         return {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
@@ -1410,7 +1526,12 @@ def process_uploaded_video_for_live_detection(
             "alert_level": get_alert_level(focus_score),
             "study_status": get_study_status(focus_score),
             "risk_band": get_risk_band(focus_score),
+            "average_confidence": average_confidence,
+            "highest_confidence": highest_confidence,
+            "warnings": warning_log,
+            "warning_count": len(warning_log),
             "timeline": generate_timeline(detection_flags),
+            "object_counts": object_counts,
             "detection_events": detection_events,
             "annotated_frame": last_annotated_frame,
             "output_video_path": str(temp_output_path),
@@ -1432,6 +1553,7 @@ def process_uploaded_video_for_live_detection(
                 temp_video_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
 
 
 # ============================================================
