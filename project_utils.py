@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import tempfile
@@ -297,3 +298,67 @@ def calculate_study_streaks(session_dates: Any,
             expected -= timedelta(days=1)
 
     return {"current": current, "longest": longest, "active_days": len(ordered_dates)}
+
+
+def load_integer_setting(
+    setting_path: str | Path,
+    key: str,
+    default: int = 0,
+) -> int:
+    """Read a non-negative integer setting from a small JSON file."""
+    path = Path(setting_path)
+    try:
+        with path.open("r", encoding="utf-8") as setting_file:
+            data = json.load(setting_file)
+        value = int(data.get(key, default)) if isinstance(data, Mapping) else default
+    except (OSError, json.JSONDecodeError, TypeError, ValueError, OverflowError):
+        value = default
+    return max(0, value)
+
+
+def save_integer_setting(
+    setting_path: str | Path,
+    key: str,
+    value: int,
+) -> None:
+    """Persist an integer setting through an atomic JSON file replacement."""
+    if not str(key).strip():
+        raise ValueError("The JSON setting key cannot be empty.")
+
+    path = Path(setting_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    settings: dict[str, Any] = {}
+
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as setting_file:
+                loaded = json.load(setting_file)
+            if isinstance(loaded, dict):
+                settings.update(loaded)
+        except (OSError, json.JSONDecodeError):
+            settings = {}
+
+    settings[key] = max(0, int(safe_float(value)))
+    temporary_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".tmp",
+            prefix=f".{path.stem}_",
+            dir=path.parent,
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            json.dump(settings, temporary_file, indent=4)
+
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
