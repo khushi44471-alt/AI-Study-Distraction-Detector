@@ -5145,12 +5145,5 @@ with about3:
 st.markdown("#### Technology stack")
 st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab · WebRTC")
 
-render_project_presentation_kit(st)
-
-st.markdown("#### Important limitations")
-st.warning(
-    "A detected phone does not prove distraction. The model can miss objects or misclassify things. This app should be used as a study-support tool, not as a final judgment."
-)
-st.caption("Designed as a Class 12 AI prototype for educational demonstration.")
 
 
