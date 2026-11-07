@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from dashboard_enhancements import (
+    TemporalPhoneFilter, build_session_insights, get_study_level,
+)
+
 from project_utils import (
     append_session_record, build_session_record, calculate_study_streaks,
     load_integer_setting, load_session_history, normalize_session_history,
@@ -109,6 +113,51 @@ class ProjectUtilsTests(unittest.TestCase):
         self.assertEqual(result["current"], 2)
         self.assertEqual(result["longest"], 2)
         self.assertEqual(result["active_days"], 4)
+
+    def test_temporal_phone_filter_rejects_single_frame_false_positive(self):
+        phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
+        self.assertFalse(phone_filter.update(True))
+        self.assertFalse(phone_filter.update(False))
+        self.assertFalse(phone_filter.update(False))
+
+    def test_temporal_phone_filter_confirms_two_of_three_samples(self):
+        phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
+        self.assertFalse(phone_filter.update(True))
+        self.assertTrue(phone_filter.update(True))
+        self.assertTrue(phone_filter.update(False))
+        phone_filter.reset()
+        self.assertFalse(phone_filter.update(False))
+
+    def test_study_levels_and_final_level(self):
+        self.assertEqual(get_study_level(0)["level"], 1)
+        self.assertEqual(get_study_level(10)["level"], 3)
+        self.assertEqual(get_study_level(150)["name"], "Study Legend")
+        self.assertEqual(get_study_level(200)["progress"], 1.0)
+
+    def test_smart_insights_compare_latest_five_with_previous_five(self):
+        dates = [f"2026-11-{day:02d}" for day in range(1, 11)]
+        history = pd.DataFrame({
+            "Date": dates,
+            "Session Time": ["09:00:00"] * 10,
+            "Video Name": [f"session-{index}.mp4" for index in range(10)],
+            "Phone Visible Percentage": [50, 40, 30, 20, 10, 10, 9, 8, 7, 6],
+        })
+        insights = build_session_insights(history)
+        self.assertTrue(insights["has_data"])
+        self.assertEqual(insights["session_count"], 10)
+        self.assertAlmostEqual(insights["recent_average"], 8.0)
+        self.assertAlmostEqual(insights["previous_average"], 30.0)
+        self.assertAlmostEqual(insights["change"], -22.0)
+        self.assertEqual(insights["active_days_7d"], 7)
+        self.assertEqual(insights["best_video"], "session-9.mp4")
+
+    def test_smart_insights_wait_for_two_complete_windows(self):
+        history = pd.DataFrame({
+            "Phone Visible Percentage": [25, 20, 15, 10, 5, 2],
+        })
+        insights = build_session_insights(history)
+        self.assertIsNone(insights["previous_average"])
+        self.assertIsNone(insights["change"])
 
 
 if __name__ == "__main__":

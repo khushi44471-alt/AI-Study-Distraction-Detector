@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from ultralytics import YOLO
 
+from dashboard_enhancements import TemporalPhoneFilter
 from project_utils import append_session_record, build_session_record
 
 # =========================================
@@ -15,7 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR / "videos" / "study_test.mp4"
 MODEL_PATH = BASE_DIR / "yolo11n.pt"
 
-CONFIDENCE = 0.08
+CONFIDENCE = 0.18
 IMAGE_SIZE = 1280
 
 REPORT_DIR = BASE_DIR / "reports"
@@ -56,6 +57,7 @@ if fps <= 0:
 total_frames = 0
 phone_frames = 0
 total_phone_detections = 0
+phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
 print(f"Video resolution: {width} x {height}")
 print("Press Q to stop the session.")
@@ -131,19 +133,25 @@ try:
                 cv2.LINE_AA
             )
 
-        # Count frames containing at least one phone
-        if phone_count > 0:
-            phone_frames += 1
+        # Confirm phone visibility across recent frames to suppress isolated hits.
+        raw_phone_detected = phone_count > 0
+        phone_confirmed = phone_filter.update(raw_phone_detected)
+        if raw_phone_detected:
             total_phone_detections += phone_count
+        if phone_confirmed:
+            phone_frames += 1
 
         percentage = (
             phone_frames / total_frames * 100
             if total_frames else 0
         )
 
-        if phone_count > 0:
-            status = f"PHONE VISIBLE: {phone_count}"
+        if phone_confirmed:
+            status = f"PHONE CONFIRMED: {phone_count}"
             status_color = (0, 0, 255)
+        elif raw_phone_detected:
+            status = "VERIFYING PHONE CANDIDATE"
+            status_color = (0, 165, 255)
         else:
             status = "NO PHONE DETECTED"
             status_color = (0, 200, 0)

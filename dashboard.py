@@ -44,6 +44,14 @@ from project_utils import (
     validate_analysis_result,
 )
 
+from dashboard_enhancements import (
+    TemporalPhoneFilter,
+    get_study_level,
+    render_professional_polish,
+    render_project_presentation_kit,
+    render_smart_insights,
+)
+
 
 # ============================================================
 # Streamlit config
@@ -546,6 +554,9 @@ st.markdown(
 )
 
 
+render_professional_polish(st)
+
+
 # ============================================================
 # Paths
 # ============================================================
@@ -769,6 +780,34 @@ ACHIEVEMENT_RULES = [
         "description": "Complete 25 focus sessions.",
         "icon": "💎",
         "target": 25,
+    },
+    {
+        "id": "momentum_builder",
+        "name": "Momentum Builder",
+        "description": "Complete 50 focus sessions.",
+        "icon": "🚀",
+        "target": 50,
+    },
+    {
+        "id": "deep_work_champion",
+        "name": "Deep Work Champion",
+        "description": "Complete 75 focus sessions.",
+        "icon": "🧠",
+        "target": 75,
+    },
+    {
+        "id": "century_scholar",
+        "name": "Century Scholar",
+        "description": "Complete 100 focus sessions.",
+        "icon": "🌟",
+        "target": 100,
+    },
+    {
+        "id": "study_legend",
+        "name": "Study Legend",
+        "description": "Complete 150 focus sessions.",
+        "icon": "👑",
+        "target": 150,
     },
 ]
 
@@ -1391,6 +1430,7 @@ class WebcamPhoneDetector(VideoProcessorBase):
     def __init__(self):
         self.model = load_yolo_model(str(ensure_model_exists()))
         self.last_warn_time = 0.0
+        self.phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
@@ -1420,33 +1460,38 @@ class WebcamPhoneDetector(VideoProcessorBase):
                         conf = float(box.conf[0].item())
                         detections.append((x1, y1, x2, y2, conf))
 
-            if detections:
-                for x1, y1, x2, y2, conf in detections:
-                    cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                    cv2.putText(
-                        image,
-                        f"PHONE {conf:.0%}",
-                        (x1, max(20, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
+            raw_detected = bool(detections)
+            confirmed_phone = self.phone_filter.update(raw_detected)
 
+            for x1, y1, x2, y2, conf in detections:
+                box_color = (0, 0, 255) if confirmed_phone else (0, 165, 255)
+                label = "PHONE" if confirmed_phone else "PHONE CANDIDATE"
+                cv2.rectangle(image, (x1, y1), (x2, y2), box_color, 3)
+                cv2.putText(
+                    image,
+                    f"{label} {conf:.0%}",
+                    (x1, max(20, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    box_color,
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            if confirmed_phone:
                 now = time.monotonic()
                 if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
                     st.session_state.last_live_warning_time = now
                     st.session_state.live_warning_triggered = True
                     st.session_state.live_phone_detected = True
-                    st.session_state.last_warning_reason = "Phone detected in webcam"
+                    st.session_state.last_warning_reason = "Phone confirmed across recent webcam frames"
                     st.session_state.warning_summary = append_warning_summary(
                         st.session_state.warning_summary,
                         st.session_state.last_warning_reason
                     )
                     st.session_state.warning_log.append({
                         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "message": "Phone detected in webcam"
+                        "message": "Phone confirmed across recent webcam frames"
                     })
 
                 cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
@@ -1456,6 +1501,19 @@ class WebcamPhoneDetector(VideoProcessorBase):
                     (20, 35),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            elif raw_detected:
+                st.session_state.live_phone_detected = False
+                cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 115, 210), -1)
+                cv2.putText(
+                    image,
+                    "VERIFYING PHONE CANDIDATE",
+                    (20, 35),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.65,
                     (255, 255, 255),
                     2,
                     cv2.LINE_AA,
@@ -1475,14 +1533,25 @@ class WebcamPhoneDetector(VideoProcessorBase):
                 )
 
             st.session_state.live_stats = {
-                "status": "PHONE DETECTED" if detections else "NO PHONE DETECTED",
-                "phone_detected": bool(detections),
+                "status": (
+                    "PHONE DETECTED" if confirmed_phone
+                    else "VERIFYING CANDIDATE" if raw_detected
+                    else "NO PHONE DETECTED"
+                ),
+                "phone_detected": bool(confirmed_phone),
                 "phone_count": len(detections),
-                "confidence": max([round(float(item[4]), 4) for item in detections], default=0.0),
+                "confidence": max(
+                    [round(float(item[4]), 4) for item in detections],
+                    default=0.0,
+                ),
                 "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
 
-            st.session_state.live_status = "PHONE DETECTED" if detections else "FOCUSED / NO PHONE"
+            st.session_state.live_status = (
+                "PHONE DETECTED" if confirmed_phone
+                else "VERIFYING PHONE" if raw_detected
+                else "FOCUSED / NO PHONE"
+            )
 
         except Exception:
             st.session_state.live_phone_detected = False
@@ -1583,6 +1652,7 @@ def process_uploaded_video_for_live_detection(
         last_display_frame = None
         frame_index = 0
         last_frame_detected = False
+        phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
         while True:
             success, frame = capture.read()
@@ -1681,7 +1751,8 @@ def process_uploaded_video_for_live_detection(
                         })
 
                 analyzed_frames += 1
-                detected = phone_count > 0
+                raw_detected = phone_count > 0
+                detected = phone_filter.update(raw_detected)
                 last_frame_detected = detected
 
                 if detected:
@@ -1717,6 +1788,7 @@ def process_uploaded_video_for_live_detection(
                 detection_events.append({
                     "frame_index": frame_index,
                     "phone_detected": detected,
+                    "phone_candidate": raw_detected,
                     "phone_count": phone_count,
                     "confidence": (
                         max(confidence_values) if confidence_values else 0.0
@@ -1731,7 +1803,9 @@ def process_uploaded_video_for_live_detection(
                 last_display_frame = frame.copy()
 
                 if detected:
-                    status_display.error("📱 PHONE DETECTED")
+                    status_display.error("📱 PHONE CONFIRMED · 2 OF LAST 3 SAMPLES")
+                elif raw_detected:
+                    status_display.warning("⚠️ VERIFYING PHONE CANDIDATE")
                 else:
                     status_display.success("✅ NO PHONE DETECTED")
 
@@ -3173,6 +3247,9 @@ else:
         else float("nan")
     )
 
+    render_smart_insights(st, report_df)
+
+    st.divider()
 
     # --------------------------------------------------------
     # TOP ANALYTICS CARDS — PREMIUM KPI DESIGN
@@ -4600,6 +4677,13 @@ sample_interval = st.slider(
 )
 st.session_state.frame_sample_interval = sample_interval
 
+st.info(
+    "AI false-positive guard: a phone candidate must appear in at least "
+    "2 of the last 3 analyzed samples before it is counted as confirmed "
+    "for the main warning and visibility summary. This reduces isolated "
+    "detections but cannot eliminate model errors."
+)
+
 # ============================================================
 # Detection results
 # ============================================================
@@ -4978,6 +5062,26 @@ achievement_col2.metric(
     completed_sessions,
 )
 
+level_info = get_study_level(completed_sessions)
+level_col1, level_col2 = st.columns(2)
+level_col1.metric(
+    "🌟 Current Study Level",
+    f"Level {level_info['level']} · {level_info['name']}",
+)
+if level_info["next_target"] is not None:
+    level_col2.metric(
+        "🎯 Next Milestone",
+        f"{level_info['next_target']} sessions",
+        delta=f"{level_info['remaining']} remaining",
+    )
+else:
+    level_col2.metric("🎯 Next Milestone", "All levels completed")
+st.progress(level_info["progress"])
+st.caption(
+    "Levels are based on completed Pomodoro focus sessions. "
+    "They reward consistency, not academic performance."
+)
+
 st.progress(
     earned_count / total_achievements
     if total_achievements > 0
@@ -5040,6 +5144,8 @@ with about3:
 
 st.markdown("#### Technology stack")
 st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab · WebRTC")
+
+render_project_presentation_kit(st)
 
 st.markdown("#### Important limitations")
 st.warning(
