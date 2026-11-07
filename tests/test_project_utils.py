@@ -153,4 +153,6 @@ class ProjectUtilsTests(unittest.TestCase):
         self.assertEqual(insights["active_days_7d"], 6)
         self.assertEqual(insights["best_video"], "session-5.mp4")
 
+
+if __name__ == "__main__":
     unittest.main()
