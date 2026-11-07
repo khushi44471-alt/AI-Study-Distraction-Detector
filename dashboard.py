@@ -2326,7 +2326,7 @@ else:
     # SESSION VISIBILITY TREND
     # --------------------------------------------------------
 
-       st.markdown("### 📈 Session Visibility Trend")
+    st.markdown("### 📈 Session Visibility Trend")
 
     if (
         "Phone Visible Percentage" in report_df.columns
