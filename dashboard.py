@@ -4554,6 +4554,8 @@ if st.session_state.get("last_analysis") is not None:
             st.image(image, channels="BGR", use_container_width=True, caption=f"Snapshot {idx}")
     else:
         st.info("No detection snapshots saved yet.")
+saved_analysis = st.session_state.get("last_analysis")
+
 st.markdown(
     '<div id="pdf-study-report"></div>',
     unsafe_allow_html=True,
@@ -4561,13 +4563,18 @@ st.markdown(
 
 st.markdown("### 📄 PDF Study Report")
 
-st.download_button(
-    "Download PDF Report",
-    data=create_pdf_report(saved_analysis),
-    file_name="study_session_report.pdf",
-    mime="application/pdf",
-    key="download_pdf_report_main",
-)
+if saved_analysis is not None:
+    st.download_button(
+        "Download PDF Report",
+        data=create_pdf_report(saved_analysis),
+        file_name="study_session_report.pdf",
+        mime="application/pdf",
+        key="download_pdf_report_main",
+    )
+else:
+    st.info(
+        "Run a video analysis first to generate your downloadable PDF report."
+    )
 
 # ============================================================
 # Warning log
