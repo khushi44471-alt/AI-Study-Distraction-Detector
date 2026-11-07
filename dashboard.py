@@ -1862,16 +1862,24 @@ def save_session_record(
     record.to_csv(report_path, index=False)
 
 
+
 # ============================================================
-# Dashboard summary
+# PREMIUM DASHBOARD ANALYTICS
 # ============================================================
 
 st.divider()
-st.subheader("📊 Study Session Dashboard")
-st.caption("Quick overview of completed analysis sessions.")
 
-    
+st.markdown(
+    """
+    <div class="analytics-heading">
+        <h2>📊 Study Analytics Overview</h2>
+        <p>Your study-session statistics and phone visibility insights.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
+# Load saved session records
 def load_report():
     report_path = Path("reports/session_summary.csv")
 
@@ -1882,57 +1890,351 @@ def load_report():
         return pd.read_csv(report_path)
     except (pd.errors.EmptyDataError, pd.errors.ParserError):
         return pd.DataFrame()
+
+
 report_df = load_report()
 
 if report_df.empty:
-    st.info("No completed sessions yet. Upload a study video to see the dashboard results.")
 
-else:
-    total_sessions = len(report_df)
-    total_frames = int(report_df["Frames Processed"].fillna(0).sum())
-    total_detections = int(report_df["Total Phone Detections"].fillna(0).sum())
-    average_visibility = report_df["Phone Visible Percentage"].dropna().mean()
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("Sessions Analyzed", total_sessions)
-    col2.metric("Frames Processed", f"{total_frames:,}")
-    col3.metric("Phone Detections", f"{total_detections:,}")
-    col4.metric(
-        "Average Phone Visibility",
-        f"{average_visibility:.1f}%" if pd.notna(average_visibility) else "N/A"
+    st.info(
+        "No completed sessions yet. Upload and analyze a study video "
+        "to see your analytics here."
     )
 
-    st.subheader("📈 Session Comparison")
+else:
+    # Ensure older report files use the expected column name
+    if (
+        "Video Name" not in report_df.columns
+        and "Video" in report_df.columns
+    ):
+        report_df = report_df.rename(
+            columns={"Video": "Video Name"}
+        )
 
-    if "Video Name" not in report_df.columns and "Video" in report_df.columns:
-        report_df = report_df.rename(columns={"Video": "Video Name"})
+    # Convert numeric columns safely
+    numeric_columns = [
+        "Frames Processed",
+        "Frames With Phone",
+        "Phone Visible Percentage",
+        "Total Phone Detections",
+    ]
 
-    if "Video Name" in report_df.columns and "Phone Visible Percentage" in report_df.columns:
-        chart_df = report_df[["Video Name", "Phone Visible Percentage"]].dropna()
+    for column in numeric_columns:
+        if column in report_df.columns:
+            report_df[column] = pd.to_numeric(
+                report_df[column],
+                errors="coerce",
+            ).fillna(0)
 
-        if not chart_df.empty:
-            chart_df = chart_df.rename(columns={
-                "Video Name": "Study Video",
-                "Phone Visible Percentage": "Phone Visibility (%)"
-            })
-            st.bar_chart(chart_df.set_index("Study Video"))
-        else:
-            st.info("No visibility data yet.")
+    # Calculate dashboard statistics
+    total_sessions = len(report_df)
+
+    total_frames = int(
+        report_df["Frames Processed"].sum()
+    ) if "Frames Processed" in report_df.columns else 0
+
+    total_detections = int(
+        report_df["Total Phone Detections"].sum()
+    ) if "Total Phone Detections" in report_df.columns else 0
+
+    average_visibility = (
+        report_df["Phone Visible Percentage"].mean()
+        if "Phone Visible Percentage" in report_df.columns
+        else float("nan")
+    )
+
+    # --------------------------------------------------------
+    # TOP ANALYTICS CARDS
+    # --------------------------------------------------------
+
+    st.markdown("### 📌 Performance at a Glance")
+
+    metric1, metric2, metric3, metric4 = st.columns(4)
+
+    metric1.metric(
+        "Sessions Analyzed",
+        f"{total_sessions:,}",
+    )
+
+    metric2.metric(
+        "Frames Processed",
+        f"{total_frames:,}",
+    )
+
+    metric3.metric(
+        "Phone Detections",
+        f"{total_detections:,}",
+    )
+
+    metric4.metric(
+        "Average Phone Visibility",
+        f"{average_visibility:.1f}%"
+        if pd.notna(average_visibility)
+        else "N/A",
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # PHONE VISIBILITY DONUT CHART
+    # --------------------------------------------------------
+
+    st.markdown("### 📱 Phone Visibility Distribution")
+
+    if pd.notna(average_visibility):
+
+        phone_visible = max(
+            0.0,
+            min(float(average_visibility), 100.0),
+        )
+
+        visibility_df = pd.DataFrame({
+            "Category": [
+                "Phone Visible",
+                "Phone Not Detected",
+            ],
+            "Percentage": [
+                phone_visible,
+                100.0 - phone_visible,
+            ],
+        })
+
+        chart_col1, chart_col2 = st.columns([1, 1])
+
+        with chart_col1:
+            chart_theme = (
+                "plotly_dark"
+                if is_dark_mode
+                else "plotly_white"
+            )
+
+            donut_fig = px.pie(
+                visibility_df,
+                names="Category",
+                values="Percentage",
+                hole=0.65,
+                color="Category",
+                color_discrete_map={
+                    "Phone Visible": "#8b5cf6",
+                    "Phone Not Detected": "#22c55e",
+                },
+                title="Average Phone Visibility",
+            )
+
+            donut_fig.update_traces(
+                textinfo="percent",
+                textposition="inside",
+                hole=0.65,
+            )
+
+            donut_fig.update_layout(
+                template=chart_theme,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                legend_title_text="",
+                margin=dict(l=10, r=10, t=55, b=10),
+            )
+
+            st.plotly_chart(
+                donut_fig,
+                use_container_width=True,
+            )
+
+        with chart_col2:
+            st.markdown("#### Understanding the result")
+
+            st.metric(
+                "Phone Visible",
+                f"{phone_visible:.1f}%",
+            )
+
+            st.metric(
+                "Phone Not Detected",
+                f"{100.0 - phone_visible:.1f}%",
+            )
+
+            st.caption(
+                "These percentages describe phone visibility "
+                "in analyzed video frames. They do not measure "
+                "or prove a student's attention."
+            )
+
     else:
-        st.info("The report is missing the video name or phone visibility column.")
+        st.info("No phone visibility data is available yet.")
 
-    st.subheader("📋 Session History")
-    st.dataframe(report_df, use_container_width=True)
+    st.divider()
 
-    csv_data = report_df.to_csv(index=False).encode("utf-8")
+    # --------------------------------------------------------
+    # SESSION VISIBILITY TREND
+    # --------------------------------------------------------
+
+    st.markdown("### 📈 Session Visibility Trend")
+
+    if (
+        "Phone Visible Percentage" in report_df.columns
+        and not report_df.empty
+    ):
+        trend_df = report_df.copy()
+
+        if "Video Name" in trend_df.columns:
+            trend_df["Session"] = (
+                trend_df["Video Name"]
+                .fillna("Study Session")
+                .astype(str)
+            )
+        else:
+            trend_df["Session"] = [
+                f"Session {i + 1}"
+                for i in range(len(trend_df))
+            ]
+
+        if "Session Time" in trend_df.columns:
+            trend_df["Session"] = (
+                trend_df["Session"]
+                + " ("
+                + trend_df["Session Time"].fillna("").astype(str)
+                + ")"
+            )
+
+        trend_df["Session Number"] = range(
+            1,
+            len(trend_df) + 1,
+        )
+
+        trend_fig = px.line(
+            trend_df,
+            x="Session Number",
+            y="Phone Visible Percentage",
+            markers=True,
+            hover_name="Session",
+            title="Phone Visibility Across Sessions",
+        )
+
+        trend_fig.update_traces(
+            line=dict(color="#8b5cf6", width=3),
+            marker=dict(size=9),
+        )
+
+        trend_fig.update_layout(
+            template=(
+                "plotly_dark"
+                if is_dark_mode
+                else "plotly_white"
+            ),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis_title="Study Session",
+            yaxis_title="Phone Visibility (%)",
+            yaxis_range=[0, 100],
+            margin=dict(l=10, r=10, t=55, b=10),
+        )
+
+        st.plotly_chart(
+            trend_fig,
+            use_container_width=True,
+        )
+
+    else:
+        st.info("No session trend data is available.")
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # VIDEO COMPARISON
+    # --------------------------------------------------------
+
+    st.markdown("### 🎬 Study Video Comparison")
+
+    if (
+        "Video Name" in report_df.columns
+        and "Phone Visible Percentage" in report_df.columns
+    ):
+        comparison_df = report_df[
+            ["Video Name", "Phone Visible Percentage"]
+        ].copy()
+
+        comparison_df = comparison_df.dropna(
+            subset=["Phone Visible Percentage"]
+        )
+
+        if not comparison_df.empty:
+
+            comparison_df["Video Name"] = (
+                comparison_df["Video Name"]
+                .fillna("Unknown Video")
+                .astype(str)
+            )
+
+            comparison_fig = px.bar(
+                comparison_df,
+                x="Video Name",
+                y="Phone Visible Percentage",
+                color="Phone Visible Percentage",
+                color_continuous_scale=[
+                    "#312e81",
+                    "#7c3aed",
+                    "#c084fc",
+                ],
+                title="Phone Visibility by Study Video",
+            )
+
+            comparison_fig.update_layout(
+                template=(
+                    "plotly_dark"
+                    if is_dark_mode
+                    else "plotly_white"
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis_title="Study Video",
+                yaxis_title="Phone Visibility (%)",
+                yaxis_range=[0, 100],
+                coloraxis_showscale=False,
+                margin=dict(l=10, r=10, t=55, b=10),
+            )
+
+            st.plotly_chart(
+                comparison_fig,
+                use_container_width=True,
+            )
+
+        else:
+            st.info("No video comparison data is available.")
+
+    else:
+        st.info("The report is missing required comparison columns.")
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # SESSION HISTORY AND CSV DOWNLOAD
+    # --------------------------------------------------------
+
+    st.markdown("### 📋 Recent Session History")
+
+    st.dataframe(
+        report_df.tail(10).iloc[::-1],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    csv_data = report_df.to_csv(
+        index=False
+    ).encode("utf-8")
+
     st.download_button(
-        "Download Session Report (CSV)",
+        "⬇️ Download Complete Session Report (CSV)",
         data=csv_data,
         file_name="session_summary.csv",
         mime="text/csv",
         key="download_csv_summary_main",
     )
+
+st.caption(
+    "Class 12 AI Project | Phone visibility is an indicator only, "
+    "not a validated measurement of attention."
+)
+
 
 # ============================================================
 # Warning summary
