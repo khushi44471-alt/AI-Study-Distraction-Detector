@@ -2064,222 +2064,260 @@ else:
 
     st.divider()
 
+   
     # ------------------------------------------------------------
-    # WEEKLY STUDY ACTIVITY CALENDAR
+    # MONTHLY STUDY ACTIVITY CALENDAR
     # ------------------------------------------------------------
-    
+
     st.markdown(
         """
-        <div style="
-            padding: 20px 22px 12px 22px;
-            border-radius: 16px;
-            background: linear-gradient(120deg, #171326, #21143f);
-            border: 1px solid #493477;
-            margin-bottom: 12px;
-        ">
-            <div style="
-                color: #c4b5fd;
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 2px;
-                text-transform: uppercase;
-            ">
+        <div style="margin-bottom:15px;">
+            <div style="font-size:12px;color:#a78bfa;
+                        font-weight:700;letter-spacing:2px;">
                 STUDY CONSISTENCY
             </div>
-            <div style="
-                color: #ffffff;
-                font-size: 23px;
-                font-weight: 750;
-                margin-top: 5px;
-            ">
-                📅 Weekly Activity Calendar
+            <div style="font-size:25px;font-weight:750;
+                        margin-top:5px;">
+                📅 Monthly Activity Calendar
             </div>
-            <div style="
-                color: #c4bddb;
-                font-size: 13px;
-                margin-top: 5px;
-            ">
-                Your recorded study-analysis activity over the last 12 weeks.
+            <div style="font-size:13px;color:gray;">
+                Track your recorded study sessions day by day.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    
+
     if "Date" in report_df.columns:
-    
+
         activity_dates = pd.to_datetime(
             report_df["Date"],
             errors="coerce",
         ).dropna().dt.normalize()
-    
-        if not activity_dates.empty:
-    
-            today = pd.Timestamp.now().normalize()
-    
-            # Start from Monday, 11 weeks before the current week
-            current_week_start = (
-                today - pd.Timedelta(days=today.weekday())
-            )
-    
-            calendar_start = (
-                current_week_start - pd.Timedelta(weeks=11)
-            )
-    
-            weekday_labels = [
-                "Mon", "Tue", "Wed", "Thu",
-                "Fri", "Sat", "Sun"
-            ]
-    
-            week_labels = [
-                (calendar_start + pd.Timedelta(weeks=i)).strftime("%d %b")
-                for i in range(12)
-            ]
-    
-            # Count completed sessions on each date
-            date_counts = activity_dates.dt.date.value_counts().to_dict()
-    
-            # Build 7 rows (weekdays) and 12 columns (weeks)
-            activity_matrix = []
-    
-            for weekday in range(7):
-    
-                row = []
-    
-                for week in range(12):
-    
-                    calendar_day = (
-                        calendar_start
-                        + pd.Timedelta(weeks=week)
-                        + pd.Timedelta(days=weekday)
-                    )
-    
-                    count = date_counts.get(
-                        calendar_day.date(),
-                        0,
-                    )
-    
-                    row.append(count)
-    
-                activity_matrix.append(row)
-    
-            maximum_activity = max(
-                1,
-                max(max(row) for row in activity_matrix),
-            )
-    
-            # Premium purple calendar heatmap
-            activity_fig = px.imshow(
-                activity_matrix,
-                x=week_labels,
-                y=weekday_labels,
-                text_auto=True,
-                aspect="auto",
-                color_continuous_scale=[
-                    "#171326",
-                    "#31205c",
-                    "#5b32a3",
-                    "#8b5cf6",
-                    "#c4b5fd",
-                ],
-                zmin=0,
-                zmax=maximum_activity,
-                labels={
-                    "x": "Week starting",
-                    "y": "Day",
-                    "color": "Sessions",
-                },
-            )
-    
-            activity_fig.update_traces(
-                xgap=6,
-                ygap=6,
-                hovertemplate=(
-                    "Week starting: %{x}<br>"
-                    "Day: %{y}<br>"
-                    "Sessions: %{z}"
-                    "<extra></extra>"
-                ),
-            )
-    
-            activity_fig.update_layout(
-                template=(
-                    "plotly_dark"
-                    if is_dark_mode
-                    else "plotly_white"
-                ),
-                height=290,
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(
-                    color=theme["text"],
-                    size=12,
-                ),
-                coloraxis_showscale=False,
-                margin=dict(
-                    l=35,
-                    r=15,
-                    t=35,
-                    b=35,
-                ),
-                xaxis=dict(
-                    side="top",
-                    title=None,
-                    showgrid=False,
-                    zeroline=False,
-                    tickangle=0,
-                ),
-                yaxis=dict(
-                    title=None,
-                    autorange="reversed",
-                    showgrid=False,
-                    zeroline=False,
-                ),
-            )
-    
-            st.plotly_chart(
-                activity_fig,
-                use_container_width=True,
-            )
-    
-            # Activity summary
-            total_active_days = sum(
-                1
-                for row in activity_matrix
-                for count in row
-                if count > 0
-            )
-    
-            total_calendar_sessions = sum(
-                sum(row) for row in activity_matrix
-            )
-    
-            activity_col1, activity_col2 = st.columns(2)
-    
-            activity_col1.metric(
-                "Active Study Days",
-                total_active_days,
-            )
-    
-            activity_col2.metric(
-                "Sessions in Calendar",
-                total_calendar_sessions,
-            )
-    
-            st.caption(
-                "Each square represents one calendar day. "
-                "Only sessions recorded in your report are counted."
-            )
-    
-        else:
-            st.info("No valid session dates are available yet.")
-    
-    else:
-        st.info(
-            "Your session report does not contain a Date column, "
-            "so the activity calendar cannot be generated."
+
+        today = pd.Timestamp.now().normalize()
+        month_start = today.replace(day=1)
+        next_month = month_start + pd.offsets.MonthBegin(1)
+        days_in_month = (next_month - month_start).days
+        first_weekday = month_start.weekday()
+
+        date_counts = (
+            activity_dates.dt.date.value_counts().to_dict()
         )
-    
+
+        month_name = today.strftime("%B %Y")
+
+        calendar_bg = (
+            "#11141c" if is_dark_mode else "#ffffff"
+        )
+        empty_bg = (
+            "#242033" if is_dark_mode else "#eef2f7"
+        )
+        border_color = (
+            "#302a43" if is_dark_mode else "#dbe2ea"
+        )
+        text_color = theme["text"]
+
+        calendar_cells = []
+
+        # Empty cells before the first day
+        for _ in range(first_weekday):
+            calendar_cells.append(
+                '<div class="month-empty"></div>'
+            )
+
+        # Actual days of the current month
+        for day in range(1, days_in_month + 1):
+
+            current_date = month_start.replace(day=day)
+            session_count = date_counts.get(
+                current_date.date(),
+                0,
+            )
+
+            if session_count == 0:
+                level = 0
+            elif session_count == 1:
+                level = 1
+            elif session_count <= 3:
+                level = 2
+            else:
+                level = 3
+
+            count_label = (
+                f"{session_count} session"
+                if session_count == 1
+                else f"{session_count} sessions"
+            )
+
+            calendar_cells.append(
+                f"""
+                <div class="month-day level-{level}"
+                     title="{current_date.strftime('%d %B %Y')} · {count_label}">
+                    <span class="day-number">{day}</span>
+                    <span class="day-count">
+                        {session_count if session_count else ""}
+                    </span>
+                </div>
+                """
+            )
+
+        # Empty cells after the last day
+        while len(calendar_cells) % 7 != 0:
+            calendar_cells.append(
+                '<div class="month-empty"></div>'
+            )
+
+        calendar_html = f"""
+        <style>
+            .month-calendar {{
+                background: {calendar_bg};
+                border: 1px solid {border_color};
+                border-radius: 18px;
+                padding: 20px;
+                color: {text_color};
+            }}
+
+            .month-title {{
+                font-size: 22px;
+                font-weight: 750;
+                margin-bottom: 20px;
+            }}
+
+            .month-grid {{
+                display: grid;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 8px;
+            }}
+
+            .month-weekday {{
+                text-align: center;
+                color: #a78bfa;
+                font-size: 12px;
+                font-weight: 700;
+                padding-bottom: 10px;
+            }}
+
+            .month-day {{
+                min-height: 65px;
+                border-radius: 10px;
+                padding: 9px 5px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                transition: transform .15s ease;
+                cursor: default;
+            }}
+
+            .month-day:hover {{
+                transform: translateY(-3px);
+                outline: 1px solid #c4b5fd;
+            }}
+
+            .month-empty {{
+                min-height: 65px;
+            }}
+
+            .level-0 {{
+                background: {empty_bg};
+            }}
+
+            .level-1 {{
+                background: #4c1d95;
+                color: white;
+            }}
+
+            .level-2 {{
+                background: #7c3aed;
+                color: white;
+            }}
+
+            .level-3 {{
+                background: #a78bfa;
+                color: #171326;
+            }}
+
+            .day-number {{
+                font-size: 15px;
+                font-weight: 700;
+            }}
+
+            .day-count {{
+                font-size: 10px;
+                margin-top: 4px;
+                opacity: .9;
+            }}
+
+            @media(max-width:600px) {{
+                .month-calendar {{
+                    padding: 10px;
+                }}
+                .month-grid {{
+                    gap: 4px;
+                }}
+                .month-day, .month-empty {{
+                    min-height: 48px;
+                }}
+                .day-number {{
+                    font-size: 12px;
+                }}
+            }}
+        </style>
+
+        <div class="month-calendar">
+            <div class="month-title">📅 {month_name}</div>
+
+            <div class="month-grid">
+                <div class="month-weekday">MON</div>
+                <div class="month-weekday">TUE</div>
+                <div class="month-weekday">WED</div>
+                <div class="month-weekday">THU</div>
+                <div class="month-weekday">FRI</div>
+                <div class="month-weekday">SAT</div>
+                <div class="month-weekday">SUN</div>
+
+                {''.join(calendar_cells)}
+            </div>
+        </div>
+        """
+
+        st.markdown(
+            calendar_html,
+            unsafe_allow_html=True,
+        )
+
+        # Monthly statistics
+        month_dates = activity_dates[
+            (activity_dates >= month_start)
+            & (activity_dates < next_month)
+        ]
+
+        active_days = month_dates.dt.date.nunique()
+        monthly_sessions = len(month_dates)
+
+        st.markdown("")
+
+        calendar_col1, calendar_col2 = st.columns(2)
+
+        calendar_col1.metric(
+            "Active Study Days",
+            active_days,
+        )
+
+        calendar_col2.metric(
+            "Sessions This Month",
+            monthly_sessions,
+        )
+
+        st.caption(
+            "Purple intensity represents the number of recorded "
+            "sessions. It does not measure attention or productivity."
+        )
+
+    else:
+        st.info("Your session report does not contain a Date column.")
+
     st.divider()
 
    
