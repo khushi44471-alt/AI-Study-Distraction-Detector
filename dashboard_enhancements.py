@@ -110,9 +110,12 @@ def build_session_insights(history: pd.DataFrame | None) -> dict[str, Any]:
 
     values = data["_visibility"].astype(float)
     recent = values.tail(5)
-    previous = values.iloc[max(0, len(values) - 10):max(0, len(values) - 5)]
+    previous = (
+        values.iloc[len(values) - 10:len(values) - 5]
+        if len(values) >= 10 else values.iloc[0:0]
+    )
     recent_average = float(recent.mean())
-    previous_average = float(previous.mean()) if len(previous) else None
+    previous_average = float(previous.mean()) if len(previous) == 5 else None
     change = recent_average - previous_average if previous_average is not None else None
 
     best_index = values.idxmin()
@@ -254,7 +257,7 @@ def render_smart_insights(st: Any, history: pd.DataFrame) -> None:
 
     if change is None:
         st.info(
-            "Record at least six sessions to compare the latest five "
+            "Record at least ten sessions to compare the latest five "
             "with the five before them."
         )
     elif change <= -2:
