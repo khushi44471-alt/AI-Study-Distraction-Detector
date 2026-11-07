@@ -1014,27 +1014,27 @@ def process_uploaded_video_for_live_detection(
                         "is_phone": is_phone,
                     })
 
-           analyzed_frames += 1
-detected = phone_count > 0
+                     analyzed_frames += 1
+            detected = phone_count > 0
 
-if detected:
-    frames_with_phone += 1
-    consecutive_phone_frames += 1
-    status_display.error("📱 PHONE DETECTED")
+            if detected:
+                frames_with_phone += 1
+                consecutive_phone_frames += 1
+                status_display.error("📱 PHONE DETECTED")
 
-    current_time = time.monotonic()
+                current_time = time.monotonic()
 
-    if (
-        smart_alerts_enabled
-        and consecutive_phone_frames >= alert_threshold
-        and current_time - last_alert_time >= alert_cooldown
-    ):
-        show_phone_alert()
-        last_alert_time = current_time
+                if (
+                    smart_alerts_enabled
+                    and consecutive_phone_frames >= alert_threshold
+                    and current_time - last_alert_time >= alert_cooldown
+                ):
+                    show_phone_alert()
+                    last_alert_time = current_time
 
-else:
-    consecutive_phone_frames = 0
-    status_display.success("✅ NO PHONE DETECTED")
+            else:
+                consecutive_phone_frames = 0
+                status_display.success("✅ NO PHONE DETECTED")
 
             detection_flags.append(detected)
 
