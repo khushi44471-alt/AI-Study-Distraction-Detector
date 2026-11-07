@@ -1538,7 +1538,7 @@ def process_uploaded_video_for_live_detection(
         }
 
      
-        except Exception as exc:
+            except Exception as exc:
         import traceback
         st.error(f"Live processing failed: {exc}")
         st.code(traceback.format_exc())
