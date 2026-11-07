@@ -2473,6 +2473,214 @@ else:
 
     
     # --------------------------------------------------------
+    # STUDY PROGRESS REPORT
+    # --------------------------------------------------------
+
+    st.markdown("### 📊 Study Progress Report")
+    st.caption(
+        "Track study-session statistics across weeks and months."
+    )
+
+    if not report_df.empty and "Date" in report_df.columns:
+
+        progress_df = report_df.copy()
+
+        progress_df["_Date"] = pd.to_datetime(
+            progress_df["Date"],
+            errors="coerce",
+        )
+
+        progress_df = progress_df.dropna(subset=["_Date"])
+
+        if not progress_df.empty:
+
+            progress_df["_Visibility"] = pd.to_numeric(
+                progress_df.get(
+                    "Phone Visible Percentage",
+                    pd.Series(index=progress_df.index, dtype=float),
+                ),
+                errors="coerce",
+            )
+
+            progress_df["_Focus"] = pd.to_numeric(
+                progress_df.get(
+                    "Focus Score",
+                    pd.Series(index=progress_df.index, dtype=float),
+                ),
+                errors="coerce",
+            )
+
+            progress_df["_Detections"] = pd.to_numeric(
+                progress_df.get(
+                    "Total Phone Detections",
+                    pd.Series(index=progress_df.index, dtype=float),
+                ),
+                errors="coerce",
+            ).fillna(0)
+
+            report_view = st.radio(
+                "Choose Progress Report",
+                ["Weekly", "Monthly"],
+                horizontal=True,
+                key="study_progress_view",
+            )
+
+            if report_view == "Weekly":
+                progress_df["_Period"] = (
+                    progress_df["_Date"]
+                    .dt.to_period("W")
+                    .dt.start_time
+                )
+            else:
+                progress_df["_Period"] = (
+                    progress_df["_Date"]
+                    .dt.to_period("M")
+                    .dt.start_time
+                )
+
+            progress_summary = (
+                progress_df.groupby("_Period")
+                .agg(
+                    Sessions=("Date", "count"),
+                    Average_Visibility=("_Visibility", "mean"),
+                    Average_Focus=("_Focus", "mean"),
+                    Total_Detections=("_Detections", "sum"),
+                )
+                .reset_index()
+                .sort_values("_Period")
+            )
+
+            latest_period = progress_summary.iloc[-1]
+
+            st.markdown(
+                f"#### 📅 Latest {report_view} Summary"
+            )
+
+            progress_col1, progress_col2, progress_col3, progress_col4 = (
+                st.columns(4)
+            )
+
+            progress_col1.metric(
+                "Sessions Completed",
+                int(latest_period["Sessions"]),
+            )
+
+            progress_col2.metric(
+                "Average Phone Visibility",
+                (
+                    f'{latest_period["Average_Visibility"]:.1f}%'
+                    if pd.notna(latest_period["Average_Visibility"])
+                    else "N/A"
+                ),
+            )
+
+            progress_col3.metric(
+                "Average Focus Score",
+                (
+                    f'{latest_period["Average_Focus"]:.1f}%'
+                    if pd.notna(latest_period["Average_Focus"])
+                    else "N/A"
+                ),
+            )
+
+            progress_col4.metric(
+                "Phone Detections",
+                int(latest_period["Total_Detections"]),
+            )
+
+            progress_summary["Period"] = (
+                progress_summary["_Period"].dt.strftime(
+                    "%d %b %Y"
+                    if report_view == "Weekly"
+                    else "%b %Y"
+                )
+            )
+
+            st.markdown("#### 📈 Progress Over Time")
+
+            chart_data = progress_summary.melt(
+                id_vars=["Period"],
+                value_vars=[
+                    "Average_Visibility",
+                    "Average_Focus",
+                ],
+                var_name="Metric",
+                value_name="Percentage",
+            )
+
+            chart_data["Metric"] = chart_data["Metric"].map({
+                "Average_Visibility": "Phone Visibility",
+                "Average_Focus": "Focus Score",
+            })
+
+            chart_data = chart_data.dropna(
+                subset=["Percentage"]
+            )
+
+            if not chart_data.empty:
+
+                progress_fig = px.line(
+                    chart_data,
+                    x="Period",
+                    y="Percentage",
+                    color="Metric",
+                    markers=True,
+                    title=f"{report_view} Study Progress",
+                )
+
+                progress_fig.update_layout(
+                    template=(
+                        "plotly_dark"
+                        if is_dark_mode
+                        else "plotly_white"
+                    ),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    yaxis_title="Percentage (%)",
+                    yaxis_range=[0, 100],
+                    xaxis_title=report_view,
+                    margin=dict(l=10, r=10, t=55, b=10),
+                )
+
+                st.plotly_chart(
+                    progress_fig,
+                    use_container_width=True,
+                )
+
+            st.markdown("#### 📋 Progress History")
+
+            progress_display = progress_summary[
+                [
+                    "Period",
+                    "Sessions",
+                    "Average_Visibility",
+                    "Average_Focus",
+                    "Total_Detections",
+                ]
+            ].rename(columns={
+                "Average_Visibility": "Average Phone Visibility (%)",
+                "Average_Focus": "Average Focus Score (%)",
+                "Total_Detections": "Total Phone Detections",
+            })
+
+            st.dataframe(
+                progress_display,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        else:
+            st.info("No valid session dates are available.")
+
+    else:
+        st.info(
+            "Complete at least one study session to generate "
+            "your progress report."
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
     # SESSION HISTORY AND ADVANCED FILTERS
     # --------------------------------------------------------
 
