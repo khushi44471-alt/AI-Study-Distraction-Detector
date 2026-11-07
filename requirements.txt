@@ -1,11 +1,9 @@
-
-streamlit
+streamlit>=1.37.0
 ultralytics
 opencv-python-headless
 pandas
 numpy
 matplotlib
 reportlab
-pyttsx3
 plotly
 streamlit-webrtc

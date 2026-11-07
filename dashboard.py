@@ -30,6 +30,19 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
+import av
+
+from project_utils import (
+    append_session_record,
+    build_session_record,
+    calculate_study_streaks,
+    load_integer_setting,
+    load_session_history,
+    normalize_warning_entries,
+    safe_float,
+    save_integer_setting,
+    validate_analysis_result,
+)
 
 
 # ============================================================
@@ -690,7 +703,8 @@ if "achievement_message" not in st.session_state:
 # ACHIEVEMENT STORAGE
 # ============================================================
 
-ACHIEVEMENT_FILE = Path("reports/achievements.json")
+ACHIEVEMENT_FILE = REPORT_DIR / "achievements.json"
+STUDY_STATS_FILE = REPORT_DIR / "study_stats.json"
 
 
 def load_achievements():
@@ -757,6 +771,39 @@ ACHIEVEMENT_RULES = [
         "target": 25,
     },
 ]
+
+def load_completed_focus_count():
+    """Restore the timer total without contradicting previously unlocked awards."""
+    saved_count = load_integer_setting(
+        STUDY_STATS_FILE,
+        "completed_focus_sessions",
+        default=0,
+    )
+    unlocked_ids = set(st.session_state.get("unlocked_achievements", []))
+    achievement_minimum = max(
+        (
+            achievement["target"]
+            for achievement in ACHIEVEMENT_RULES
+            if achievement["id"] in unlocked_ids
+        ),
+        default=0,
+    )
+    restored_count = max(saved_count, achievement_minimum)
+
+    if restored_count > saved_count:
+        try:
+            save_integer_setting(
+                STUDY_STATS_FILE,
+                "completed_focus_sessions",
+                restored_count,
+            )
+        except (OSError, ValueError) as error:
+            st.warning(
+                "The previous focus-session total was restored for this "
+                f"visit but could not be saved: {error}"
+            )
+
+    return restored_count
 
 
 def check_achievements():
@@ -2001,7 +2048,7 @@ def analyze_video(uploaded_file):
                 pass
 
                 
-def save_session_record(
+def save_session_record_legacy(
     video_name,
     resolution,
     frames_processed,
@@ -2009,29 +2056,15 @@ def save_session_record(
     percentage,
     detections
 ):
-    report_path = Path("reports/session_summary.csv")
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-
-    record = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d"),
-        "Session Time": datetime.now().strftime("%H:%M:%S"),
-        "Video Name": video_name,
-        "Resolution": resolution,
-        "Frames Processed": frames_processed,
-        "Frames With Phone": frames_with_phone,
-        "Phone Visible Percentage": percentage,
-        "Total Phone Detections": detections
-    }])
-
-    if report_path.exists():
-        try:
-            old_records = pd.read_csv(report_path)
-            record = pd.concat([old_records, record], ignore_index=True)
-        except (pd.errors.EmptyDataError, pd.errors.ParserError):
-            pass
-
-    record.to_csv(report_path, index=False)
-
+    """Compatibility wrapper for the earlier six-argument save function."""
+    return save_session_record(
+        video_name,
+        resolution,
+        frames_processed,
+        frames_with_phone,
+        percentage,
+        detections,
+    )
 
 
 def create_pdf_report(analysis):
@@ -2303,41 +2336,28 @@ def create_pdf_report(analysis):
     ))
 
    
-    warnings = analysis.get("warnings", [])
+    warnings = normalize_warning_entries(
+        analysis.get("warnings", [])
+    )
 
     if warnings:
         for warning in warnings:
+            warning_text = (
+                f"• {escape(warning['message'])}"
+            )
 
-            if isinstance(warning, dict):
-                warning_message = warning.get(
-                    "message",
-                    "Detection warning recorded",
-                )
-                warning_time = warning.get("time", "")
-
-                warning_text = (
-                    f"• {escape(str(warning_message))}"
-                )
-
-                if warning_time:
-                    warning_text += (
-                        f" <font color='#64748B'>"
-                        f"({escape(str(warning_time))})"
-                        f"</font>"
-                    )
-
-            else:
-                warning_text = (
-                    f"• {escape(str(warning))}"
+            if warning["time"]:
+                warning_text += (
+                    f" <font color='#64748B'>"
+                    f"({escape(warning['time'])})"
+                    f"</font>"
                 )
 
             story.append(Paragraph(
                 warning_text,
                 styles["BodyText"],
             ))
-
             story.append(Spacer(1, 4))
-
     else:
         story.append(Paragraph(
             "No detection warnings were recorded.",
@@ -2810,6 +2830,9 @@ if uploaded_video_analysis is not None:
 
                 show_phone_alert(preview=False)
 
+            # Keep the completed analysis visible even if report saving fails.
+            st.session_state["last_analysis"] = analysis_result
+
             try:
                 save_session_record(
                     analysis_result["video_name"],
@@ -2819,8 +2842,6 @@ if uploaded_video_analysis is not None:
                     analysis_result["percentage"],
                     analysis_result["detections"],
                 )
-
-                st.session_state["last_analysis"] = analysis_result
 
                 st.success(
                     "AI video analysis completed and saved to the report."
@@ -2879,31 +2900,41 @@ def save_session_record(
     frames_with_phone,
     percentage,
     detections,
-    focus_score
+    focus_score=None,
 ):
-    report_path = Path("reports/session_summary.csv")
-    report_path.parent.mkdir(parents=True, exist_ok=True)
+    """Validate and save a session in the shared, backwards-compatible schema."""
+    report_path = REPORT_FILE
 
-    record = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d"),
-        "Session Time": datetime.now().strftime("%H:%M:%S"),
-        "Video Name": video_name,
-        "Resolution": resolution,
-        "Frames Processed": frames_processed,
-        "Frames With Phone": frames_with_phone,
-        "Phone Visible Percentage": percentage,
-        "Total Phone Detections": detections,
-        "Focus Score": focus_score
-    }])
+    analysis_for_validation = {
+        "video_name": video_name,
+        "resolution": resolution,
+        "frames_processed": frames_processed,
+        "frames_with_phone": frames_with_phone,
+        "percentage": percentage,
+        "detections": detections,
+    }
+    if focus_score is not None:
+        analysis_for_validation["focus_score"] = focus_score
 
-    if report_path.exists():
-        try:
-            old_records = pd.read_csv(report_path)
-            record = pd.concat([old_records, record], ignore_index=True)
-        except (pd.errors.EmptyDataError, pd.errors.ParserError):
-            pass
+    validation_errors = validate_analysis_result(analysis_for_validation)
+    if validation_errors:
+        raise ValueError(
+            "Session results were not saved: "
+            + "; ".join(validation_errors)
+        )
 
-    record.to_csv(report_path, index=False)
+    record = build_session_record(
+        video_name=video_name,
+        resolution=resolution,
+        frames_processed=frames_processed,
+        frames_with_phone=frames_with_phone,
+        percentage=percentage,
+        detections=detections,
+        focus_score=focus_score,
+        timestamp=datetime.now(),
+    )
+
+    append_session_record(report_path, record)
 
 
 
@@ -2931,14 +2962,15 @@ st.markdown(
 
 # Load saved session records
 def load_report():
-    report_path = Path("reports/session_summary.csv")
-
-    if not report_path.exists():
-        return pd.DataFrame()
+    report_path = REPORT_FILE
 
     try:
-        return pd.read_csv(report_path)
-    except (pd.errors.EmptyDataError, pd.errors.ParserError):
+        return load_session_history(report_path)
+    except (OSError, pd.errors.ParserError) as error:
+        st.warning(
+            "The saved session report could not be read. "
+            f"Please download a backup and check the CSV file. Details: {error}"
+        )
         return pd.DataFrame()
 
 
@@ -3454,51 +3486,18 @@ else:
         )
 
         # Weekly activity and study streak statistics
-
         today = pd.Timestamp.now().normalize()
 
         past_dates = activity_dates[
             activity_dates <= today
         ]
 
-        unique_study_dates = sorted(
-            set(past_dates.dt.date)
+        streak_statistics = calculate_study_streaks(
+            past_dates.tolist(),
+            today=today.date(),
         )
-
-        # Calculate longest study streak
-        longest_streak = 0
-        current_streak_count = 0
-        previous_date = None
-
-        for study_date in unique_study_dates:
-
-            if (
-                previous_date is not None
-                and (study_date - previous_date).days == 1
-            ):
-                current_streak_count += 1
-            else:
-                current_streak_count = 1
-
-            longest_streak = max(
-                longest_streak,
-                current_streak_count,
-            )
-
-            previous_date = study_date
-
-        # Calculate current streak
-        current_streak = 0
-
-        if unique_study_dates:
-            last_study_date = unique_study_dates[-1]
-
-            if (today.date() - last_study_date).days <= 1:
-                check_date = last_study_date
-
-                while check_date in set(unique_study_dates):
-                    current_streak += 1
-                    check_date -= pd.Timedelta(days=1)
+        current_streak = streak_statistics["current"]
+        longest_streak = streak_statistics["longest"]
 
         # Calculate this week's activity
         week_start = today - pd.Timedelta(days=today.weekday())
@@ -4609,7 +4608,11 @@ def render_study_timer():
     )
 
     st.session_state.setdefault("study_timer_mode", "Focus")
-    st.session_state.setdefault("completed_focus_sessions", 0)
+
+    if "completed_focus_sessions" not in st.session_state:
+        st.session_state.completed_focus_sessions = (
+            load_completed_focus_count()
+        )
 
     mode_options = ["Focus", "Short Break", "Long Break"]
 
@@ -4687,6 +4690,19 @@ def render_study_timer():
 
         if st.session_state.study_timer_mode == "Focus":
             st.session_state.completed_focus_sessions += 1
+
+            try:
+                save_integer_setting(
+                    STUDY_STATS_FILE,
+                    "completed_focus_sessions",
+                    st.session_state.completed_focus_sessions,
+                )
+            except (OSError, ValueError) as error:
+                st.warning(
+                    "The completed-session count could not be saved: "
+                    f"{error}"
+                )
+
             check_achievements()
 
     elapsed_minutes = int(elapsed_seconds) // 60
