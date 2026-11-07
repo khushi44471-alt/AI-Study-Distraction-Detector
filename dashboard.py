@@ -4560,13 +4560,14 @@ st.markdown(
 )
 
 st.markdown("### 📄 PDF Study Report")
-    st.download_button(
-        "Download PDF Report",
-        data=create_pdf_report(saved_analysis),
-        file_name="study_session_report.pdf",
-        mime="application/pdf",
-        key="download_pdf_report_main",
-    )
+
+st.download_button(
+    "Download PDF Report",
+    data=create_pdf_report(saved_analysis),
+    file_name="study_session_report.pdf",
+    mime="application/pdf",
+    key="download_pdf_report_main",
+)
 
 # ============================================================
 # Warning log
