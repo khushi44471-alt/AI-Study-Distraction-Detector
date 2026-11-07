@@ -677,6 +677,111 @@ if "last_live_alert_key" not in st.session_state:
     st.session_state.last_live_alert_key = None
 
 # ============================================================
+# ACHIEVEMENT SYSTEM — SESSION STATE
+# ============================================================
+
+if "unlocked_achievements" not in st.session_state:
+    st.session_state.unlocked_achievements = []
+
+if "achievement_message" not in st.session_state:
+    st.session_state.achievement_message = ""
+
+# ============================================================
+# ACHIEVEMENT STORAGE
+# ============================================================
+
+ACHIEVEMENT_FILE = Path("reports/achievements.json")
+
+
+def load_achievements():
+    if not ACHIEVEMENT_FILE.exists():
+        return []
+
+    try:
+        with open(ACHIEVEMENT_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        if isinstance(data, list):
+            return data
+
+        return []
+
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def save_achievements(achievements):
+    ACHIEVEMENT_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with open(ACHIEVEMENT_FILE, "w", encoding="utf-8") as file:
+        json.dump(achievements, file, indent=4)
+
+
+if not st.session_state.unlocked_achievements:
+    st.session_state.unlocked_achievements = load_achievements()
+
+# ============================================================
+# ACHIEVEMENT DEFINITIONS
+# ============================================================
+
+ACHIEVEMENT_RULES = [
+    {
+        "id": "first_step",
+        "name": "First Step",
+        "description": "Complete your first focus session.",
+        "icon": "🌱",
+        "target": 1,
+    },
+    {
+        "id": "consistency",
+        "name": "Consistency",
+        "description": "Complete 5 focus sessions.",
+        "icon": "🔥",
+        "target": 5,
+    },
+    {
+        "id": "study_champion",
+        "name": "Study Champion",
+        "description": "Complete 10 focus sessions.",
+        "icon": "🏆",
+        "target": 10,
+    },
+    {
+        "id": "focus_master",
+        "name": "Focus Master",
+        "description": "Complete 25 focus sessions.",
+        "icon": "💎",
+        "target": 25,
+    },
+]
+
+
+def check_achievements():
+    completed = st.session_state.completed_focus_sessions
+    unlocked = st.session_state.unlocked_achievements
+
+    newly_unlocked = []
+
+    for achievement in ACHIEVEMENT_RULES:
+        if (
+            completed >= achievement["target"]
+            and achievement["id"] not in unlocked
+        ):
+            unlocked.append(achievement["id"])
+            newly_unlocked.append(achievement)
+
+    if newly_unlocked:
+        st.session_state.unlocked_achievements = unlocked
+        save_achievements(unlocked)
+
+        st.session_state.achievement_message = (
+            newly_unlocked[-1]["name"]
+        )
+
+# ============================================================
 # Utility functions
 # ============================================================
 
@@ -4152,6 +4257,7 @@ def render_study_timer():
 
         if st.session_state.study_timer_mode == "Focus":
             st.session_state.completed_focus_sessions += 1
+            check_achievements()
 
     elapsed_minutes = int(elapsed_seconds) // 60
     elapsed_remainder = int(elapsed_seconds) % 60
@@ -4249,6 +4355,68 @@ def render_study_timer():
 
 
 render_study_timer()
+
+# ============================================================
+# ACHIEVEMENT CENTRE
+# ============================================================
+
+st.divider()
+st.subheader("🏆 Achievement Centre")
+st.caption(
+    "Celebrate your study milestones and track your progress."
+)
+
+completed_sessions = st.session_state.completed_focus_sessions
+unlocked_ids = st.session_state.unlocked_achievements
+
+earned_count = len(unlocked_ids)
+total_achievements = len(ACHIEVEMENT_RULES)
+
+achievement_col1, achievement_col2 = st.columns(2)
+
+achievement_col1.metric(
+    "🏅 Achievements Unlocked",
+    f"{earned_count}/{total_achievements}",
+)
+
+achievement_col2.metric(
+    "📚 Completed Focus Sessions",
+    completed_sessions,
+)
+
+st.progress(
+    earned_count / total_achievements
+    if total_achievements > 0
+    else 0
+)
+
+st.markdown("#### Your Achievements")
+
+achievement_columns = st.columns(2)
+
+for index, achievement in enumerate(ACHIEVEMENT_RULES):
+
+    is_unlocked = achievement["id"] in unlocked_ids
+
+    with achievement_columns[index % 2]:
+
+        if is_unlocked:
+            st.success(
+                f'{achievement["icon"]} **{achievement["name"]}**\n\n'
+                f'{achievement["description"]}\n\n'
+                "UNLOCKED"
+            )
+        else:
+            remaining = max(
+                0,
+                achievement["target"] - completed_sessions,
+            )
+
+            st.info(
+                f'🔒 **{achievement["name"]}**\n\n'
+                f'{achievement["description"]}\n\n'
+                f'{remaining} more focus session(s) to unlock'
+            )
 
 
 # ============================================================
