@@ -2769,6 +2769,55 @@ st.markdown(
 )
 
 st.divider()
+# ============================================================
+# Session report saving function
+# ============================================================
+
+
+def save_session_record(
+    video_name,
+    resolution,
+    frames_processed,
+    frames_with_phone,
+    percentage,
+    detections,
+    focus_score=None,
+):
+    """Validate and save a session in the shared, backwards-compatible schema."""
+    report_path = REPORT_FILE
+
+    analysis_for_validation = {
+        "video_name": video_name,
+        "resolution": resolution,
+        "frames_processed": frames_processed,
+        "frames_with_phone": frames_with_phone,
+        "percentage": percentage,
+        "detections": detections,
+    }
+    if focus_score is not None:
+        analysis_for_validation["focus_score"] = focus_score
+
+    validation_errors = validate_analysis_result(analysis_for_validation)
+    if validation_errors:
+        raise ValueError(
+            "Session results were not saved: "
+            + "; ".join(validation_errors)
+        )
+
+    record = build_session_record(
+        video_name=video_name,
+        resolution=resolution,
+        frames_processed=frames_processed,
+        frames_with_phone=frames_with_phone,
+        percentage=percentage,
+        detections=detections,
+        focus_score=focus_score,
+        timestamp=datetime.now(),
+    )
+
+    append_session_record(report_path, record)
+
+
 st.subheader("🎬 AI Video Analysis")
 st.caption(
     "Upload a study video, run the AI detector, "
@@ -2886,57 +2935,6 @@ if uploaded_video_analysis is not None:
                             "detected object bounding boxes"
                         ),
                     )
-
-
-# ============================================================
-# Session report saving function
-# ============================================================
-
-
-def save_session_record(
-    video_name,
-    resolution,
-    frames_processed,
-    frames_with_phone,
-    percentage,
-    detections,
-    focus_score=None,
-):
-    """Validate and save a session in the shared, backwards-compatible schema."""
-    report_path = REPORT_FILE
-
-    analysis_for_validation = {
-        "video_name": video_name,
-        "resolution": resolution,
-        "frames_processed": frames_processed,
-        "frames_with_phone": frames_with_phone,
-        "percentage": percentage,
-        "detections": detections,
-    }
-    if focus_score is not None:
-        analysis_for_validation["focus_score"] = focus_score
-
-    validation_errors = validate_analysis_result(analysis_for_validation)
-    if validation_errors:
-        raise ValueError(
-            "Session results were not saved: "
-            + "; ".join(validation_errors)
-        )
-
-    record = build_session_record(
-        video_name=video_name,
-        resolution=resolution,
-        frames_processed=frames_processed,
-        frames_with_phone=frames_with_phone,
-        percentage=percentage,
-        detections=detections,
-        focus_score=focus_score,
-        timestamp=datetime.now(),
-    )
-
-    append_session_record(report_path, record)
-
-
 
 
 # ============================================================
