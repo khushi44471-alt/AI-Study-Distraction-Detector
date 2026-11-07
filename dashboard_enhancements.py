@@ -1,4 +1,4 @@
-"""Polished analytics, temporal detection checks, levels, and demo support."""
+"""Dashboard styling, analytics helpers, study levels, and temporal detection checks."""
 from __future__ import annotations
 
 from collections import deque
@@ -278,82 +278,4 @@ def render_smart_insights(st: Any, history: pd.DataFrame) -> None:
         f'({insights["best_visibility"]:.1f}%). '
         f'Median across {insights["session_count"]} valid sessions: '
         f'{insights["median_visibility"]:.1f}%.'
-    )
-
-
-def build_demo_brief() -> str:
-    """Create a portable, evaluation-friendly project demonstration brief."""
-    return """AI STUDY DISTRACTION DETECTOR — PROJECT DEMONSTRATION BRIEF
-
-PROJECT OBJECTIVE
-Identify visible mobile phones in study-session videos and summarize phone-visibility patterns.
-
-DEMO ORDER
-1. Introduce the problem and explain the project objective.
-2. Open Live Webcam Detection or upload a recorded study video.
-3. Show the YOLO bounding box and the phone-candidate confirmation step.
-4. Open Study Analytics to review session history, trends, and comparisons.
-5. Show the Pomodoro timer, study levels, achievement badges, and PDF report.
-6. Close with the project's limitations and responsible-use statement.
-
-HOW THE SYSTEM WORKS
-OpenCV reads video frames. A YOLO object-detection model identifies objects and their bounding boxes. A temporal confirmation filter requires a phone candidate in at least two of the last three samples before it is counted as confirmed for the primary warning/visibility summary. Streamlit presents the results, while Pandas and Plotly support history and analytics.
-
-HOW TO EXPLAIN THE RESULTS
-Phone visibility percentage describes the share of analyzed sample frames in which a phone was confirmed. The focus score is a simple inverse of this percentage for this prototype. It is not a scientifically validated attention or productivity score.
-
-KEY LIMITATIONS
-The detector can miss phones or classify other objects incorrectly. Temporal confirmation reduces isolated frame-level false positives but does not eliminate model errors. Results depend on lighting, camera angle, resolution, distance, and the selected confidence threshold. The system does not identify a person's intention or prove that they were distracted.
-
-POSSIBLE VIVA QUESTIONS
-Q: What is object detection?
-A: It identifies object classes and locates them using bounding boxes.
-
-Q: Why is YOLO used?
-A: YOLO performs object detection in a single model pipeline and is suitable for near-real-time demonstrations.
-
-Q: Why use frame sampling?
-A: It reduces the number of frames sent for inference and helps balance processing time and coverage.
-
-Q: How are isolated false positives reduced?
-A: A temporal filter asks for a phone candidate in at least two of the last three sampled frames before confirming it for the main summary.
-
-Q: Does a detected phone prove distraction?
-A: No. The system reports phone visibility only; it cannot determine attention, intention, or how the phone is being used.
-
-TECHNOLOGY
-Python, Streamlit, YOLO, OpenCV, Pandas, Plotly, WebRTC, and ReportLab.
-"""
-
-
-def render_project_presentation_kit(st: Any) -> None:
-    """Add a short live demo flow, viva preparation, and a downloadable brief."""
-    st.markdown("### 🎤 Project Presentation & Viva Kit")
-    st.caption(
-        "A built-in guide for demonstrating the prototype and explaining its limits."
-    )
-    with st.expander("🧭 Recommended demonstration order", expanded=False):
-        st.markdown(
-            "1. **Problem and objective:** explain why visible-phone tracking is useful as a study-support prototype.\n"
-            "2. **Live or recorded demo:** show a camera stream or upload a prepared study video.\n"
-            "3. **Detection explanation:** point out YOLO boxes and the 2-of-3 sample confirmation.\n"
-            "4. **Results:** show phone-visibility metrics, trends, comparisons, and the PDF report.\n"
-            "5. **Responsible-use note:** explain that phone visibility does not prove distraction."
-        )
-    with st.expander("🧪 Common viva questions", expanded=False):
-        questions = [
-            ("What does the project detect?", "Visible mobile phones in sampled study-session video frames."),
-            ("What is YOLO?", "A real-time object-detection model that predicts object classes and bounding boxes."),
-            ("Why is temporal confirmation used?", "To reduce warnings caused by a phone-like detection appearing in only one sampled frame."),
-            ("What can affect accuracy?", "Lighting, camera angle, resolution, distance, occlusion, and the confidence threshold."),
-            ("Does the focus score measure attention?", "No. It is a simple project indicator derived from phone visibility."),
-        ]
-        for question, answer in questions:
-            st.markdown(f"**Q. {question}**\n\n{answer}")
-    st.download_button(
-        "⬇️ Download Project Demo & Viva Brief",
-        data=build_demo_brief().encode("utf-8"),
-        file_name="AI_Study_Distraction_Detector_Demo_Brief.txt",
-        mime="text/plain",
-        key="download_project_demo_brief",
     )
