@@ -2,20 +2,23 @@
 
 A Class 12 Artificial Intelligence project that uses computer vision to identify visible mobile phones in study-session videos and summarize phone-visibility patterns.
 
-> **Important:** A detected phone does not prove that a student is distracted. The dashboard's focus indicator is a simple project metric derived from phone visibility; it is not a scientifically validated measure of attention.
+> **Important:** A detected phone does not prove that a student is distracted. The dashboard's focus indicator is a simple project metric derived from confirmed phone visibility; it is not a scientifically validated measure of attention. The temporal filter reduces isolated frame-level detections but cannot eliminate misclassification.
 
 ## Features
 
 - Live webcam phone detection using YOLO and Streamlit WebRTC.
 - Uploaded-video analysis with annotated frame previews and an exported processed video.
 - Configurable detection confidence, sampling interval, alert threshold, cooldown, and warning sound.
-- Session history, comparison charts, study calendar, weekly/monthly progress, and streak statistics.
-- Pomodoro timer, achievement centre, warning log, and downloadable PDF analysis report.
+- Session history, comparison charts, study calendar, weekly/monthly progress, recent-versus-previous insights, and visibility trends.
+- Temporal 2-of-3 sample confirmation to reduce isolated phone false positives in live and uploaded-video detection.
+- Pomodoro timer, eight achievement milestones, study levels, warning log, and downloadable PDF analysis report.
+- Built-in presentation flow, common viva answers, and a downloadable project demonstration brief.
 - Desktop video-processing entry point in main.py.
 
 ## Project structure
 
 - dashboard.py: Streamlit interface, live detection, analytics, timer, and PDF report.
+- dashboard_enhancements.py: temporal detection filter, analytics helpers, study levels, and presentation guide.
 - main.py: optional desktop video-processing runner.
 - project_utils.py: shared validation, history normalization, and safe report persistence.
 - tests/: automated tests for shared utility functions.
