@@ -1275,7 +1275,7 @@ volume_level = alert_volume / 100.0
 custom_audio = None
 custom_audio_type = None
 
-if alert_choice == "5. Custom MP3/WAV File":
+if alert_choice == "2. Custom MP3/WAV File":
     uploaded_audio = st.file_uploader(
         "Upload your warning sound",
         type=["mp3", "wav"],
