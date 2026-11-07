@@ -1014,7 +1014,7 @@ def process_uploaded_video_for_live_detection(
                         "is_phone": is_phone,
                     })
 
-                     analyzed_frames += 1
+            analyzed_frames += 1
             detected = phone_count > 0
 
             if detected:
