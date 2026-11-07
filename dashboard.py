@@ -2797,6 +2797,9 @@ if uploaded_video_analysis is not None:
 
                 show_phone_alert(preview=False)
 
+            # Keep the completed analysis visible even if report saving fails.
+            st.session_state["last_analysis"] = analysis_result
+
             try:
                 save_session_record(
                     analysis_result["video_name"],
@@ -2806,8 +2809,6 @@ if uploaded_video_analysis is not None:
                     analysis_result["percentage"],
                     analysis_result["detections"],
                 )
-
-                st.session_state["last_analysis"] = analysis_result
 
                 st.success(
                     "AI video analysis completed and saved to the report."
