@@ -36,9 +36,11 @@ from project_utils import (
     append_session_record,
     build_session_record,
     calculate_study_streaks,
+    load_integer_setting,
     load_session_history,
     normalize_warning_entries,
     safe_float,
+    save_integer_setting,
     validate_analysis_result,
 )
 
@@ -701,7 +703,8 @@ if "achievement_message" not in st.session_state:
 # ACHIEVEMENT STORAGE
 # ============================================================
 
-ACHIEVEMENT_FILE = Path("reports/achievements.json")
+ACHIEVEMENT_FILE = REPORT_DIR / "achievements.json"
+STUDY_STATS_FILE = REPORT_DIR / "study_stats.json"
 
 
 def load_achievements():
@@ -2866,7 +2869,7 @@ def save_session_record(
     focus_score=None,
 ):
     """Validate and save a session in the shared, backwards-compatible schema."""
-    report_path = Path("reports/session_summary.csv")
+    report_path = REPORT_FILE
 
     analysis_for_validation = {
         "video_name": video_name,
@@ -2925,7 +2928,7 @@ st.markdown(
 
 # Load saved session records
 def load_report():
-    report_path = Path("reports/session_summary.csv")
+    report_path = REPORT_FILE
 
     try:
         return load_session_history(report_path)
@@ -4571,7 +4574,13 @@ def render_study_timer():
     )
 
     st.session_state.setdefault("study_timer_mode", "Focus")
-    st.session_state.setdefault("completed_focus_sessions", 0)
+
+    if "completed_focus_sessions" not in st.session_state:
+        st.session_state.completed_focus_sessions = load_integer_setting(
+            STUDY_STATS_FILE,
+            "completed_focus_sessions",
+            default=0,
+        )
 
     mode_options = ["Focus", "Short Break", "Long Break"]
 
@@ -4649,6 +4658,19 @@ def render_study_timer():
 
         if st.session_state.study_timer_mode == "Focus":
             st.session_state.completed_focus_sessions += 1
+
+            try:
+                save_integer_setting(
+                    STUDY_STATS_FILE,
+                    "completed_focus_sessions",
+                    st.session_state.completed_focus_sessions,
+                )
+            except (OSError, ValueError) as error:
+                st.warning(
+                    "The completed-session count could not be saved: "
+                    f"{error}"
+                )
+
             check_achievements()
 
     elapsed_minutes = int(elapsed_seconds) // 60
