@@ -1919,10 +1919,7 @@ def create_pdf_report(analysis):
     return pdf_buffer.getvalue()
 
 
-st.markdown(
-    "<div style='background:#6d28d9;color:white;padding:20px;border-radius:12px;'>HTML TEST — THIS SHOULD BE A PURPLE BOX</div>",
-    unsafe_allow_html=True,
-)
+
 
 
 # ============================================================
