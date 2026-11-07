@@ -1923,27 +1923,52 @@ st.markdown(
     "<div style='background:#6d28d9;color:white;padding:20px;border-radius:12px;'>HTML TEST — THIS SHOULD BE A PURPLE BOX</div>",
     unsafe_allow_html=True,
 )
-
 # ============================================================
-# PREMIUM HERO SECTION
+# HERO SECTION — HTML RENDER TEST
 # ============================================================
 
 st.markdown(
-    f"""
-    <style>
+    """
+    <div style="
+        background: linear-gradient(115deg, #4c1d95, #7c3aed);
+        color: white;
+        padding: 40px;
+        border-radius: 24px;
+        margin-bottom: 20px;
+    ">
+        <span style="
+            background: rgba(255,255,255,0.18);
+            padding: 8px 14px;
+            border-radius: 30px;
+        ">
+            ✦ CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT
+        </span>
 
-    .hero-panel {{
-        position: relative;
-        overflow: hidden;
-        padding: 42px 44px;
-        border-radius: 26px;
+        <h1 style="color:white; margin-top:25px;">
+            AI Study Distraction Detector
+        </h1>
 
-        background:
-            radial-gradient(
-                circle at 90% 15%,
-                rgba(255,255,255,0.17),
-                transparent 30%
-            ),
+        <p style="color:white;">
+            Computer vision for monitoring phone visibility
+            during study sessions, with live webcam detection,
+            uploaded video analysis, focus scoring, warnings,
+            and downloadable reports.
+        </p>
+    </div>
+
+    <div style="
+        padding: 15px;
+        border: 1px solid #8b5cf6;
+        border-radius: 12px;
+        margin-bottom: 25px;
+    ">
+        💡 <strong>Important note:</strong>
+        Phone visibility is an indicator only, not proof
+        of distraction.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
             linear-gradient(
                 115deg,
                 {theme["hero1"]} 0%,
