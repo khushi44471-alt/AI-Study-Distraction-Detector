@@ -2475,8 +2475,9 @@ else:
 
     st.divider()
 
+   
     # --------------------------------------------------------
-    # PHONE VISIBILITY DONUT CHART
+    # PHONE VISIBILITY DONUT CHART — PREMIUM DESIGN
     # --------------------------------------------------------
 
     st.markdown("### 📱 Phone Visibility Distribution")
@@ -2488,6 +2489,8 @@ else:
             min(float(average_visibility), 100.0),
         )
 
+        phone_not_detected = 100.0 - phone_visible
+
         visibility_df = pd.DataFrame({
             "Category": [
                 "Phone Visible",
@@ -2495,62 +2498,121 @@ else:
             ],
             "Percentage": [
                 phone_visible,
-                100.0 - phone_visible,
+                phone_not_detected,
             ],
         })
 
-        chart_col1, chart_col2 = st.columns([1, 1])
+        chart_col1, chart_col2 = st.columns([1.3, 1])
+
+        chart_theme = (
+            "plotly_dark"
+            if is_dark_mode
+            else "plotly_white"
+        )
 
         with chart_col1:
-            chart_theme = (
-                "plotly_dark"
-                if is_dark_mode
-                else "plotly_white"
-            )
 
             donut_fig = px.pie(
                 visibility_df,
                 names="Category",
                 values="Percentage",
-                hole=0.65,
+                hole=0.70,
                 color="Category",
                 color_discrete_map={
-                    "Phone Visible": "#8b5cf6",
+                    "Phone Visible": "#a78bfa",
                     "Phone Not Detected": "#22c55e",
                 },
-                title="Average Phone Visibility",
             )
 
             donut_fig.update_traces(
                 textinfo="percent",
                 textposition="inside",
-                hole=0.65,
+                hole=0.70,
+                marker=dict(
+                    line=dict(
+                        color="rgba(255,255,255,0.15)",
+                        width=3,
+                    )
+                ),
+                hovertemplate=(
+                    "<b>%{label}</b><br>"
+                    "%{value:.1f}%<extra></extra>"
+                ),
             )
 
             donut_fig.update_layout(
                 template=chart_theme,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
+                title=dict(
+                    text="Average Phone Visibility",
+                    x=0.5,
+                    xanchor="center",
+                    font=dict(size=18),
+                ),
                 legend_title_text="",
-                margin=dict(l=10, r=10, t=55, b=10),
+                margin=dict(l=15, r=15, t=65, b=15),
+                font=dict(size=13),
+                showlegend=True,
             )
 
             st.plotly_chart(
                 donut_fig,
                 use_container_width=True,
+                config={"displayModeBar": False},
             )
 
         with chart_col2:
-            st.markdown("#### Understanding the result")
 
-            st.metric(
-                "Phone Visible",
-                f"{phone_visible:.1f}%",
+            st.markdown("#### 📊 Visibility Summary")
+
+            st.markdown(
+                """
+                <style>
+                .visibility-card {
+                    background: linear-gradient(145deg, #211b38, #30234f);
+                    border: 1px solid rgba(167,139,250,0.3);
+                    border-radius: 16px;
+                    padding: 18px;
+                    margin: 12px 0;
+                }
+                .visibility-label {
+                    color: #c4b5fd;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
+                .visibility-value {
+                    color: white;
+                    font-size: 29px;
+                    font-weight: 700;
+                    margin-top: 5px;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
             )
 
-            st.metric(
-                "Phone Not Detected",
-                f"{100.0 - phone_visible:.1f}%",
+            st.markdown(
+                f"""
+                <div class="visibility-card">
+                    <div class="visibility-label">
+                        📱 Phone Visible
+                    </div>
+                    <div class="visibility-value">
+                        {phone_visible:.1f}%
+                    </div>
+                </div>
+
+                <div class="visibility-card">
+                    <div class="visibility-label">
+                        ✅ Phone Not Detected
+                    </div>
+                    <div class="visibility-value">
+                        {phone_not_detected:.1f}%
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
             st.caption(
@@ -2563,6 +2625,7 @@ else:
         st.info("No phone visibility data is available yet.")
 
     st.divider()
+
 
    
     # ------------------------------------------------------------
