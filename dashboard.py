@@ -2672,6 +2672,10 @@ with st.sidebar:
 # ============================================================
 # Live webcam detection
 # ============================================================
+st.markdown(
+    '<div id="live-webcam-detection"></div>',
+    unsafe_allow_html=True,
+)
 
 st.divider()
 st.subheader("📹 Live Webcam Detection")
