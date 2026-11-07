@@ -43,8 +43,9 @@ st.set_page_config(
 )
 
 
+
 # ============================================================
-# PREMIUM DASHBOARD THEME
+# PREMIUM DASHBOARD THEME — REFINED EDITION
 # ============================================================
 
 is_dark_mode = st.toggle(
@@ -55,46 +56,56 @@ is_dark_mode = st.toggle(
 
 if is_dark_mode:
     theme = {
-        "bg1": "#08090f",
-        "bg2": "#0d101a",
-        "panel": "#121522",
-        "panel2": "#191d2c",
-        "brand": "#9b7aff",
-        "text": "#e9eaf5",
-        "muted": "#999eb5",
-        "line": "#272b40",
+        "bg1": "#11101b",
+        "bg2": "#171526",
+        "panel": "#201e32",
+        "panel2": "#28243e",
+        "brand": "#a78bfa",
+        "text": "#eeeafd",
+        "muted": "#aaa4c2",
+        "line": "#39334f",
         "heading": "#ffffff",
-        "button": "#1c2032",
-        "button_text": "#ffffff",
-        "input": "#15192a",
-        "hero1": "#20123f",
-        "hero2": "#5125a8",
-        "hero3": "#8b5cf6",
-    }
-else:
-    theme = {
-        "bg1": "#f5f6fc",
-        "bg2": "#edf0fa",
-        "panel": "#ffffff",
-        "panel2": "#f1f2fb",
-        "brand": "#7046db",
-        "text": "#25243a",
-        "muted": "#73748e",
-        "line": "#dedff0",
-        "heading": "#17152c",
-        "button": "#ffffff",
-        "button_text": "#392276",
-        "input": "#ffffff",
-        "hero1": "#44318f",
-        "hero2": "#7046c9",
+        "button": "#29243e",
+        "button_text": "#f5f0ff",
+        "input": "#211e34",
+        "hero1": "#30205b",
+        "hero2": "#6338a8",
         "hero3": "#9875ef",
     }
+
+    shadow = "rgba(0, 0, 0, 0.22)"
+    glow = "rgba(167, 139, 250, 0.16)"
+
+else:
+    theme = {
+        "bg1": "#f7f5fc",
+        "bg2": "#efebf9",
+        "panel": "#ffffff",
+        "panel2": "#f7f3ff",
+        "brand": "#8055d9",
+        "text": "#302944",
+        "muted": "#77718c",
+        "line": "#e6def4",
+        "heading": "#241a3b",
+        "button": "#ffffff",
+        "button_text": "#55368f",
+        "input": "#ffffff",
+        "hero1": "#49318a",
+        "hero2": "#7951c9",
+        "hero3": "#a58aeb",
+    }
+
+    shadow = "rgba(75, 50, 120, 0.08)"
+    glow = "rgba(128, 85, 217, 0.12)"
+
 
 st.markdown(
     f"""
     <style>
 
-    /* GLOBAL BACKGROUND */
+    /* =========================================
+       MAIN DASHBOARD BACKGROUND
+    ========================================= */
 
     :root {{
         --bg-1: {theme["bg1"]};
@@ -105,13 +116,15 @@ st.markdown(
         --text: {theme["text"]};
         --muted: {theme["muted"]};
         --line: {theme["line"]};
+        --shadow: {shadow};
+        --glow: {glow};
     }}
 
     .stApp {{
         background:
             radial-gradient(
-                ellipse at 10% 0%,
-                rgba(139, 92, 246, 0.12),
+                ellipse at 12% 0%,
+                {glow},
                 transparent 38%
             ),
             linear-gradient(
@@ -123,247 +136,295 @@ st.markdown(
     }}
 
     .main .block-container {{
-        max-width: 1500px;
-        padding-top: 2rem;
+        max-width: 1480px;
+        padding-top: 2.2rem;
         padding-bottom: 4rem;
     }}
 
-    /* HEADER */
+    /* =========================================
+       HEADER
+    ========================================= */
 
     [data-testid="stHeader"] {{
-        background: var(--bg-1);
+        background: transparent;
     }}
 
     [data-testid="stToolbar"] {{
         right: 1rem;
     }}
 
-    /* SIDEBAR */
+    /* =========================================
+       TYPOGRAPHY
+    ========================================= */
 
-    [data-testid="stSidebar"] {{
-        background: var(--bg-2);
-        border-right: 1px solid var(--line);
-    }}
-
-    [data-testid="stSidebar"] > div {{
-        padding-top: 1.5rem;
-    }}
-
-    [data-testid="stSidebar"] * {{
-        color: var(--text);
-    }}
-
-    /* TYPOGRAPHY */
-
-    h1, h2, h3, h4 {{
+    .main h1,
+    .main h2,
+    .main h3,
+    .main h4 {{
         color: {theme["heading"]} !important;
         letter-spacing: -0.035em;
         font-weight: 750;
     }}
 
-    h1 {{
+    .main h1 {{
         font-size: clamp(2rem, 4vw, 2.8rem);
+        line-height: 1.2;
     }}
 
-    h2 {{
-        font-size: 1.7rem;
+    .main h2 {{
+        font-size: 1.65rem;
     }}
 
-    h3 {{
-        font-size: 1.25rem;
+    .main h3 {{
+        font-size: 1.2rem;
     }}
 
-    p, li, label {{
+    .main p,
+    .main li,
+    .main label {{
         color: var(--text);
     }}
 
-    [data-testid="stCaptionContainer"] {{
+    .main [data-testid="stCaptionContainer"] {{
         color: var(--muted);
     }}
 
-    /* SECTION DIVIDERS */
+    /* =========================================
+       DIVIDERS
+    ========================================= */
 
-    hr {{
+    .main hr {{
         border-color: var(--line) !important;
-        opacity: 0.8;
-        margin-top: 1.5rem;
-        margin-bottom: 1.5rem;
+        opacity: 0.85;
+        margin: 1.7rem 0;
     }}
 
-    /* METRIC CARDS */
+    /* =========================================
+       METRIC CARDS
+    ========================================= */
 
-    [data-testid="stMetric"] {{
+    .main [data-testid="stMetric"] {{
         background: linear-gradient(
             145deg,
             var(--panel),
             var(--panel-2)
         );
+
         border: 1px solid var(--line);
-        border-radius: 18px;
-        padding: 20px;
-        min-height: 115px;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.10);
-        transition: all 0.2s ease;
+        border-radius: 20px;
+        padding: 21px 20px;
+        min-height: 125px;
+
+        box-shadow: 0 8px 25px var(--shadow);
+
+        transition:
+            transform 0.22s ease,
+            border-color 0.22s ease,
+            box-shadow 0.22s ease;
     }}
 
-    [data-testid="stMetric"]:hover {{
+    .main [data-testid="stMetric"]:hover {{
+        transform: translateY(-4px);
         border-color: var(--brand);
-        transform: translateY(-3px);
-        box-shadow: 0 10px 30px rgba(139,92,246,0.12);
+        box-shadow: 0 12px 30px var(--glow);
     }}
 
-    [data-testid="stMetricLabel"] {{
+    .main [data-testid="stMetricLabel"] {{
         color: var(--muted) !important;
-        font-weight: 600;
+        font-weight: 650;
+        font-size: 0.88rem;
     }}
 
-    [data-testid="stMetricValue"] {{
+    .main [data-testid="stMetricValue"] {{
         color: {theme["heading"]} !important;
-        font-weight: 750;
+        font-weight: 800;
+        letter-spacing: -0.04em;
     }}
 
-    /* BUTTONS */
+    /* =========================================
+       BUTTONS
+    ========================================= */
 
-    div.stButton > button,
-    div.stDownloadButton > button {{
+    .main div.stButton > button,
+    .main div.stDownloadButton > button {{
         background: linear-gradient(
-            120deg,
+            135deg,
             {theme["button"]},
             var(--panel-2)
         );
+
         color: {theme["button_text"]} !important;
         border: 1px solid var(--line);
         border-radius: 12px;
-        padding: 0.55rem 1.1rem;
+        padding: 0.62rem 1.15rem;
         font-weight: 650;
+
         transition: all 0.2s ease;
     }}
 
-    div.stButton > button:hover,
-    div.stDownloadButton > button:hover {{
+    .main div.stButton > button:hover,
+    .main div.stDownloadButton > button:hover {{
         border-color: var(--brand);
-        box-shadow: 0 0 18px rgba(139,92,246,0.22);
         transform: translateY(-2px);
+        box-shadow: 0 7px 20px var(--glow);
     }}
 
-    div.stButton > button[kind="primary"] {{
+    .main div.stButton > button[kind="primary"] {{
         background: linear-gradient(
             110deg,
-            #7046db,
-            #9b65ef
+            #7046c9,
+            #9870e9
         );
-        color: white !important;
+        color: #ffffff !important;
         border: none;
     }}
 
-    /* INPUTS */
+    /* =========================================
+       INPUTS AND SELECT BOXES
+    ========================================= */
 
-    [data-baseweb="select"] > div,
-    [data-baseweb="input"] > div,
-    [data-baseweb="textarea"] > div {{
-        background: var(--input);
+    .main [data-baseweb="select"] > div,
+    .main [data-baseweb="input"] > div,
+    .main [data-baseweb="textarea"] > div {{
+        background: var(--panel);
         border-color: var(--line);
-        border-radius: 11px;
+        border-radius: 12px;
         color: var(--text);
     }}
 
-    input, textarea {{
+    .main input,
+    .main textarea {{
         color: var(--text) !important;
     }}
 
-    /* FILE UPLOADER */
+    .main [data-baseweb="select"] span {{
+        color: var(--text);
+    }}
 
-    [data-testid="stFileUploader"] {{
+    .main [data-baseweb="select"] > div:focus-within,
+    .main [data-baseweb="input"] > div:focus-within {{
+        border-color: var(--brand);
+        box-shadow: 0 0 0 2px var(--glow);
+    }}
+
+    /* =========================================
+       FILE UPLOADER
+    ========================================= */
+
+    .main [data-testid="stFileUploader"] {{
         background: var(--panel);
         border: 1px dashed var(--brand);
         border-radius: 18px;
-        padding: 16px;
+        padding: 17px;
         transition: all 0.2s ease;
     }}
 
-    [data-testid="stFileUploader"]:hover {{
-        box-shadow: 0 0 20px rgba(139,92,246,0.12);
+    .main [data-testid="stFileUploader"]:hover {{
+        border-style: solid;
+        box-shadow: 0 8px 22px var(--glow);
     }}
 
-    /* ALERTS */
+    /* =========================================
+       ALERTS
+    ========================================= */
 
-    [data-testid="stAlert"] {{
-        border-radius: 13px;
+    .main [data-testid="stAlert"] {{
+        border-radius: 14px;
         border: 1px solid var(--line);
-        background: var(--panel);
+        box-shadow: 0 4px 15px var(--shadow);
     }}
 
-    /* DATA TABLES */
+    /* =========================================
+       DATA TABLES
+    ========================================= */
 
-    [data-testid="stDataFrame"],
-    [data-testid="stTable"] {{
+    .main [data-testid="stDataFrame"],
+    .main [data-testid="stTable"] {{
         border: 1px solid var(--line);
-        border-radius: 15px;
+        border-radius: 16px;
         overflow: hidden;
+        box-shadow: 0 5px 18px var(--shadow);
     }}
 
-    /* PROGRESS BAR */
+    /* =========================================
+       PROGRESS BARS
+    ========================================= */
 
-    [data-testid="stProgressBar"] > div > div {{
+    .main [data-testid="stProgressBar"] > div {{
+        background: var(--panel-2);
+        border-radius: 20px;
+    }}
+
+    .main [data-testid="stProgressBar"] > div > div {{
         background: linear-gradient(
             90deg,
-            #7046db,
-            #b18aff
+            #7046c9,
+            #a78bfa
         );
         border-radius: 20px;
     }}
 
-    /* SELECT BOX AND SLIDERS */
+    /* =========================================
+       SLIDERS AND CHECKBOXES
+    ========================================= */
 
-    [data-baseweb="popover"] {{
-        background: var(--panel);
+    .main [data-testid="stSlider"] {{
+        color: var(--brand);
     }}
 
-    [data-testid="stSlider"] [role="slider"] {{
-        background: var(--brand);
+    .main [data-testid="stCheckbox"],
+    .main [data-testid="stRadio"] {{
+        color: var(--text);
     }}
 
-    /* HERO PANEL */
+    /* =========================================
+       HERO PANEL
+    ========================================= */
 
     .hero-panel {{
-        padding: 34px;
-        border-radius: 24px;
+        padding: 36px;
+        border-radius: 25px;
+
         background: linear-gradient(
             120deg,
             {theme["hero1"]},
             {theme["hero2"]} 60%,
             {theme["hero3"]}
         );
-        border: 1px solid rgba(255,255,255,0.18);
-        box-shadow: 0 18px 45px rgba(110,70,210,0.20);
-        margin: 8px 0 25px 0;
+
+        border: 1px solid rgba(255,255,255,0.20);
+        box-shadow: 0 18px 42px rgba(85,55,150,0.18);
+        margin: 10px 0 26px 0;
     }}
 
     .hero-panel h1 {{
-        color: white !important;
+        color: #ffffff !important;
         font-size: clamp(2rem, 4vw, 2.8rem);
         margin-bottom: 10px;
     }}
 
     .hero-panel p {{
-        color: #eee7ff !important;
+        color: #f1eaff !important;
         font-size: 1rem;
         max-width: 800px;
+        line-height: 1.7;
     }}
 
     .hero-chip {{
         display: inline-block;
-        background: rgba(255,255,255,0.13);
-        border: 1px solid rgba(255,255,255,0.25);
-        color: white;
+        background: rgba(255,255,255,0.14);
+        border: 1px solid rgba(255,255,255,0.28);
+        color: #ffffff;
         border-radius: 50px;
-        padding: 6px 13px;
+        padding: 7px 14px;
         font-size: 0.78rem;
         font-weight: 700;
-        margin-bottom: 14px;
+        margin-bottom: 15px;
     }}
 
-    /* INFO CARDS */
+    /* =========================================
+       INFORMATION CARDS
+    ========================================= */
 
     .info-card {{
         background: linear-gradient(
@@ -371,11 +432,20 @@ st.markdown(
             var(--panel),
             var(--panel-2)
         );
+
         border: 1px solid var(--line);
-        border-radius: 18px;
-        padding: 21px;
+        border-radius: 20px;
+        padding: 23px;
         height: 100%;
-        box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+        box-shadow: 0 8px 22px var(--shadow);
+
+        transition: all 0.22s ease;
+    }}
+
+    .info-card:hover {{
+        transform: translateY(-3px);
+        border-color: var(--brand);
+        box-shadow: 0 12px 28px var(--glow);
     }}
 
     .info-card h3 {{
@@ -385,54 +455,75 @@ st.markdown(
 
     .info-card p {{
         color: var(--muted) !important;
+        line-height: 1.65;
     }}
 
     .section-note {{
         color: var(--muted);
         font-size: 0.92rem;
+        line-height: 1.6;
     }}
 
-    /* PLOTLY CHART CONTAINERS */
+    /* =========================================
+       CHART CONTAINERS
+    ========================================= */
 
-    [data-testid="stPlotlyChart"] {{
+    .main [data-testid="stPlotlyChart"] {{
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 17px;
-        padding: 8px;
+        border-radius: 19px;
+        padding: 10px;
+        box-shadow: 0 7px 22px var(--shadow);
     }}
 
-    /* CHECKBOX AND RADIO */
+    /* =========================================
+       EXPANDERS
+    ========================================= */
 
-    [data-testid="stCheckbox"],
-    [data-testid="stRadio"] {{
-        color: var(--text);
+    .main [data-testid="stExpander"] {{
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        overflow: hidden;
     }}
 
-    /* RESPONSIVE DESIGN */
+    /* =========================================
+       RESPONSIVE DESIGN
+    ========================================= */
 
     @media (max-width: 768px) {{
+
         .main .block-container {{
-            padding: 1rem 0.8rem 3rem 0.8rem;
+            padding: 1.1rem 0.8rem 3rem 0.8rem;
         }}
 
         .hero-panel {{
-            padding: 22px;
-            border-radius: 18px;
+            padding: 23px;
+            border-radius: 19px;
         }}
 
-        [data-testid="stMetric"] {{
-            padding: 13px;
-            min-height: 95px;
+        .main [data-testid="stMetric"] {{
+            padding: 14px;
+            min-height: 100px;
+            border-radius: 15px;
         }}
 
-        h1 {{
+        .main h1 {{
             font-size: 1.9rem;
+        }}
+
+        .info-card {{
+            padding: 17px;
         }}
     }}
 
-    /* SMOOTH TRANSITIONS */
+    /* =========================================
+       SMOOTH ANIMATIONS
+    ========================================= */
 
-    button, input, [data-testid="stMetric"] {{
+    .main button,
+    .main input,
+    .main [data-testid="stMetric"] {{
         transition: all 0.2s ease;
     }}
 
@@ -440,6 +531,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # ============================================================
 # Paths
