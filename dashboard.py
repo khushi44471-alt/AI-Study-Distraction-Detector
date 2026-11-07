@@ -1537,8 +1537,11 @@ def process_uploaded_video_for_live_detection(
             "output_video_path": str(temp_output_path),
         }
 
-    except Exception as exc:
-        st.error(f"Live processing failed: {exc}")
+   except Exception as exc:
+    import traceback
+    st.error(f"Live processing failed: {exc}")
+    st.code(traceback.format_exc())
+    return None
         return None
 
     finally:
