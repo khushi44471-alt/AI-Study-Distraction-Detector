@@ -1,23 +1,25 @@
 
 import cv2
-import csv
 from pathlib import Path
 from datetime import datetime
 from ultralytics import YOLO
+
+from project_utils import append_session_record, build_session_record
 
 # =========================================
 # AI STUDY DISTRACTION DETECTOR
 # Session Tracking and Report Generation
 # =========================================
 
-VIDEO_PATH = Path("videos") / "study_test.mp4"
-MODEL_PATH = "yolo11n.pt"
+BASE_DIR = Path(__file__).resolve().parent
+VIDEO_PATH = BASE_DIR / "videos" / "study_test.mp4"
+MODEL_PATH = BASE_DIR / "yolo11n.pt"
 
 CONFIDENCE = 0.08
 IMAGE_SIZE = 1280
 
-REPORT_DIR = Path("reports")
-REPORT_DIR.mkdir(exist_ok=True)
+REPORT_DIR = BASE_DIR / "reports"
+REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 REPORT_FILE = REPORT_DIR / "session_summary.csv"
 
@@ -30,7 +32,6 @@ print("Loading YOLO model...")
 model = YOLO(MODEL_PATH)
 
 # Open the recorded video
-print("NEW VERSION TEST - 123")
 print("Opening recorded video...")
 cap = cv2.VideoCapture(str(VIDEO_PATH))
 
@@ -44,6 +45,11 @@ width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = cap.get(cv2.CAP_PROP_FPS)
 
+if width <= 0 or height <= 0:
+    print("ERROR: The video has invalid dimensions.")
+    cap.release()
+    raise SystemExit
+
 if fps <= 0:
     fps = 25
 
@@ -55,8 +61,17 @@ print(f"Video resolution: {width} x {height}")
 print("Press Q to stop the session.")
 
 window = "AI Study Distraction Detector"
-cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(window, min(width, 1280), min(height, 720))
+preview_enabled = True
+
+try:
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, min(width, 1280), min(height, 720))
+except cv2.error:
+    preview_enabled = False
+    print(
+        "OpenCV preview is unavailable in this environment. "
+        "The video will still be processed and saved."
+    )
 
 try:
     while True:
@@ -189,15 +204,27 @@ try:
         else:
             screen = display
 
-        cv2.imshow(window, screen)
-
-        if cv2.waitKey(max(1, int(1000 / fps))) & 0xFF == ord("q"):
-            print("Session stopped by user.")
-            break
+        if preview_enabled:
+            try:
+                cv2.imshow(window, screen)
+                key = cv2.waitKey(max(1, int(1000 / fps))) & 0xFF
+            except cv2.error:
+                preview_enabled = False
+                print(
+                    "OpenCV preview stopped because GUI support is unavailable. "
+                    "Continuing video analysis without the preview."
+                )
+            else:
+                if key == ord("q"):
+                    print("Session stopped by user.")
+                    break
 
 finally:
     cap.release()
-    cv2.destroyAllWindows()
+    try:
+        cv2.destroyAllWindows()
+    except cv2.error:
+        pass
 
 # =========================================
 # SAVE SESSION REPORT
@@ -212,39 +239,20 @@ percentage = (
     if total_frames else 0
 )
 
-file_exists = (
-    REPORT_FILE.exists()
-    and REPORT_FILE.stat().st_size > 0
+session_record = build_session_record(
+    video_name=VIDEO_PATH.name,
+    resolution=f"{width}x{height}",
+    frames_processed=total_frames,
+    frames_with_phone=phone_frames,
+    percentage=percentage,
+    detections=total_phone_detections,
+    timestamp=datetime.now(),
 )
 
-with open(
+append_session_record(
     REPORT_FILE,
-    "a",
-    newline="",
-    encoding="utf-8"
-) as file:
-    writer = csv.writer(file)
-
-    if not file_exists:
-        writer.writerow([
-            "Session Time",
-            "Video",
-            "Resolution",
-            "Frames Processed",
-            "Frames With Phone",
-            "Phone Visible Percentage",
-            "Total Phone Detections"
-        ])
-
-    writer.writerow([
-        session_time,
-        VIDEO_PATH.name,
-        f"{width}x{height}",
-        total_frames,
-        phone_frames,
-        round(percentage, 2),
-        total_phone_detections
-    ])
+    session_record,
+)
 
 print("\nSESSION REPORT")
 print("-" * 35)
