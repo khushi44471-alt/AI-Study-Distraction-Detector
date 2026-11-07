@@ -709,6 +709,14 @@ def play_custom_warning_audio():
 
 def show_phone_alert(preview=False):
     if not preview:
+        if "phone_alert_placeholder" not in st.session_state:
+            st.session_state.phone_alert_placeholder = True
+
+        if "phone_alert_display" not in st.session_state:
+            st.session_state.phone_alert_display = False
+
+        st.session_state.phone_alert_display = True
+
         st.warning(
             "📱 Phone detected repeatedly! Please check whether "
             "you need your phone for studying."
@@ -737,17 +745,6 @@ def show_phone_alert(preview=False):
         play_warning_tone("digital", volume=volume_level)
     else:
         play_warning_tone("voice", volume=volume_level)
-
-    fallback_html = """
-    <div style="margin-top: 12px;">
-        <button id="manual-warning-button">
-            Play warning sound
-        </button>
-    </div>
-    """
-
-    components.html(fallback_html, height=70)
-
 if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
 
