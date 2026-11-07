@@ -2302,15 +2302,42 @@ def create_pdf_report(analysis):
         styles["Heading2"],
     ))
 
+   
     warnings = analysis.get("warnings", [])
 
     if warnings:
         for warning in warnings:
+
+            if isinstance(warning, dict):
+                warning_message = warning.get(
+                    "message",
+                    "Detection warning recorded",
+                )
+                warning_time = warning.get("time", "")
+
+                warning_text = (
+                    f"• {escape(str(warning_message))}"
+                )
+
+                if warning_time:
+                    warning_text += (
+                        f" <font color='#64748B'>"
+                        f"({escape(str(warning_time))})"
+                        f"</font>"
+                    )
+
+            else:
+                warning_text = (
+                    f"• {escape(str(warning))}"
+                )
+
             story.append(Paragraph(
-                "• " + escape(str(warning)),
+                warning_text,
                 styles["BodyText"],
             ))
+
             story.append(Spacer(1, 4))
+
     else:
         story.append(Paragraph(
             "No detection warnings were recorded.",
