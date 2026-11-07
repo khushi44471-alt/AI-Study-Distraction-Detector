@@ -7,8 +7,9 @@ import pandas as pd
 
 from project_utils import (
     append_session_record, build_session_record, calculate_study_streaks,
-    load_session_history, normalize_session_history, normalize_warning_entries,
-    safe_float, validate_analysis_result,
+    load_integer_setting, load_session_history, normalize_session_history,
+    normalize_warning_entries, safe_float, save_integer_setting,
+    validate_analysis_result,
 )
 
 
@@ -82,6 +83,22 @@ class ProjectUtilsTests(unittest.TestCase):
             self.assertEqual(loaded.loc[0, "Video Name"], "older.mp4")
             self.assertEqual(loaded.loc[1, "Video Name"], "new.mp4")
             self.assertEqual(loaded.loc[1, "Focus Score"], 80.0)
+
+    def test_integer_setting_survives_reload_and_preserves_other_keys(self):
+        with tempfile.TemporaryDirectory() as directory:
+            setting_path = Path(directory) / "study_stats.json"
+            save_integer_setting(setting_path, "completed_focus_sessions", 7)
+            save_integer_setting(setting_path, "other_counter", 3)
+            self.assertEqual(
+                load_integer_setting(setting_path, "completed_focus_sessions"),
+                7,
+            )
+            self.assertEqual(load_integer_setting(setting_path, "other_counter"), 3)
+            save_integer_setting(setting_path, "completed_focus_sessions", -4)
+            self.assertEqual(
+                load_integer_setting(setting_path, "completed_focus_sessions"),
+                0,
+            )
 
     def test_streaks_handle_duplicates_gaps_and_future_dates(self):
         result = calculate_study_streaks(
