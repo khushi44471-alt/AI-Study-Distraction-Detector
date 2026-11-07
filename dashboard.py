@@ -1793,17 +1793,17 @@ if uploaded_video_analysis is not None:
         analysis_result = analyze_video(uploaded_video_analysis)
 
         if analysis_result is not None:
+           
             try:
-                
-save_session_record(
-    analysis_result["video_name"],
-    analysis_result["resolution"],
-    analysis_result["frames_processed"],
-    analysis_result["frames_with_phone"],
-    analysis_result["percentage"],
-    analysis_result["detections"],
-    analysis_result["focus_score"],
-)
+                save_session_record(
+                    analysis_result["video_name"],
+                    analysis_result["resolution"],
+                    analysis_result["frames_processed"],
+                    analysis_result["frames_with_phone"],
+                    analysis_result["percentage"],
+                    analysis_result["detections"],
+                    analysis_result["focus_score"],
+                )
 
 
                 st.session_state["last_analysis"] = analysis_result
