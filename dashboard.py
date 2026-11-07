@@ -772,6 +772,39 @@ ACHIEVEMENT_RULES = [
     },
 ]
 
+def load_completed_focus_count():
+    """Restore the timer total without contradicting previously unlocked awards."""
+    saved_count = load_integer_setting(
+        STUDY_STATS_FILE,
+        "completed_focus_sessions",
+        default=0,
+    )
+    unlocked_ids = set(st.session_state.get("unlocked_achievements", []))
+    achievement_minimum = max(
+        (
+            achievement["target"]
+            for achievement in ACHIEVEMENT_RULES
+            if achievement["id"] in unlocked_ids
+        ),
+        default=0,
+    )
+    restored_count = max(saved_count, achievement_minimum)
+
+    if restored_count > saved_count:
+        try:
+            save_integer_setting(
+                STUDY_STATS_FILE,
+                "completed_focus_sessions",
+                restored_count,
+            )
+        except (OSError, ValueError) as error:
+            st.warning(
+                "The previous focus-session total was restored for this "
+                f"visit but could not be saved: {error}"
+            )
+
+    return restored_count
+
 
 def check_achievements():
     completed = st.session_state.completed_focus_sessions
@@ -4577,10 +4610,8 @@ def render_study_timer():
     st.session_state.setdefault("study_timer_mode", "Focus")
 
     if "completed_focus_sessions" not in st.session_state:
-        st.session_state.completed_focus_sessions = load_integer_setting(
-            STUDY_STATS_FILE,
-            "completed_focus_sessions",
-            default=0,
+        st.session_state.completed_focus_sessions = (
+            load_completed_focus_count()
         )
 
     mode_options = ["Focus", "Short Break", "Long Break"]
