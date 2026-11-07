@@ -924,9 +924,9 @@ def process_uploaded_video_for_live_detection(
         frames_with_phone = 0
         total_phone_hits = 0
         detection_flags = []
-        # Smart alert tracking
-consecutive_phone_frames = 0
-last_alert_time = 0.0
+               # Smart alert tracking
+        consecutive_phone_frames = 0
+        last_alert_time = 0.0
         detection_events = []
         last_annotated_frame = None
         frame_index = 0
