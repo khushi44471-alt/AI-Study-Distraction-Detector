@@ -2351,13 +2351,17 @@ stat2.metric("Phones Found", live_stats["phone_count"])
 stat3.metric("Max Confidence", f"{live_stats['confidence']:.1%}")
 stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
 
+
 # ============================================================
 # AI video analysis section
 # ============================================================
 
 st.divider()
 st.subheader("🎬 AI Video Analysis")
-st.caption("Upload a study video, run the AI detector, and view the processed live detection preview directly here.")
+st.caption(
+    "Upload a study video, run the AI detector, "
+    "and view the processed live detection preview directly here."
+)
 
 uploaded_video_analysis = st.file_uploader(
     "Choose a study video",
@@ -2366,21 +2370,54 @@ uploaded_video_analysis = st.file_uploader(
 )
 
 if uploaded_video_analysis is not None:
+
     st.video(uploaded_video_analysis)
 
-    if st.button("Start AI Detection", type="primary", key="start_ai_detection_main"):
+    if st.button(
+        "Start AI Detection",
+        type="primary",
+        key="start_ai_detection_main",
+    ):
+
         st.session_state.analysis_warning_triggered = False
 
-        live_preview = process_uploaded_video_for_live_detection(
+        # Run YOLO only once.
+        analysis_result = process_uploaded_video_for_live_detection(
             uploaded_video_analysis,
-            confidence_threshold=float(st.session_state.detection_confidence),
-            sample_interval=int(st.session_state.frame_sample_interval),
+            confidence_threshold=float(
+                st.session_state.detection_confidence
+            ),
+            sample_interval=int(
+                st.session_state.frame_sample_interval
+            ),
         )
 
-        analysis_result = analyze_video(uploaded_video_analysis)
-
         if analysis_result is not None:
-           
+
+            # Preserve the existing warning summary behaviour.
+            if (
+                analysis_result["warning_count"] > 0
+                and not st.session_state.analysis_warning_triggered
+            ):
+                st.session_state.analysis_warning_triggered = True
+                st.session_state.last_warning_reason = (
+                    "Phone detected in video analysis"
+                )
+
+                st.session_state.warning_summary = append_warning_summary(
+                    st.session_state.warning_summary,
+                    st.session_state.last_warning_reason,
+                )
+
+                st.session_state.warning_log.append({
+                    "time": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "message": "Phone detected in video analysis",
+                })
+
+                show_phone_alert(preview=False)
+
             try:
                 save_session_record(
                     analysis_result["video_name"],
@@ -2389,31 +2426,54 @@ if uploaded_video_analysis is not None:
                     analysis_result["frames_with_phone"],
                     analysis_result["percentage"],
                     analysis_result["detections"],
-                    analysis_result["focus_score"],
                 )
-
 
                 st.session_state["last_analysis"] = analysis_result
-                st.success("AI video analysis completed and saved to the report.")
-            except Exception as error:
-                st.error(f"The analysis finished, but the report could not be saved: {error}")
 
-        if live_preview is not None and live_preview.get("output_video_path"):
-            st.subheader("📽️ Processed Video Preview")
-            st.video(live_preview["output_video_path"])
-
-            processed_col1, processed_col2 = st.columns(2)
-            processed_col1.metric("Frames Processed", live_preview["frames_processed"])
-            processed_col2.metric("Frames With Phone", live_preview["frames_with_phone"])
-
-            if live_preview.get("annotated_frame") is not None:
-                st.subheader("📸 Sample Processed Frame")
-                st.image(
-                    cv2.cvtColor(live_preview["annotated_frame"], cv2.COLOR_BGR2RGB),
-                    channels="RGB",
-                    use_container_width=True,
-                    caption="Example processed frame with phone bounding box",
+                st.success(
+                    "AI video analysis completed and saved to the report."
                 )
+
+            except Exception as error:
+                st.error(
+                    f"The analysis finished, but the report "
+                    f"could not be saved: {error}"
+                )
+
+            if analysis_result.get("output_video_path"):
+
+                st.subheader("📽️ Processed Video Preview")
+                st.video(analysis_result["output_video_path"])
+
+                processed_col1, processed_col2 = st.columns(2)
+
+                processed_col1.metric(
+                    "Frames Processed",
+                    analysis_result["frames_processed"],
+                )
+
+                processed_col2.metric(
+                    "Frames With Phone",
+                    analysis_result["frames_with_phone"],
+                )
+
+                if analysis_result.get("annotated_frame") is not None:
+
+                    st.subheader("📸 Sample Processed Frame")
+
+                    st.image(
+                        cv2.cvtColor(
+                            analysis_result["annotated_frame"],
+                            cv2.COLOR_BGR2RGB,
+                        ),
+                        channels="RGB",
+                        use_container_width=True,
+                        caption=(
+                            "Example processed frame with "
+                            "detected object bounding boxes"
+                        ),
+                    )
+
 
 # ============================================================
 # Session report saving function
