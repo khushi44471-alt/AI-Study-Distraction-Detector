@@ -2282,10 +2282,11 @@ else:
         </div>
         """
 
-        st.markdown(
-            calendar_html,
-            unsafe_allow_html=True,
-        )
+st.components.v1.html(
+    calendar_html,
+    height=480,
+    scrolling=False,
+)
 
         # Monthly statistics
         month_dates = activity_dates[
