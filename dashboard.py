@@ -4566,6 +4566,11 @@ else:
 # SMART POMODORO TIMER
 # ============================================================
 
+st.markdown(
+    '<div id="study-session-timer"></div>',
+    unsafe_allow_html=True,
+)
+
 @st.fragment(run_every="1s")
 def render_study_timer():
 
