@@ -42,8 +42,9 @@ st.set_page_config(
     layout="wide",
 )
 
+
 # ============================================================
-# Dark / Light Theme
+# PREMIUM DASHBOARD THEME
 # ============================================================
 
 is_dark_mode = st.toggle(
@@ -54,44 +55,47 @@ is_dark_mode = st.toggle(
 
 if is_dark_mode:
     theme = {
-        "bg1": "#0b0d12",
-        "bg2": "#11141c",
-        "panel": "#171a24",
-        "panel2": "#1b1f2b",
-        "brand": "#8b5cf6",
-        "text": "#edf0f7",
-        "muted": "#aab2c5",
-        "line": "#2b3040",
-        "heading": "#f7f8fc",
-        "button": "#202433",
-        "button_text": "#f4f5fb",
-        "input": "#1b1f2b",
-        "hero1": "#21143f",
-        "hero2": "#4c1d95",
-        "hero3": "#7c3aed",
+        "bg1": "#08090f",
+        "bg2": "#0d101a",
+        "panel": "#121522",
+        "panel2": "#191d2c",
+        "brand": "#9b7aff",
+        "text": "#e9eaf5",
+        "muted": "#999eb5",
+        "line": "#272b40",
+        "heading": "#ffffff",
+        "button": "#1c2032",
+        "button_text": "#ffffff",
+        "input": "#15192a",
+        "hero1": "#20123f",
+        "hero2": "#5125a8",
+        "hero3": "#8b5cf6",
     }
 else:
     theme = {
-        "bg1": "#f8fafc",
-        "bg2": "#eef2ff",
+        "bg1": "#f5f6fc",
+        "bg2": "#edf0fa",
         "panel": "#ffffff",
-        "panel2": "#f1f5f9",
-        "brand": "#7c3aed",
-        "text": "#1e293b",
-        "muted": "#64748b",
-        "line": "#dbe2ea",
-        "heading": "#172033",
+        "panel2": "#f1f2fb",
+        "brand": "#7046db",
+        "text": "#25243a",
+        "muted": "#73748e",
+        "line": "#dedff0",
+        "heading": "#17152c",
         "button": "#ffffff",
-        "button_text": "#312e81",
+        "button_text": "#392276",
         "input": "#ffffff",
-        "hero1": "#4338ca",
-        "hero2": "#6d28d9",
-        "hero3": "#8b5cf6",
+        "hero1": "#44318f",
+        "hero2": "#7046c9",
+        "hero3": "#9875ef",
     }
 
 st.markdown(
     f"""
     <style>
+
+    /* GLOBAL BACKGROUND */
+
     :root {{
         --bg-1: {theme["bg1"]};
         --bg-2: {theme["bg2"]};
@@ -104,78 +108,162 @@ st.markdown(
     }}
 
     .stApp {{
-        background: linear-gradient(
-            180deg, var(--bg-1), var(--bg-2)
-        );
+        background:
+            radial-gradient(
+                ellipse at 10% 0%,
+                rgba(139, 92, 246, 0.12),
+                transparent 38%
+            ),
+            linear-gradient(
+                135deg,
+                var(--bg-1),
+                var(--bg-2)
+            );
         color: var(--text);
     }}
+
+    .main .block-container {{
+        max-width: 1500px;
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+    }}
+
+    /* HEADER */
 
     [data-testid="stHeader"] {{
         background: var(--bg-1);
     }}
+
+    [data-testid="stToolbar"] {{
+        right: 1rem;
+    }}
+
+    /* SIDEBAR */
 
     [data-testid="stSidebar"] {{
         background: var(--bg-2);
         border-right: 1px solid var(--line);
     }}
 
-    [data-testid="stSidebar"] *,
-    [data-testid="stMarkdownContainer"],
-    [data-testid="stText"],
-    label, p, li {{
+    [data-testid="stSidebar"] > div {{
+        padding-top: 1.5rem;
+    }}
+
+    [data-testid="stSidebar"] * {{
         color: var(--text);
     }}
 
+    /* TYPOGRAPHY */
+
     h1, h2, h3, h4 {{
-        color: {theme["heading"]};
-        letter-spacing: -0.025em;
+        color: {theme["heading"]} !important;
+        letter-spacing: -0.035em;
+        font-weight: 750;
     }}
 
+    h1 {{
+        font-size: clamp(2rem, 4vw, 2.8rem);
+    }}
+
+    h2 {{
+        font-size: 1.7rem;
+    }}
+
+    h3 {{
+        font-size: 1.25rem;
+    }}
+
+    p, li, label {{
+        color: var(--text);
+    }}
+
+    [data-testid="stCaptionContainer"] {{
+        color: var(--muted);
+    }}
+
+    /* SECTION DIVIDERS */
+
+    hr {{
+        border-color: var(--line) !important;
+        opacity: 0.8;
+        margin-top: 1.5rem;
+        margin-bottom: 1.5rem;
+    }}
+
+    /* METRIC CARDS */
+
     [data-testid="stMetric"] {{
-        background: var(--panel);
+        background: linear-gradient(
+            145deg,
+            var(--panel),
+            var(--panel-2)
+        );
         border: 1px solid var(--line);
-        padding: 16px 18px;
-        border-radius: 15px;
-        box-shadow: 0 5px 18px rgba(0,0,0,.10);
+        border-radius: 18px;
+        padding: 20px;
+        min-height: 115px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.10);
+        transition: all 0.2s ease;
+    }}
+
+    [data-testid="stMetric"]:hover {{
+        border-color: var(--brand);
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(139,92,246,0.12);
     }}
 
     [data-testid="stMetricLabel"] {{
-        color: var(--muted);
+        color: var(--muted) !important;
         font-weight: 600;
     }}
 
     [data-testid="stMetricValue"] {{
-        color: {theme["heading"]};
+        color: {theme["heading"]} !important;
+        font-weight: 750;
     }}
+
+    /* BUTTONS */
 
     div.stButton > button,
     div.stDownloadButton > button {{
-        border-radius: 10px;
-        font-weight: 650;
+        background: linear-gradient(
+            120deg,
+            {theme["button"]},
+            var(--panel-2)
+        );
+        color: {theme["button_text"]} !important;
         border: 1px solid var(--line);
-        background: {theme["button"]};
-        color: {theme["button_text"]};
-        transition: transform .15s ease;
+        border-radius: 12px;
+        padding: 0.55rem 1.1rem;
+        font-weight: 650;
+        transition: all 0.2s ease;
     }}
 
     div.stButton > button:hover,
     div.stDownloadButton > button:hover {{
-        transform: translateY(-1px);
         border-color: var(--brand);
+        box-shadow: 0 0 18px rgba(139,92,246,0.22);
+        transform: translateY(-2px);
     }}
 
-    [data-testid="stFileUploader"] {{
-        border: 1px dashed var(--line);
-        border-radius: 14px;
-        padding: 8px;
-        background: var(--panel);
+    div.stButton > button[kind="primary"] {{
+        background: linear-gradient(
+            110deg,
+            #7046db,
+            #9b65ef
+        );
+        color: white !important;
+        border: none;
     }}
+
+    /* INPUTS */
 
     [data-baseweb="select"] > div,
     [data-baseweb="input"] > div,
     [data-baseweb="textarea"] > div {{
-        background: {theme["input"]};
+        background: var(--input);
         border-color: var(--line);
+        border-radius: 11px;
         color: var(--text);
     }}
 
@@ -183,98 +271,171 @@ st.markdown(
         color: var(--text) !important;
     }}
 
-    [data-testid="stAlert"] {{
+    /* FILE UPLOADER */
+
+    [data-testid="stFileUploader"] {{
         background: var(--panel);
-        border-color: var(--line);
+        border: 1px dashed var(--brand);
+        border-radius: 18px;
+        padding: 16px;
+        transition: all 0.2s ease;
     }}
 
+    [data-testid="stFileUploader"]:hover {{
+        box-shadow: 0 0 20px rgba(139,92,246,0.12);
+    }}
+
+    /* ALERTS */
+
+    [data-testid="stAlert"] {{
+        border-radius: 13px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+    }}
+
+    /* DATA TABLES */
+
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"] {{
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        overflow: hidden;
+    }}
+
+    /* PROGRESS BAR */
+
+    [data-testid="stProgressBar"] > div > div {{
+        background: linear-gradient(
+            90deg,
+            #7046db,
+            #b18aff
+        );
+        border-radius: 20px;
+    }}
+
+    /* SELECT BOX AND SLIDERS */
+
+    [data-baseweb="popover"] {{
+        background: var(--panel);
+    }}
+
+    [data-testid="stSlider"] [role="slider"] {{
+        background: var(--brand);
+    }}
+
+    /* HERO PANEL */
+
     .hero-panel {{
-        padding: 28px 30px;
-        border-radius: 22px;
+        padding: 34px;
+        border-radius: 24px;
         background: linear-gradient(
             120deg,
             {theme["hero1"]},
-            {theme["hero2"]} 62%,
+            {theme["hero2"]} 60%,
             {theme["hero3"]}
         );
-        color: white;
-        margin: 4px 0 22px 0;
-        border: 1px solid var(--brand);
-        box-shadow: 0 14px 30px rgba(124,58,237,.15);
+        border: 1px solid rgba(255,255,255,0.18);
+        box-shadow: 0 18px 45px rgba(110,70,210,0.20);
+        margin: 8px 0 25px 0;
     }}
 
     .hero-panel h1 {{
-        color: white;
-        font-size: clamp(1.75rem, 4vw, 2.55rem);
-        margin: 0 0 8px 0;
-        line-height: 1.15;
+        color: white !important;
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        margin-bottom: 10px;
     }}
 
     .hero-panel p {{
-        color: #f3e8ff;
-        margin: 0;
+        color: #eee7ff !important;
         font-size: 1rem;
-        max-width: 850px;
+        max-width: 800px;
     }}
 
     .hero-chip {{
         display: inline-block;
-        border: 1px solid rgba(255,255,255,.35);
-        background: rgba(255,255,255,.12);
-        border-radius: 999px;
-        padding: 5px 11px;
-        margin-bottom: 13px;
-        font-size: .78rem;
+        background: rgba(255,255,255,0.13);
+        border: 1px solid rgba(255,255,255,0.25);
+        color: white;
+        border-radius: 50px;
+        padding: 6px 13px;
+        font-size: 0.78rem;
         font-weight: 700;
+        margin-bottom: 14px;
+    }}
+
+    /* INFO CARDS */
+
+    .info-card {{
+        background: linear-gradient(
+            145deg,
+            var(--panel),
+            var(--panel-2)
+        );
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 21px;
+        height: 100%;
+        box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+    }}
+
+    .info-card h3 {{
+        color: var(--brand) !important;
+        margin-top: 0;
+    }}
+
+    .info-card p {{
+        color: var(--muted) !important;
     }}
 
     .section-note {{
         color: var(--muted);
-        font-size: .92rem;
-        margin-top: -7px;
+        font-size: 0.92rem;
     }}
 
-    .info-card {{
+    /* PLOTLY CHART CONTAINERS */
+
+    [data-testid="stPlotlyChart"] {{
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 15px;
-        padding: 16px 18px;
-        height: 100%;
-        box-shadow: 0 4px 14px rgba(0,0,0,.08);
+        border-radius: 17px;
+        padding: 8px;
     }}
 
-    .info-card h3 {{
-        margin-top: 0;
-        color: var(--brand);
-        font-size: 1.02rem;
+    /* CHECKBOX AND RADIO */
+
+    [data-testid="stCheckbox"],
+    [data-testid="stRadio"] {{
+        color: var(--text);
     }}
 
-    .info-card p {{
-        margin-bottom: 0;
-        color: var(--muted);
-        font-size: .92rem;
-    }}
+    /* RESPONSIVE DESIGN */
 
-    [data-testid="stProgressBar"] > div > div {{
-        background: var(--brand);
-    }}
+    @media (max-width: 768px) {{
+        .main .block-container {{
+            padding: 1rem 0.8rem 3rem 0.8rem;
+        }}
 
-    [data-testid="stDataFrame"],
-    [data-testid="stTable"] {{
-        border-radius: 12px;
-        overflow: hidden;
-    }}
-
-    @media (max-width: 640px) {{
         .hero-panel {{
-            padding: 22px 19px;
-            border-radius: 16px;
+            padding: 22px;
+            border-radius: 18px;
         }}
 
         [data-testid="stMetric"] {{
-            padding: 12px;
+            padding: 13px;
+            min-height: 95px;
+        }}
+
+        h1 {{
+            font-size: 1.9rem;
         }}
     }}
+
+    /* SMOOTH TRANSITIONS */
+
+    button, input, [data-testid="stMetric"] {{
+        transition: all 0.2s ease;
+    }}
+
     </style>
     """,
     unsafe_allow_html=True,
