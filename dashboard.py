@@ -3135,6 +3135,90 @@ else:
             monthly_sessions,
         )
 
+        # Weekly activity and study streak statistics
+
+        today = pd.Timestamp.now().normalize()
+
+        past_dates = activity_dates[
+            activity_dates <= today
+        ]
+
+        unique_study_dates = sorted(
+            set(past_dates.dt.date)
+        )
+
+        # Calculate longest study streak
+        longest_streak = 0
+        current_streak_count = 0
+        previous_date = None
+
+        for study_date in unique_study_dates:
+
+            if (
+                previous_date is not None
+                and (study_date - previous_date).days == 1
+            ):
+                current_streak_count += 1
+            else:
+                current_streak_count = 1
+
+            longest_streak = max(
+                longest_streak,
+                current_streak_count,
+            )
+
+            previous_date = study_date
+
+        # Calculate current streak
+        current_streak = 0
+
+        if unique_study_dates:
+            last_study_date = unique_study_dates[-1]
+
+            if (today.date() - last_study_date).days <= 1:
+                check_date = last_study_date
+
+                while check_date in set(unique_study_dates):
+                    current_streak += 1
+                    check_date -= pd.Timedelta(days=1)
+
+        # Calculate this week's activity
+        week_start = today - pd.Timedelta(days=today.weekday())
+
+        weekly_dates = activity_dates[
+            (activity_dates >= week_start)
+            & (activity_dates <= today)
+        ]
+
+        weekly_active_days = weekly_dates.dt.date.nunique()
+        weekly_sessions = len(weekly_dates)
+
+        st.markdown("#### 🔥 Study Consistency")
+
+        streak_col1, streak_col2 = st.columns(2)
+
+        streak_col1.metric(
+            "🔥 Current Study Streak",
+            f"{current_streak} days",
+        )
+
+        streak_col2.metric(
+            "🏆 Longest Study Streak",
+            f"{longest_streak} days",
+        )
+
+        weekly_col1, weekly_col2 = st.columns(2)
+
+        weekly_col1.metric(
+            "📅 Active Days This Week",
+            weekly_active_days,
+        )
+
+        weekly_col2.metric(
+            "📚 Sessions This Week",
+            weekly_sessions,
+        )
+
         st.caption(
             "Purple intensity represents the number of recorded "
             "sessions. It does not measure attention or productivity."
