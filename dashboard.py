@@ -2414,31 +2414,60 @@ else:
         else float("nan")
     )
 
+
     # --------------------------------------------------------
-    # TOP ANALYTICS CARDS
+    # TOP ANALYTICS CARDS — PREMIUM KPI DESIGN
     # --------------------------------------------------------
 
     st.markdown("### 📌 Performance at a Glance")
 
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stMetric"] {
+            background: linear-gradient(145deg, #211b38, #30234f);
+            border: 1px solid rgba(167, 139, 250, 0.35);
+            border-radius: 18px;
+            padding: 20px 16px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
+            min-height: 125px;
+        }
+
+        div[data-testid="stMetricLabel"] p {
+            color: #c4b5fd !important;
+            font-size: 14px !important;
+            font-weight: 600 !important;
+        }
+
+        div[data-testid="stMetricValue"] {
+            color: #ffffff !important;
+            font-size: 28px !important;
+            font-weight: 700 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     metric1, metric2, metric3, metric4 = st.columns(4)
 
     metric1.metric(
-        "Sessions Analyzed",
+        "📚 Sessions Analyzed",
         f"{total_sessions:,}",
     )
 
     metric2.metric(
-        "Frames Processed",
+        "🎞️ Frames Processed",
         f"{total_frames:,}",
     )
 
     metric3.metric(
-        "Phone Detections",
+        "📱 Phone Detections",
         f"{total_detections:,}",
     )
 
     metric4.metric(
-        "Average Phone Visibility",
+        "📊 Average Phone Visibility",
         f"{average_visibility:.1f}%"
         if pd.notna(average_visibility)
         else "N/A",
