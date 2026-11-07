@@ -1923,8 +1923,9 @@ st.markdown(
     "<div style='background:#6d28d9;color:white;padding:20px;border-radius:12px;'>HTML TEST — THIS SHOULD BE A PURPLE BOX</div>",
     unsafe_allow_html=True,
 )
+
 # ============================================================
-# HERO SECTION — HTML RENDER TEST
+# PREMIUM HERO SECTION
 # ============================================================
 
 st.markdown(
@@ -1935,7 +1936,7 @@ st.markdown(
         padding: 40px;
         border-radius: 24px;
         margin-bottom: 20px;
-    ">)
+    ">
         <span style="
             background: rgba(255,255,255,0.18);
             padding: 8px 14px;
@@ -1968,6 +1969,8 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True,
+)
+
 
 # ============================================================
 # PREMIUM SIDEBAR NAVIGATION
