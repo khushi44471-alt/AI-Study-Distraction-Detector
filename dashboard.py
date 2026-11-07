@@ -2429,6 +2429,11 @@ def create_pdf_report(analysis):
 # ============================================================
 
 st.markdown(
+    '<div id="study-session-dashboard"></div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
     """
     <div style="background-color:#4c1d95; color:white; padding:35px; border-radius:20px;">
         <h1 style="color:white;">AI Study Distraction Detector</h1>
