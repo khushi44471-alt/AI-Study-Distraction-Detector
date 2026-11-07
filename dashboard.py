@@ -1430,6 +1430,7 @@ class WebcamPhoneDetector(VideoProcessorBase):
     def __init__(self):
         self.model = load_yolo_model(str(ensure_model_exists()))
         self.last_warn_time = 0.0
+        self.phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
@@ -1459,33 +1460,38 @@ class WebcamPhoneDetector(VideoProcessorBase):
                         conf = float(box.conf[0].item())
                         detections.append((x1, y1, x2, y2, conf))
 
-            if detections:
-                for x1, y1, x2, y2, conf in detections:
-                    cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                    cv2.putText(
-                        image,
-                        f"PHONE {conf:.0%}",
-                        (x1, max(20, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
+            raw_detected = bool(detections)
+            confirmed_phone = self.phone_filter.update(raw_detected)
 
+            for x1, y1, x2, y2, conf in detections:
+                box_color = (0, 0, 255) if confirmed_phone else (0, 165, 255)
+                label = "PHONE" if confirmed_phone else "PHONE CANDIDATE"
+                cv2.rectangle(image, (x1, y1), (x2, y2), box_color, 3)
+                cv2.putText(
+                    image,
+                    f"{label} {conf:.0%}",
+                    (x1, max(20, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    box_color,
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            if confirmed_phone:
                 now = time.monotonic()
                 if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
                     st.session_state.last_live_warning_time = now
                     st.session_state.live_warning_triggered = True
                     st.session_state.live_phone_detected = True
-                    st.session_state.last_warning_reason = "Phone detected in webcam"
+                    st.session_state.last_warning_reason = "Phone confirmed across recent webcam frames"
                     st.session_state.warning_summary = append_warning_summary(
                         st.session_state.warning_summary,
                         st.session_state.last_warning_reason
                     )
                     st.session_state.warning_log.append({
                         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "message": "Phone detected in webcam"
+                        "message": "Phone confirmed across recent webcam frames"
                     })
 
                 cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 0, 200), -1)
@@ -1495,6 +1501,19 @@ class WebcamPhoneDetector(VideoProcessorBase):
                     (20, 35),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            elif raw_detected:
+                st.session_state.live_phone_detected = False
+                cv2.rectangle(image, (0, 0), (image.shape[1], 52), (0, 115, 210), -1)
+                cv2.putText(
+                    image,
+                    "VERIFYING PHONE CANDIDATE",
+                    (20, 35),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.65,
                     (255, 255, 255),
                     2,
                     cv2.LINE_AA,
@@ -1514,14 +1533,25 @@ class WebcamPhoneDetector(VideoProcessorBase):
                 )
 
             st.session_state.live_stats = {
-                "status": "PHONE DETECTED" if detections else "NO PHONE DETECTED",
-                "phone_detected": bool(detections),
+                "status": (
+                    "PHONE DETECTED" if confirmed_phone
+                    else "VERIFYING CANDIDATE" if raw_detected
+                    else "NO PHONE DETECTED"
+                ),
+                "phone_detected": bool(confirmed_phone),
                 "phone_count": len(detections),
-                "confidence": max([round(float(item[4]), 4) for item in detections], default=0.0),
+                "confidence": max(
+                    [round(float(item[4]), 4) for item in detections],
+                    default=0.0,
+                ),
                 "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
 
-            st.session_state.live_status = "PHONE DETECTED" if detections else "FOCUSED / NO PHONE"
+            st.session_state.live_status = (
+                "PHONE DETECTED" if confirmed_phone
+                else "VERIFYING PHONE" if raw_detected
+                else "FOCUSED / NO PHONE"
+            )
 
         except Exception:
             st.session_state.live_phone_detected = False
@@ -1622,6 +1652,7 @@ def process_uploaded_video_for_live_detection(
         last_display_frame = None
         frame_index = 0
         last_frame_detected = False
+        phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
         while True:
             success, frame = capture.read()
@@ -1720,7 +1751,8 @@ def process_uploaded_video_for_live_detection(
                         })
 
                 analyzed_frames += 1
-                detected = phone_count > 0
+                raw_detected = phone_count > 0
+                detected = phone_filter.update(raw_detected)
                 last_frame_detected = detected
 
                 if detected:
@@ -1756,6 +1788,7 @@ def process_uploaded_video_for_live_detection(
                 detection_events.append({
                     "frame_index": frame_index,
                     "phone_detected": detected,
+                    "phone_candidate": raw_detected,
                     "phone_count": phone_count,
                     "confidence": (
                         max(confidence_values) if confidence_values else 0.0
@@ -1770,7 +1803,9 @@ def process_uploaded_video_for_live_detection(
                 last_display_frame = frame.copy()
 
                 if detected:
-                    status_display.error("📱 PHONE DETECTED")
+                    status_display.error("📱 PHONE CONFIRMED · 2 OF LAST 3 SAMPLES")
+                elif raw_detected:
+                    status_display.warning("⚠️ VERIFYING PHONE CANDIDATE")
                 else:
                     status_display.success("✅ NO PHONE DETECTED")
 
