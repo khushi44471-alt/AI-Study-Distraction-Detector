@@ -2282,11 +2282,12 @@ else:
 
 st.divider()
 
+   
     # --------------------------------------------------------
     # SESSION VISIBILITY TREND
     # --------------------------------------------------------
 
-        st.markdown("### 📈 Session Visibility Trend")
+    st.markdown("### 📈 Session Visibility Trend")
 
     if (
         "Phone Visible Percentage" in report_df.columns
@@ -2356,6 +2357,7 @@ st.divider()
         st.info("No session trend data is available.")
 
     st.divider()
+
 
     # --------------------------------------------------------
     # VIDEO COMPARISON
