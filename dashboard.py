@@ -2738,6 +2738,11 @@ stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
 # AI video analysis section
 # ============================================================
 
+st.markdown(
+    '<div id="ai-video-analysis"></div>',
+    unsafe_allow_html=True,
+)
+
 st.divider()
 st.subheader("🎬 AI Video Analysis")
 st.caption(
