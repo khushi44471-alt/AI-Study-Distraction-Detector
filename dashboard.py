@@ -4059,87 +4059,197 @@ if warnings:
 else:
     st.info("No warnings recorded.")
 
+
 # ============================================================
-# Timer
+# SMART POMODORO TIMER
 # ============================================================
 
-st.divider()
-st.subheader("⏱️ Study Session Timer")
-st.caption("Use the timer to manage a focused study block.")
+@st.fragment(run_every="1s")
+def render_study_timer():
 
-duration_options = [25, 45, 60]
-selected_duration = st.selectbox(
-    "Choose study duration (minutes)",
-    duration_options,
-    index=duration_options.index(st.session_state.study_timer_duration),
-    disabled=st.session_state.study_timer_running,
-    key="study_timer_duration_selector_main",
-)
+    st.divider()
+    st.subheader("⏱️ Smart Pomodoro Timer")
+    st.caption(
+        "Manage focus sessions and breaks with a live countdown."
+    )
 
-if selected_duration != st.session_state.study_timer_duration:
-    st.session_state.study_timer_duration = selected_duration
-    st.session_state.study_timer_elapsed_before_pause = 0.0
-    st.session_state.study_timer_started_at = None
-    st.session_state.study_timer_running = False
-    st.session_state.study_timer_finished = False
+    st.session_state.setdefault("study_timer_mode", "Focus")
+    st.session_state.setdefault("completed_focus_sessions", 0)
 
-total_seconds = st.session_state.study_timer_duration * 60
+    mode_options = ["Focus", "Short Break", "Long Break"]
 
-if st.session_state.study_timer_running:
-    elapsed_seconds = st.session_state.study_timer_elapsed_before_pause + time.monotonic() - st.session_state.study_timer_started_at
-else:
-    elapsed_seconds = st.session_state.study_timer_elapsed_before_pause
+    current_mode = st.session_state.study_timer_mode
 
-elapsed_seconds = min(elapsed_seconds, total_seconds)
-remaining_seconds = max(0, total_seconds - elapsed_seconds)
+    mode_choice = st.selectbox(
+        "Choose session type",
+        mode_options,
+        index=mode_options.index(current_mode),
+        disabled=st.session_state.study_timer_running,
+        key="study_timer_mode_selector_main",
+    )
 
-if remaining_seconds <= 0:
-    st.session_state.study_timer_running = False
-    st.session_state.study_timer_finished = True
-
-elapsed_minutes = int(elapsed_seconds) // 60
-elapsed_remainder = int(elapsed_seconds) % 60
-remaining_minutes = int(remaining_seconds) // 60
-remaining_remainder = int(remaining_seconds) % 60
-
-timer_col1, timer_col2 = st.columns(2)
-timer_col1.metric("Elapsed Study Time", f"{elapsed_minutes:02d}:{elapsed_remainder:02d}")
-timer_col2.metric("Time Remaining", f"{remaining_minutes:02d}:{remaining_remainder:02d}")
-
-st.progress(min(1.0, elapsed_seconds / total_seconds))
-
-button_col1, button_col2, button_col3 = st.columns(3)
-
-with button_col1:
-    if st.button(
-        "▶️ Start / Resume",
-        disabled=(st.session_state.study_timer_running or st.session_state.study_timer_finished),
-        key="study_timer_start_main",
-    ):
-        st.session_state.study_timer_started_at = time.monotonic()
-        st.session_state.study_timer_running = True
-
-with button_col2:
-    if st.button(
-        "⏸️ Pause",
-        disabled=not st.session_state.study_timer_running,
-        key="study_timer_pause_main",
-    ):
-        st.session_state.study_timer_elapsed_before_pause = elapsed_seconds
-        st.session_state.study_timer_running = False
-        st.session_state.study_timer_started_at = None
-
-with button_col3:
-    if st.button("🔄 Reset", key="study_timer_reset_main"):
+    if mode_choice != current_mode:
+        st.session_state.study_timer_mode = mode_choice
         st.session_state.study_timer_running = False
         st.session_state.study_timer_started_at = None
         st.session_state.study_timer_elapsed_before_pause = 0.0
         st.session_state.study_timer_finished = False
 
-if st.session_state.study_timer_finished:
-    st.success("🎉 Study session completed! Take a short break.")
-elif st.session_state.study_timer_running:
-    st.info("Your study timer is running.")
+        if mode_choice == "Short Break":
+            st.session_state.study_timer_duration = 5
+        elif mode_choice == "Long Break":
+            st.session_state.study_timer_duration = 15
+        else:
+            st.session_state.study_timer_duration = 25
+
+    if st.session_state.study_timer_mode == "Focus":
+
+        duration_options = [25, 45, 60]
+
+        selected_duration = st.selectbox(
+            "Choose focus duration (minutes)",
+            duration_options,
+            index=duration_options.index(
+                st.session_state.study_timer_duration
+            ),
+            disabled=st.session_state.study_timer_running,
+            key="study_timer_duration_selector_main",
+        )
+
+        if selected_duration != st.session_state.study_timer_duration:
+            st.session_state.study_timer_duration = selected_duration
+            st.session_state.study_timer_elapsed_before_pause = 0.0
+            st.session_state.study_timer_started_at = None
+            st.session_state.study_timer_finished = False
+
+    else:
+        st.info(
+            "Short break: 5 minutes"
+            if st.session_state.study_timer_mode == "Short Break"
+            else "Long break: 15 minutes"
+        )
+
+    total_seconds = st.session_state.study_timer_duration * 60
+
+    if st.session_state.study_timer_running:
+        elapsed_seconds = (
+            st.session_state.study_timer_elapsed_before_pause
+            + time.monotonic()
+            - st.session_state.study_timer_started_at
+        )
+    else:
+        elapsed_seconds = (
+            st.session_state.study_timer_elapsed_before_pause
+        )
+
+    elapsed_seconds = min(elapsed_seconds, total_seconds)
+    remaining_seconds = max(0, total_seconds - elapsed_seconds)
+
+    if remaining_seconds <= 0 and st.session_state.study_timer_running:
+        st.session_state.study_timer_running = False
+        st.session_state.study_timer_started_at = None
+        st.session_state.study_timer_finished = True
+
+        if st.session_state.study_timer_mode == "Focus":
+            st.session_state.completed_focus_sessions += 1
+
+    elapsed_minutes = int(elapsed_seconds) // 60
+    elapsed_remainder = int(elapsed_seconds) % 60
+
+    remaining_minutes = int(remaining_seconds) // 60
+    remaining_remainder = int(remaining_seconds) % 60
+
+    st.markdown("#### ⏳ Session Countdown")
+
+    timer_col1, timer_col2 = st.columns(2)
+
+    timer_col1.metric(
+        "Elapsed Time",
+        f"{elapsed_minutes:02d}:{elapsed_remainder:02d}",
+    )
+
+    timer_col2.metric(
+        "Time Remaining",
+        f"{remaining_minutes:02d}:{remaining_remainder:02d}",
+    )
+
+    st.progress(
+        min(1.0, elapsed_seconds / total_seconds)
+    )
+
+    st.metric(
+        "🏆 Completed Focus Sessions",
+        st.session_state.completed_focus_sessions,
+    )
+
+    button_col1, button_col2, button_col3 = st.columns(3)
+
+    with button_col1:
+        if st.button(
+            "▶️ Start / Resume",
+            disabled=(
+                st.session_state.study_timer_running
+                or st.session_state.study_timer_finished
+            ),
+            key="study_timer_start_main",
+            use_container_width=True,
+        ):
+            st.session_state.study_timer_started_at = time.monotonic()
+            st.session_state.study_timer_running = True
+            st.rerun()
+
+    with button_col2:
+        if st.button(
+            "⏸️ Pause",
+            disabled=not st.session_state.study_timer_running,
+            key="study_timer_pause_main",
+            use_container_width=True,
+        ):
+            st.session_state.study_timer_elapsed_before_pause = elapsed_seconds
+            st.session_state.study_timer_running = False
+            st.session_state.study_timer_started_at = None
+            st.rerun()
+
+    with button_col3:
+        if st.button(
+            "🔄 Reset",
+            key="study_timer_reset_main",
+            use_container_width=True,
+        ):
+            st.session_state.study_timer_running = False
+            st.session_state.study_timer_started_at = None
+            st.session_state.study_timer_elapsed_before_pause = 0.0
+            st.session_state.study_timer_finished = False
+            st.rerun()
+
+    if st.session_state.study_timer_finished:
+
+        if st.session_state.study_timer_mode == "Focus":
+            st.success(
+                "🎉 Focus session completed! "
+                "Take a short break before studying again."
+            )
+
+            if st.session_state.completed_focus_sessions % 4 == 0:
+                st.info(
+                    "🌟 You've completed four focus sessions! "
+                    "Consider taking a 15-minute long break."
+                )
+
+        else:
+            st.success(
+                "☕ Break completed! You're ready for your next session."
+            )
+
+    elif st.session_state.study_timer_running:
+        st.info(
+            f"🎯 Your {st.session_state.study_timer_mode.lower()} "
+            "session is running."
+        )
+
+
+render_study_timer()
+
 
 # ============================================================
 # About section
