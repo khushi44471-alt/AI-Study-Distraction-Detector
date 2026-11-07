@@ -617,6 +617,33 @@ def speak_warning():
 # Alert UI
 # ============================================================
 
+smart_alerts_enabled = st.checkbox(
+    "🔔 Enable Smart Detection Alerts",
+    value=True,
+    help="Receive an alert when a phone is detected repeatedly.",
+    key="smart_alerts_enabled",
+)
+
+alert_threshold = st.slider(
+    "📱 Consecutive Phone Detections Required",
+    min_value=1,
+    max_value=20,
+    value=3,
+    step=1,
+    help="Number of consecutive detected frames required before an alert.",
+    key="smart_alert_threshold",
+)
+
+alert_cooldown = st.slider(
+    "⏱️ Alert Cooldown (seconds)",
+    min_value=10,
+    max_value=120,
+    value=30,
+    step=5,
+    help="Minimum waiting time between repeated alerts.",
+    key="smart_alert_cooldown",
+)
+
 alert_choice = st.selectbox(
     "🔔 Choose Phone Alert Sound",
     [
@@ -655,7 +682,9 @@ if alert_choice == "5. Custom MP3/WAV File":
         key="custom_phone_alert_audio_main",
     )
     if uploaded_audio is not None:
-        custom_audio = base64.b64encode(uploaded_audio.getvalue()).decode("utf-8")
+        custom_audio = base64.b64encode(
+            uploaded_audio.getvalue()
+        ).decode("utf-8")
         custom_audio_type = uploaded_audio.type or "audio/mpeg"
 
 def play_custom_warning_audio():
