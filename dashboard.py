@@ -2282,11 +2282,11 @@ else:
         </div>
         """
 
-st.components.v1.html(
-    calendar_html,
-    height=480,
-    scrolling=False,
-)
+        st.components.v1.html(
+            calendar_html,
+            height=480,
+            scrolling=False,
+        )
 
         # Monthly statistics
         month_dates = activity_dates[
@@ -2326,7 +2326,7 @@ st.components.v1.html(
     # SESSION VISIBILITY TREND
     # --------------------------------------------------------
 
-    st.markdown("### 📈 Session Visibility Trend")
+       st.markdown("### 📈 Session Visibility Trend")
 
     if (
         "Phone Visible Percentage" in report_df.columns
