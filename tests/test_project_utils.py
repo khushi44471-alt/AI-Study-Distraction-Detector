@@ -135,23 +135,29 @@ class ProjectUtilsTests(unittest.TestCase):
         self.assertEqual(get_study_level(200)["progress"], 1.0)
 
     def test_smart_insights_compare_latest_five_with_previous_five(self):
+        dates = [f"2026-11-{day:02d}" for day in range(1, 11)]
         history = pd.DataFrame({
-            "Date": [
-                "2026-11-01", "2026-11-02", "2026-11-03",
-                "2026-11-04", "2026-11-05", "2026-11-06",
-            ],
-            "Session Time": ["09:00:00"] * 6,
-            "Video Name": [f"session-{index}.mp4" for index in range(6)],
-            "Phone Visible Percentage": [50, 40, 30, 20, 10, 5],
+            "Date": dates,
+            "Session Time": ["09:00:00"] * 10,
+            "Video Name": [f"session-{index}.mp4" for index in range(10)],
+            "Phone Visible Percentage": [50, 40, 30, 20, 10, 10, 9, 8, 7, 6],
         })
         insights = build_session_insights(history)
         self.assertTrue(insights["has_data"])
-        self.assertEqual(insights["session_count"], 6)
-        self.assertAlmostEqual(insights["recent_average"], 21.0)
-        self.assertAlmostEqual(insights["previous_average"], 50.0)
-        self.assertAlmostEqual(insights["change"], -29.0)
-        self.assertEqual(insights["active_days_7d"], 6)
-        self.assertEqual(insights["best_video"], "session-5.mp4")
+        self.assertEqual(insights["session_count"], 10)
+        self.assertAlmostEqual(insights["recent_average"], 8.0)
+        self.assertAlmostEqual(insights["previous_average"], 30.0)
+        self.assertAlmostEqual(insights["change"], -22.0)
+        self.assertEqual(insights["active_days_7d"], 7)
+        self.assertEqual(insights["best_video"], "session-9.mp4")
+
+    def test_smart_insights_wait_for_two_complete_windows(self):
+        history = pd.DataFrame({
+            "Phone Visible Percentage": [25, 20, 15, 10, 5, 2],
+        })
+        insights = build_session_insights(history)
+        self.assertIsNone(insights["previous_average"])
+        self.assertIsNone(insights["change"])
 
 
 if __name__ == "__main__":
