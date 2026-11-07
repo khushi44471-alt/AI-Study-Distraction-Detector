@@ -3028,9 +3028,9 @@ else:
 
     st.divider()
 
-    
+   
     # --------------------------------------------------------
-    # STUDY PROGRESS REPORT
+    # STUDY PROGRESS REPORT — PREMIUM DESIGN
     # --------------------------------------------------------
 
     st.markdown("### 📊 Study Progress Report")
@@ -3113,17 +3113,18 @@ else:
                 f"#### 📅 Latest {report_view} Summary"
             )
 
+            # Progress summary metrics
             progress_col1, progress_col2, progress_col3, progress_col4 = (
                 st.columns(4)
             )
 
             progress_col1.metric(
-                "Sessions Completed",
+                "📚 Sessions Completed",
                 int(latest_period["Sessions"]),
             )
 
             progress_col2.metric(
-                "Average Phone Visibility",
+                "📱 Average Phone Visibility",
                 (
                     f'{latest_period["Average_Visibility"]:.1f}%'
                     if pd.notna(latest_period["Average_Visibility"])
@@ -3132,7 +3133,7 @@ else:
             )
 
             progress_col3.metric(
-                "Average Focus Score",
+                "🎯 Average Focus Score",
                 (
                     f'{latest_period["Average_Focus"]:.1f}%'
                     if pd.notna(latest_period["Average_Focus"])
@@ -3141,10 +3142,13 @@ else:
             )
 
             progress_col4.metric(
-                "Phone Detections",
+                "🔍 Phone Detections",
                 int(latest_period["Total_Detections"]),
             )
 
+            st.markdown("---")
+
+            # Prepare period labels
             progress_summary["Period"] = (
                 progress_summary["_Period"].dt.strftime(
                     "%d %b %Y"
@@ -3182,7 +3186,21 @@ else:
                     y="Percentage",
                     color="Metric",
                     markers=True,
+                    color_discrete_map={
+                        "Phone Visibility": "#a78bfa",
+                        "Focus Score": "#22c55e",
+                    },
                     title=f"{report_view} Study Progress",
+                )
+
+                progress_fig.update_traces(
+                    line=dict(width=3),
+                    marker=dict(size=9),
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "%{x}<br>"
+                        "%{y:.1f}%<extra></extra>"
+                    ),
                 )
 
                 progress_fig.update_layout(
@@ -3193,18 +3211,53 @@ else:
                     ),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(size=13),
+                    title=dict(
+                        x=0.5,
+                        xanchor="center",
+                        font=dict(size=19),
+                    ),
                     yaxis_title="Percentage (%)",
                     yaxis_range=[0, 100],
                     xaxis_title=report_view,
-                    margin=dict(l=10, r=10, t=55, b=10),
+                    legend_title_text="",
+                    hovermode="x unified",
+                    margin=dict(l=15, r=15, t=65, b=20),
+                )
+
+                progress_fig.update_xaxes(
+                    showgrid=False,
+                    zeroline=False,
+                )
+
+                progress_fig.update_yaxes(
+                    showgrid=True,
+                    gridcolor=(
+                        "rgba(255,255,255,0.10)"
+                        if is_dark_mode
+                        else "rgba(0,0,0,0.08)"
+                    ),
+                    zeroline=False,
                 )
 
                 st.plotly_chart(
                     progress_fig,
                     use_container_width=True,
+                    config={"displayModeBar": False},
                 )
 
+            else:
+                st.info(
+                    "Focus and phone visibility data are not "
+                    "available for the selected periods yet."
+                )
+
+            st.markdown("---")
             st.markdown("#### 📋 Progress History")
+            st.caption(
+                "A breakdown of your recorded study sessions "
+                "for each selected period."
+            )
 
             progress_display = progress_summary[
                 [
@@ -3219,6 +3272,14 @@ else:
                 "Average_Focus": "Average Focus Score (%)",
                 "Total_Detections": "Total Phone Detections",
             })
+
+            progress_display["Average Phone Visibility (%)"] = (
+                progress_display["Average Phone Visibility (%)"].round(1)
+            )
+
+            progress_display["Average Focus Score (%)"] = (
+                progress_display["Average Focus Score (%)"].round(1)
+            )
 
             st.dataframe(
                 progress_display,
