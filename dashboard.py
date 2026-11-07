@@ -2465,18 +2465,208 @@ else:
 
     st.divider()
 
+    
     # --------------------------------------------------------
-    # SESSION HISTORY AND CSV DOWNLOAD
+    # SESSION HISTORY AND ADVANCED FILTERS
     # --------------------------------------------------------
 
     st.markdown("### 📋 Recent Session History")
+    st.caption("Search, filter, sort, and download your study sessions.")
 
-    st.dataframe(
-        report_df.tail(10).iloc[::-1],
-        use_container_width=True,
-        hide_index=True,
+    history_df = report_df.copy()
+
+    # Prepare date and visibility columns
+    if "Date" in history_df.columns:
+        history_df["_Date"] = pd.to_datetime(
+            history_df["Date"],
+            errors="coerce"
+        )
+    else:
+        history_df["_Date"] = pd.NaT
+
+    if "Phone Visible Percentage" in history_df.columns:
+        history_df["_Visibility"] = pd.to_numeric(
+            history_df["Phone Visible Percentage"],
+            errors="coerce"
+        )
+    else:
+        history_df["_Visibility"] = pd.NA
+
+    # Default filter values
+    valid_dates = history_df["_Date"].dropna()
+
+    if not valid_dates.empty:
+        default_date_range = (
+            valid_dates.min().date(),
+            valid_dates.max().date()
+        )
+    else:
+        default_date_range = None
+
+    # Reset filters
+    if st.button("🔄 Reset All Filters", key="reset_history_filters"):
+        st.session_state["history_video_search"] = ""
+        st.session_state["history_visibility_range"] = (0.0, 100.0)
+        st.session_state["history_sort_order"] = "Newest First"
+
+        if default_date_range is not None:
+            st.session_state["history_date_range"] = default_date_range
+
+    # Filter controls
+    st.markdown("#### 🔎 Filter Sessions")
+
+    filter_col1, filter_col2 = st.columns(2)
+
+    with filter_col1:
+        if default_date_range is not None:
+            selected_dates = st.date_input(
+                "📅 Select Date Range",
+                value=default_date_range,
+                min_value=default_date_range[0],
+                max_value=default_date_range[1],
+                key="history_date_range"
+            )
+        else:
+            selected_dates = None
+            st.info("No valid session dates are available.")
+
+        if "Video Name" in history_df.columns:
+            search_term = st.text_input(
+                "🎬 Search Video Name",
+                placeholder="Enter a video name...",
+                key="history_video_search"
+            )
+        else:
+            search_term = ""
+
+    with filter_col2:
+        visibility_range = st.slider(
+            "📱 Phone Visibility Range (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=(0.0, 100.0),
+            step=1.0,
+            key="history_visibility_range"
+        )
+
+        sort_order = st.selectbox(
+            "↕️ Sort Sessions",
+            [
+                "Newest First",
+                "Oldest First",
+                "Highest Visibility",
+                "Lowest Visibility"
+            ],
+            key="history_sort_order"
+        )
+
+    # Apply date filter
+    if (
+        selected_dates is not None
+        and isinstance(selected_dates, (tuple, list))
+        and len(selected_dates) == 2
+    ):
+        start_date, end_date = selected_dates
+
+        history_df = history_df[
+            history_df["_Date"].dt.date.between(
+                start_date,
+                end_date
+            )
+        ]
+
+    # Apply video search
+    if search_term and "Video Name" in history_df.columns:
+        history_df = history_df[
+            history_df["Video Name"].fillna("").astype(str).str.contains(
+                search_term,
+                case=False,
+                regex=False
+            )
+        ]
+
+    # Apply visibility filter
+    if "_Visibility" in history_df.columns:
+        history_df = history_df[
+            history_df["_Visibility"].between(
+                visibility_range[0],
+                visibility_range[1]
+            )
+        ]
+
+    # Apply sorting
+    if sort_order == "Newest First":
+        history_df = history_df.sort_values(
+            "_Date",
+            ascending=False,
+            na_position="last"
+        )
+
+    elif sort_order == "Oldest First":
+        history_df = history_df.sort_values(
+            "_Date",
+            ascending=True,
+            na_position="last"
+        )
+
+    elif sort_order == "Highest Visibility":
+        history_df = history_df.sort_values(
+            "_Visibility",
+            ascending=False,
+            na_position="last"
+        )
+
+    elif sort_order == "Lowest Visibility":
+        history_df = history_df.sort_values(
+            "_Visibility",
+            ascending=True,
+            na_position="last"
+        )
+
+    # Remove temporary columns
+    display_history = history_df.drop(
+        columns=["_Date", "_Visibility"],
+        errors="ignore"
     )
 
+    # Display filtered results
+    st.markdown("#### 📊 Filtered Results")
+
+    result_col1, result_col2 = st.columns(2)
+
+    result_col1.metric(
+        "Matching Sessions",
+        len(display_history)
+    )
+
+    result_col2.metric(
+        "Total Sessions",
+        len(report_df)
+    )
+
+    if not display_history.empty:
+        st.dataframe(
+            display_history,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        filtered_csv = display_history.to_csv(
+            index=False
+        ).encode("utf-8")
+
+        st.download_button(
+            "⬇️ Download Filtered Sessions (CSV)",
+            data=filtered_csv,
+            file_name="filtered_session_report.csv",
+            mime="text/csv",
+            key="download_filtered_sessions"
+        )
+
+    else:
+        st.info("No sessions match your selected filters.")
+
+    # Download complete report
     csv_data = report_df.to_csv(
         index=False
     ).encode("utf-8")
@@ -2486,8 +2676,9 @@ else:
         data=csv_data,
         file_name="session_summary.csv",
         mime="text/csv",
-        key="download_csv_summary_main",
+        key="download_csv_summary_main"
     )
+
 
 st.caption(
     "Class 12 AI Project | Phone visibility is an indicator only, "
