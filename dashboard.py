@@ -2033,8 +2033,11 @@ def save_session_record(
     record.to_csv(report_path, index=False)
 
 
+
 def create_pdf_report(analysis):
-    """Generate a PDF summary of one study video analysis."""
+    """Generate an advanced PDF report for a study video analysis."""
+
+    from xml.sax.saxutils import escape
 
     pdf_buffer = BytesIO()
 
@@ -2050,38 +2053,92 @@ def create_pdf_report(analysis):
     styles = getSampleStyleSheet()
     story = []
 
-    story.append(Paragraph(
-        "AI Study Distraction Detector System",
-        styles["Title"]
-    ))
-    story.append(Spacer(1, 15))
+    # --------------------------------------------------------
+    # SAFE FORMATTING HELPERS
+    # --------------------------------------------------------
+
+    def safe_number(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def safe_paragraph(value, style):
+        return Paragraph(
+            escape(str(value)),
+            style,
+        )
+
+    # --------------------------------------------------------
+    # REPORT HEADER
+    # --------------------------------------------------------
 
     story.append(Paragraph(
-        "Study Session Analysis Report",
-        styles["Heading2"]
+        "AI STUDY DISTRACTION DETECTOR",
+        styles["Title"],
     ))
-    story.append(Spacer(1, 12))
+
+    story.append(Spacer(1, 5))
+
+    story.append(Paragraph(
+        "ADVANCED STUDY SESSION ANALYSIS REPORT",
+        styles["Heading2"],
+    ))
+
+    story.append(Spacer(1, 8))
+
+    story.append(Paragraph(
+        f"Report generated: {datetime.now().strftime('%d %B %Y, %I:%M %p')}",
+        styles["BodyText"],
+    ))
+
+    story.append(Spacer(1, 18))
+
+    # --------------------------------------------------------
+    # SESSION INFORMATION
+    # --------------------------------------------------------
+
+    story.append(Paragraph(
+        "1. Session Overview",
+        styles["Heading2"],
+    ))
+
+    percentage = max(
+        0,
+        min(100, safe_number(analysis.get("percentage", 0))),
+    )
+
+    focus_score = max(
+        0,
+        min(100, safe_number(analysis.get("focus_score", 0))),
+    )
 
     report_data = [
-        ["Metric", "Result"],
+        ["SESSION METRIC", "RESULT"],
         ["Video Name", str(analysis.get("video_name", "N/A"))],
-        ["Resolution", str(analysis.get("resolution", "N/A"))],
+        ["Video Resolution", str(analysis.get("resolution", "N/A"))],
         ["Frames Processed", str(analysis.get("frames_processed", 0))],
         ["Frames With Phone", str(analysis.get("frames_with_phone", 0))],
-        ["Phone Visibility", f'{analysis.get("percentage", 0):.2f}%'],
+        ["Phone Visibility", f"{percentage:.2f}%"],
         ["Total Phone Detections", str(analysis.get("detections", 0))],
-        ["Focus Score", f'{analysis.get("focus_score", 0):.2f}%'],
+        ["Estimated Focus Indicator", f"{focus_score:.2f}%"],
         ["Alert Level", str(analysis.get("alert_level", "N/A"))],
         ["Study Status", str(analysis.get("study_status", "N/A"))],
         ["Risk Band", str(analysis.get("risk_band", "N/A"))],
     ]
 
-    report_table = Table(report_data, colWidths=[210, 270])
+    report_table = Table(
+        report_data,
+        colWidths=[210, 270],
+        repeatRows=1,
+    )
 
     report_table.setStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#312E81")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F5F3FF")),
+        ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#1E1B4B")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#C4B5FD")),
         ("PADDING", (0, 0), (-1, -1), 8),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ])
@@ -2089,35 +2146,250 @@ def create_pdf_report(analysis):
     story.append(report_table)
     story.append(Spacer(1, 20))
 
-    story.append(Paragraph("Analysis Summary", styles["Heading2"]))
+    # --------------------------------------------------------
+    # PHONE VISIBILITY INDICATOR
+    # --------------------------------------------------------
+
+    story.append(Paragraph(
+        "2. Phone Visibility Indicator",
+        styles["Heading2"],
+    ))
+
+    story.append(Paragraph(
+        f"Phone visibility recorded: {percentage:.2f}%",
+        styles["BodyText"],
+    ))
+
+    story.append(Spacer(1, 8))
+
+    filled_cells = int(round(percentage / 10))
+
+    meter = Table(
+        [[" "] * 10],
+        colWidths=[48] * 10,
+        rowHeights=[12],
+    )
+
+    meter_styles = [
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.white),
+        ("INNERGRID", (0, 0), (-1, -1), 1, colors.white),
+    ]
+
+    for index in range(10):
+        meter_styles.append((
+            "BACKGROUND",
+            (index, 0),
+            (index, 0),
+            colors.HexColor("#7C3AED")
+            if index < filled_cells
+            else colors.HexColor("#E9D5FF"),
+        ))
+
+    meter.setStyle(meter_styles)
+
+    story.append(meter)
+    story.append(Spacer(1, 18))
+
+    # --------------------------------------------------------
+    # DETECTION TIMELINE
+    # --------------------------------------------------------
+
+    story.append(Paragraph(
+        "3. Phone Detection Timeline",
+        styles["Heading2"],
+    ))
+
+    detection_events = analysis.get("detection_events", [])
+
+    detected_events = [
+        event for event in detection_events
+        if isinstance(event, dict)
+        and event.get("phone_detected", False)
+    ]
+
+    timeline_data = [
+        ["Frame Number", "Phone Count", "Confidence"]
+    ]
+
+    for event in detected_events[:15]:
+        timeline_data.append([
+            str(event.get("frame_index", "N/A")),
+            str(event.get("phone_count", 0)),
+            f"{safe_number(event.get('confidence', 0)):.1%}",
+        ])
+
+    if len(timeline_data) == 1:
+        timeline_data.append([
+            "No phone detections",
+            "-",
+            "-",
+        ])
+
+    timeline_table = Table(
+        timeline_data,
+        colWidths=[160, 160, 160],
+        repeatRows=1,
+    )
+
+    timeline_table.setStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4C1D95")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#C4B5FD")),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ])
+
+    story.append(timeline_table)
+
+    if len(detected_events) > 15:
+        story.append(Spacer(1, 5))
+        story.append(Paragraph(
+            f"Showing the first 15 of {len(detected_events)} "
+            "phone-detected sampled frames.",
+            styles["Italic"],
+        ))
+
+    story.append(Spacer(1, 20))
+
+    # --------------------------------------------------------
+    # OBJECT DETECTION STATISTICS
+    # --------------------------------------------------------
+
+    story.append(Paragraph(
+        "4. Object Detection Statistics",
+        styles["Heading2"],
+    ))
+
+    object_counts = analysis.get("object_counts", {})
+
+    object_data = [["Detected Object", "Detection Count"]]
+
+    if isinstance(object_counts, dict) and object_counts:
+        for object_name, count in sorted(
+            object_counts.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        ):
+            object_data.append([
+                str(object_name),
+                str(count),
+            ])
+    else:
+        object_data.append(["No object statistics available", "-"])
+
+    object_table = Table(
+        object_data,
+        colWidths=[240, 240],
+        repeatRows=1,
+    )
+
+    object_table.setStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#312E81")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#C4B5FD")),
+        ("PADDING", (0, 0), (-1, -1), 7),
+    ])
+
+    story.append(object_table)
+    story.append(Spacer(1, 20))
+
+    # --------------------------------------------------------
+    # WARNINGS
+    # --------------------------------------------------------
+
+    story.append(Paragraph(
+        "5. Detection Warnings",
+        styles["Heading2"],
+    ))
+
+    warnings = analysis.get("warnings", [])
+
+    if warnings:
+        for warning in warnings:
+            story.append(Paragraph(
+                "• " + escape(str(warning)),
+                styles["BodyText"],
+            ))
+            story.append(Spacer(1, 4))
+    else:
+        story.append(Paragraph(
+            "No detection warnings were recorded.",
+            styles["BodyText"],
+        ))
+
+    story.append(Spacer(1, 18))
+
+    # --------------------------------------------------------
+    # ANALYSIS SUMMARY AND RECOMMENDATION
+    # --------------------------------------------------------
+
+    story.append(Paragraph(
+        "6. Analysis Summary",
+        styles["Heading2"],
+    ))
 
     insight = generate_session_insight(analysis)
 
-    story.append(Paragraph(
-        insight["summary"],
-        styles["BodyText"]
+    story.append(safe_paragraph(
+        insight.get("summary", "No summary available."),
+        styles["BodyText"],
     ))
+
     story.append(Spacer(1, 12))
 
-    story.append(Paragraph("Recommendation", styles["Heading2"]))
-
     story.append(Paragraph(
-        insight["recommendation"],
-        styles["BodyText"]
+        "7. Study Recommendations",
+        styles["Heading2"],
     ))
+
+    story.append(safe_paragraph(
+        insight.get("recommendation", "No recommendation available."),
+        styles["BodyText"],
+    ))
+
     story.append(Spacer(1, 20))
 
+    # --------------------------------------------------------
+    # PROJECT LIMITATIONS
+    # --------------------------------------------------------
+
     story.append(Paragraph(
-        "<b>Important note:</b> Phone visibility is an indicator only. "
-        "It does not directly measure a person's attention, concentration, "
-        "or actual distraction.",
-        styles["Italic"]
+        "8. Important Notes and Limitations",
+        styles["Heading2"],
     ))
+
+    limitation_text = (
+        "This system uses computer vision to identify visible phones "
+        "in sampled video frames. Phone visibility is only an indicator "
+        "and does not directly measure a person's attention, concentration, "
+        "learning ability, or actual distraction. Detection accuracy may "
+        "vary with lighting, camera angle, video quality, and object visibility. "
+        "The estimated focus indicator is a project-generated metric, "
+        "not a scientifically validated measurement of concentration."
+    )
+
+    story.append(Paragraph(
+        limitation_text,
+        styles["Italic"],
+    ))
+
+    story.append(Spacer(1, 18))
+
+    story.append(Paragraph(
+        "AI Study Distraction Detector System | Class 12 AI Project",
+        styles["BodyText"],
+    ))
+
+    # --------------------------------------------------------
+    # GENERATE PDF
+    # --------------------------------------------------------
 
     document.build(story)
 
     pdf_buffer.seek(0)
+
     return pdf_buffer.getvalue()
+
 
 
 
