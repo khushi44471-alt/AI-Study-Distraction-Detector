@@ -44,6 +44,14 @@ from project_utils import (
     validate_analysis_result,
 )
 
+from dashboard_enhancements import (
+    TemporalPhoneFilter,
+    get_study_level,
+    render_professional_polish,
+    render_project_presentation_kit,
+    render_smart_insights,
+)
+
 
 # ============================================================
 # Streamlit config
@@ -546,6 +554,9 @@ st.markdown(
 )
 
 
+render_professional_polish(st)
+
+
 # ============================================================
 # Paths
 # ============================================================
@@ -769,6 +780,34 @@ ACHIEVEMENT_RULES = [
         "description": "Complete 25 focus sessions.",
         "icon": "💎",
         "target": 25,
+    },
+    {
+        "id": "momentum_builder",
+        "name": "Momentum Builder",
+        "description": "Complete 50 focus sessions.",
+        "icon": "🚀",
+        "target": 50,
+    },
+    {
+        "id": "deep_work_champion",
+        "name": "Deep Work Champion",
+        "description": "Complete 75 focus sessions.",
+        "icon": "🧠",
+        "target": 75,
+    },
+    {
+        "id": "century_scholar",
+        "name": "Century Scholar",
+        "description": "Complete 100 focus sessions.",
+        "icon": "🌟",
+        "target": 100,
+    },
+    {
+        "id": "study_legend",
+        "name": "Study Legend",
+        "description": "Complete 150 focus sessions.",
+        "icon": "👑",
+        "target": 150,
     },
 ]
 
@@ -3173,6 +3212,9 @@ else:
         else float("nan")
     )
 
+    render_smart_insights(st, report_df)
+
+    st.divider()
 
     # --------------------------------------------------------
     # TOP ANALYTICS CARDS — PREMIUM KPI DESIGN
@@ -4600,6 +4642,13 @@ sample_interval = st.slider(
 )
 st.session_state.frame_sample_interval = sample_interval
 
+st.info(
+    "AI false-positive guard: a phone candidate must appear in at least "
+    "2 of the last 3 analyzed samples before it is counted as confirmed "
+    "for the main warning and visibility summary. This reduces isolated "
+    "detections but cannot eliminate model errors."
+)
+
 # ============================================================
 # Detection results
 # ============================================================
@@ -4978,6 +5027,26 @@ achievement_col2.metric(
     completed_sessions,
 )
 
+level_info = get_study_level(completed_sessions)
+level_col1, level_col2 = st.columns(2)
+level_col1.metric(
+    "🌟 Current Study Level",
+    f"Level {level_info['level']} · {level_info['name']}",
+)
+if level_info["next_target"] is not None:
+    level_col2.metric(
+        "🎯 Next Milestone",
+        f"{level_info['next_target']} sessions",
+        delta=f"{level_info['remaining']} remaining",
+    )
+else:
+    level_col2.metric("🎯 Next Milestone", "All levels completed")
+st.progress(level_info["progress"])
+st.caption(
+    "Levels are based on completed Pomodoro focus sessions. "
+    "They reward consistency, not academic performance."
+)
+
 st.progress(
     earned_count / total_achievements
     if total_achievements > 0
@@ -5040,6 +5109,8 @@ with about3:
 
 st.markdown("#### Technology stack")
 st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab · WebRTC")
+
+render_project_presentation_kit(st)
 
 st.markdown("#### Important limitations")
 st.warning(
