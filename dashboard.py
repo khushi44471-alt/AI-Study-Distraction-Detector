@@ -1848,22 +1848,236 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+# ============================================================
+# PREMIUM SIDEBAR NAVIGATION
+# ============================================================
+
+# Sidebar styling
+st.markdown("""
+<style>
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #11101d 0%, #19152b 100%);
+    border-right: 1px solid rgba(167, 139, 250, 0.18);
+}
+
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 1.5rem;
+}
+
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: #f5f3ff !important;
+}
+
+[data-testid="stSidebar"] p {
+    color: #b8b2cc;
+}
+
+.sidebar-brand {
+    background: linear-gradient(135deg, #382568, #211b3b);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 16px;
+    padding: 18px 14px;
+    margin-bottom: 18px;
+}
+
+.sidebar-brand h2 {
+    color: white !important;
+    margin: 0;
+    font-size: 21px;
+}
+
+.sidebar-brand p {
+    color: #c4b5fd !important;
+    font-size: 12px;
+    margin: 7px 0 0 0;
+}
+
+.sidebar-section {
+    color: #a78bfa;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin: 22px 0 9px 3px;
+}
+
+.sidebar-link {
+    display: block;
+    text-decoration: none !important;
+    color: #e9e5f5 !important;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 11px;
+    padding: 11px 13px;
+    margin: 6px 0;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.sidebar-link:hover {
+    background: linear-gradient(100deg, #49317b, #30234f);
+    border-color: #a78bfa;
+    color: white !important;
+    transform: translateX(4px);
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.18);
+}
+
+.sidebar-note {
+    background: rgba(139, 92, 246, 0.10);
+    border: 1px solid rgba(167, 139, 250, 0.20);
+    border-radius: 12px;
+    padding: 12px;
+    color: #ddd6fe;
+    font-size: 12px;
+    line-height: 1.6;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 with st.sidebar:
-    st.markdown("## 📱 Study Detector")
-    st.caption("AI project workspace")
+
+    # BRAND HEADER
+    st.markdown("""
+    <div class="sidebar-brand">
+        <h2>📱 Study Detector</h2>
+        <p>AI-powered study workspace</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # QUICK NAVIGATION
+    # --------------------------------------------------------
+
+    st.markdown(
+        '<div class="sidebar-section">⚡ Quick Navigation</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown("""
+    <a class="sidebar-link" href="#study-session-dashboard">
+        🏠 Dashboard
+    </a>
+    <a class="sidebar-link" href="#live-webcam-detection">
+        📹 Live Detection
+    </a>
+    <a class="sidebar-link" href="#ai-video-analysis">
+        🎬 Video Analysis
+    </a>
+    <a class="sidebar-link" href="#session-history-and-advanced-filters">
+        📚 Session History
+    </a>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # STUDY TOOLS
+    # --------------------------------------------------------
+
+    st.markdown(
+        '<div class="sidebar-section">🎯 Study Tools</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown("""
+    <a class="sidebar-link" href="#study-session-timer">
+        ⏱️ Focus Timer
+    </a>
+    <a class="sidebar-link" href="#study-progress-report">
+        📈 Study Progress
+    </a>
+    <a class="sidebar-link" href="#session-comparison">
+        ⚖️ Session Comparison
+    </a>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # REPORTS AND ANALYTICS
+    # --------------------------------------------------------
+
+    st.markdown(
+        '<div class="sidebar-section">📊 Reports & Analytics</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown("""
+    <a class="sidebar-link" href="#study-session-dashboard">
+        📄 PDF Study Report
+    </a>
+    <a class="sidebar-link" href="#detection-results">
+        📊 Detection Analytics
+    </a>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # QUICK ACTIONS
+    # --------------------------------------------------------
+
+    st.markdown(
+        '<div class="sidebar-section">🛠️ Quick Actions</div>',
+        unsafe_allow_html=True
+    )
+
+    if st.button("🔄 Refresh Dashboard", use_container_width=True):
+        st.rerun()
+
+    if st.button("🧹 Reset Filters", use_container_width=True):
+        filter_terms = ("filter", "date_range", "search", "sort")
+
+        for key in list(st.session_state.keys()):
+            if any(term in key.lower() for term in filter_terms):
+                del st.session_state[key]
+
+        st.rerun()
+
+    # --------------------------------------------------------
+    # HELP AND PROJECT INFORMATION
+    # --------------------------------------------------------
+
+    st.markdown(
+        '<div class="sidebar-section">ℹ️ Help & Information</div>',
+        unsafe_allow_html=True
+    )
+
+    with st.expander("📖 About this project", expanded=False):
+        st.write(
+            "**Objective:** Identify visible phone appearances "
+            "during study sessions."
+        )
+
+        st.write(
+            "**Technology:** Python, Streamlit, OpenCV, "
+            "YOLO, Pandas and Plotly."
+        )
+
+        st.write(
+            "**Features:** Live detection, video analysis, "
+            "focus score, session history and reports."
+        )
+
+        st.caption(
+            "This is a prototype. Phone visibility is only "
+            "an indicator and does not directly measure attention."
+        )
+
+    with st.expander("💡 How to use the dashboard", expanded=False):
+        st.write("1. Open Live Detection or Video Analysis.")
+        st.write("2. Start a study session or upload a video.")
+        st.write("3. Review detection results.")
+        st.write("4. Compare sessions and track progress.")
+        st.write("5. View or download available reports.")
+
+    # FOOTER
     st.markdown("---")
-    st.markdown("### Quick navigation")
-    st.markdown("[📹 Webcam stream](#live-webcam-detection)")
-    st.markdown("[🎬 AI video analysis](#ai-video-analysis)")
-    st.markdown("[📊 Session dashboard](#study-session-dashboard)")
-    st.markdown("[📈 Detection results](#detection-results)")
-    st.markdown("[⏱️ Study timer](#study-session-timer)")
-    st.markdown("---")
-    with st.expander("ℹ️ About this project", expanded=False):
-        st.write("**Objective:** detect visible phone appearances during study sessions.")
-        st.write("**Technology:** Python, Streamlit, OpenCV, YOLO, Pandas, Plotly.")
-        st.write("**Output:** focus score, timeline, warnings, and downloadable reports.")
-        st.caption("This is a prototype and may miss or misidentify objects.")
+
+    st.markdown("""
+    <div class="sidebar-note">
+        ✨ <b>Study smarter, stay focused.</b><br>
+        Your AI study workspace is ready.
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================================
 # Live webcam detection
