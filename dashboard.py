@@ -4171,6 +4171,11 @@ else:
     # SIDE-BY-SIDE SESSION COMPARISON
     # --------------------------------------------------------
 
+    st.markdown(
+        '<div id="session-comparison"></div>',
+        unsafe_allow_html=True,
+    )
+    
     st.divider()
     st.markdown("### ⚖️ Side-by-Side Session Comparison")
     st.caption(
