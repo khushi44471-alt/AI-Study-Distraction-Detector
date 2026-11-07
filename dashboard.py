@@ -1200,6 +1200,7 @@ def trigger_live_warning_once():
 
 
 
+
 def process_uploaded_video_for_live_detection(
     uploaded_file, confidence_threshold, sample_interval
 ):
@@ -1213,7 +1214,6 @@ def process_uploaded_video_for_live_detection(
 
     try:
         uploaded_file.seek(0)
-
         suffix = Path(uploaded_file.name).suffix.lower() or ".mp4"
 
         with tempfile.NamedTemporaryFile(
@@ -1238,7 +1238,6 @@ def process_uploaded_video_for_live_detection(
             st.error("Invalid video dimensions.")
             return None
 
-        # Reduce inference resolution for faster processing.
         inference_size = 480
 
         with tempfile.NamedTemporaryFile(
@@ -1278,15 +1277,10 @@ def process_uploaded_video_for_live_detection(
 
         consecutive_phone_frames = 0
         last_alert_time = 0.0
-
         last_annotated_frame = None
         last_display_frame = None
         frame_index = 0
-
-        # Only sampled frames are passed through YOLO.
-        # Intermediate frames reuse the previous detection result.
         last_frame_detected = False
-        last_phone_count = 0
 
         while True:
             success, frame = capture.read()
@@ -1294,12 +1288,9 @@ def process_uploaded_video_for_live_detection(
             if not success:
                 break
 
-            should_analyze = (
-                frame_index % sample_interval == 0
-            )
+            should_analyze = frame_index % sample_interval == 0
 
             if should_analyze:
-
                 prediction = model.predict(
                     source=frame,
                     imgsz=inference_size,
@@ -1313,9 +1304,7 @@ def process_uploaded_video_for_live_detection(
                 phone_detections = []
 
                 if prediction.boxes is not None:
-
                     for box in prediction.boxes:
-
                         cls_id = int(box.cls[0].item())
 
                         class_name = (
@@ -1351,7 +1340,6 @@ def process_uploaded_video_for_live_detection(
                                 "confidence": confidence,
                                 "bbox": [x1, y1, x2, y2],
                             })
-
                         else:
                             class_hash = sum(
                                 (index + 1) * ord(char)
@@ -1391,11 +1379,8 @@ def process_uploaded_video_for_live_detection(
                         })
 
                 analyzed_frames += 1
-
                 detected = phone_count > 0
-
                 last_frame_detected = detected
-                last_phone_count = phone_count
 
                 if detected:
                     frames_with_phone += 1
@@ -1418,15 +1403,13 @@ def process_uploaded_video_for_live_detection(
 
                     snapshots.append(frame.copy())
                     snapshots = snapshots[-5:]
-
                 else:
                     consecutive_phone_frames = 0
 
                 detection_flags.append(detected)
 
                 confidence_values = [
-                    item["confidence"]
-                    for item in phone_detections
+                    item["confidence"] for item in phone_detections
                 ]
 
                 detection_events.append({
@@ -1434,9 +1417,7 @@ def process_uploaded_video_for_live_detection(
                     "phone_detected": detected,
                     "phone_count": phone_count,
                     "confidence": (
-                        max(confidence_values)
-                        if confidence_values
-                        else 0.0
+                        max(confidence_values) if confidence_values else 0.0
                     ),
                     "objects": detected_objects,
                     "time": datetime.now().strftime(
@@ -1445,18 +1426,14 @@ def process_uploaded_video_for_live_detection(
                 })
 
                 last_annotated_frame = frame.copy()
-
-                # Update the preview only for analyzed frames.
                 last_display_frame = frame.copy()
 
-                status_display.error(
-                    "📱 PHONE DETECTED"
-                ) if detected else status_display.success(
-                    "✅ NO PHONE DETECTED"
-                )
+                if detected:
+                    status_display.error("📱 PHONE DETECTED")
+                else:
+                    status_display.success("✅ NO PHONE DETECTED")
 
             else:
-                # Keep the previous detection status between samples.
                 if last_frame_detected:
                     cv2.putText(
                         frame,
@@ -1473,9 +1450,7 @@ def process_uploaded_video_for_live_detection(
 
             writer.write(frame)
 
-            # Refresh the Streamlit preview periodically, not every frame.
             if frame_index % max(1, sample_interval * 3) == 0:
-
                 video_display.image(
                     cv2.cvtColor(
                         last_display_frame,
@@ -1501,18 +1476,15 @@ def process_uploaded_video_for_live_detection(
 
         average_confidence = (
             float(np.mean(detection_confidences))
-            if detection_confidences
-            else 0.0
+            if detection_confidences else 0.0
         )
 
         highest_confidence = (
             float(np.max(detection_confidences))
-            if detection_confidences
-            else 0.0
+            if detection_confidences else 0.0
         )
 
         st.session_state.detection_snapshots = snapshots
-
         progress.progress(1.0)
 
         return {
@@ -1537,8 +1509,7 @@ def process_uploaded_video_for_live_detection(
             "output_video_path": str(temp_output_path),
         }
 
-     
-            except Exception as exc:
+    except Exception as exc:
         import traceback
         st.error(f"Live processing failed: {exc}")
         st.code(traceback.format_exc())
