@@ -1923,59 +1923,17 @@ def create_pdf_report(analysis):
 
 
 
+
 # ============================================================
-# PREMIUM HERO SECTION
+# PREMIUM HERO SECTION — SIMPLE HTML TEST
 # ============================================================
 
 st.markdown(
     """
-    <div style="
-        background: linear-gradient(115deg, #4c1d95, #7c3aed);
-        color: white;
-        padding: 40px;
-        border-radius: 24px;
-        margin-bottom: 20px;
-    ">
-        <span style="
-            background: rgba(255,255,255,0.18);
-            padding: 8px 14px;
-            border-radius: 30px;
-            color: white;
-            font-size: 13px;
-        ">
-            ✦ CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT
-        </span>
-
-        <h1 style="
-            color: white !important;
-            margin-top: 25px;
-            font-size: 36px;
-        ">
-            AI Study Distraction Detector
-        </h1>
-
-        <p style="
-            color: white !important;
-            font-size: 16px;
-            line-height: 1.7;
-        ">
-            Computer vision for monitoring phone visibility
-            during study sessions, with live webcam detection,
-            uploaded video analysis, focus scoring, warnings,
-            and downloadable reports.
-        </p>
-    </div>
-
-    <div style="
-        padding: 15px;
-        border: 1px solid #8b5cf6;
-        border-radius: 12px;
-        margin-bottom: 25px;
-        color: inherit;
-    ">
-        💡 <strong>Important note:</strong>
-        Phone visibility is an indicator only, not proof
-        of distraction.
+    <div style="background-color:#4c1d95; color:white; padding:35px; border-radius:20px;">
+        <h1 style="color:white;">AI Study Distraction Detector</h1>
+        <p style="color:white;">Computer vision for monitoring phone visibility during study sessions.</p>
+        <p style="color:white;">✦ CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT</p>
     </div>
     """,
     unsafe_allow_html=True,
