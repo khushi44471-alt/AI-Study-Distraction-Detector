@@ -1935,7 +1935,7 @@ st.markdown(
         padding: 40px;
         border-radius: 24px;
         margin-bottom: 20px;
-    ">
+    ">)
         <span style="
             background: rgba(255,255,255,0.18);
             padding: 8px 14px;
