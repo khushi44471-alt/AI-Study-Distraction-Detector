@@ -4011,6 +4011,11 @@ else:
     # SESSION HISTORY AND ADVANCED FILTERS
     # --------------------------------------------------------
 
+    st.markdown(
+        '<div id="session-history-and-advanced-filters"></div>',
+        unsafe_allow_html=True,
+    )
+    
     st.markdown("### 📋 Recent Session History")
     st.caption("Search, filter, sort, and download your study sessions.")
 
