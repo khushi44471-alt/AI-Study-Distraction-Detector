@@ -12,13 +12,12 @@ A Class 12 Artificial Intelligence project that uses computer vision to identify
 - Session history, comparison charts, study calendar, weekly/monthly progress, recent-versus-previous insights, and visibility trends.
 - Temporal 2-of-3 sample confirmation to reduce isolated phone false positives in live and uploaded-video detection.
 - Pomodoro timer, eight achievement milestones, study levels, warning log, and downloadable PDF analysis report.
-- Built-in presentation flow, common viva answers, and a downloadable project demonstration brief.
 - Desktop video-processing entry point in main.py.
 
 ## Project structure
 
 - dashboard.py: Streamlit interface, live detection, analytics, timer, and PDF report.
-- dashboard_enhancements.py: temporal detection filter, analytics helpers, study levels, and presentation guide.
+- dashboard_enhancements.py: temporal detection filter, analytics helpers, and study levels.
 - main.py: optional desktop video-processing runner.
 - project_utils.py: shared validation, history normalization, and safe report persistence.
 - tests/: automated tests for shared utility functions.
