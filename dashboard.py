@@ -43,116 +43,181 @@ st.set_page_config(
 )
 
 # ============================================================
-# Styling
+# Dark / Light Theme
 # ============================================================
 
+is_dark_mode = st.toggle(
+    "🌙 Dark Mode",
+    value=True,
+    key="dashboard_theme",
+)
+
+if is_dark_mode:
+    theme = {
+        "bg1": "#0b0d12",
+        "bg2": "#11141c",
+        "panel": "#171a24",
+        "panel2": "#1b1f2b",
+        "brand": "#8b5cf6",
+        "text": "#edf0f7",
+        "muted": "#aab2c5",
+        "line": "#2b3040",
+        "heading": "#f7f8fc",
+        "button": "#202433",
+        "button_text": "#f4f5fb",
+        "input": "#1b1f2b",
+        "hero1": "#21143f",
+        "hero2": "#4c1d95",
+        "hero3": "#7c3aed",
+    }
+else:
+    theme = {
+        "bg1": "#f8fafc",
+        "bg2": "#eef2ff",
+        "panel": "#ffffff",
+        "panel2": "#f1f5f9",
+        "brand": "#7c3aed",
+        "text": "#1e293b",
+        "muted": "#64748b",
+        "line": "#dbe2ea",
+        "heading": "#172033",
+        "button": "#ffffff",
+        "button_text": "#312e81",
+        "input": "#ffffff",
+        "hero1": "#4338ca",
+        "hero2": "#6d28d9",
+        "hero3": "#8b5cf6",
+    }
+
 st.markdown(
-    """
+    f"""
     <style>
-    :root {
-        --bg-1: #0b0d12;
-        --bg-2: #11141c;
-        --panel: #171a24;
-        --panel-2: #1b1f2b;
-        --brand: #8b5cf6;
-        --brand-2: #6d28d9;
-        --text: #edf0f7;
-        --muted: #aab2c5;
-        --line: #2b3040;
-        --green: #22c55e;
-        --red: #ef4444;
-        --yellow: #f59e0b;
-    }
+    :root {{
+        --bg-1: {theme["bg1"]};
+        --bg-2: {theme["bg2"]};
+        --panel: {theme["panel"]};
+        --panel-2: {theme["panel2"]};
+        --brand: {theme["brand"]};
+        --text: {theme["text"]};
+        --muted: {theme["muted"]};
+        --line: {theme["line"]};
+    }}
 
-    .stApp {
-        background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 48%, var(--bg-1) 100%);
+    .stApp {{
+        background: linear-gradient(
+            180deg, var(--bg-1), var(--bg-2)
+        );
         color: var(--text);
-    }
+    }}
 
-    [data-testid="stHeader"] {
-        background: rgba(11,13,18,0.92);
-    }
+    [data-testid="stHeader"] {{
+        background: var(--bg-1);
+    }}
 
-    [data-testid="stSidebar"] {
-        background: #11131b;
+    [data-testid="stSidebar"] {{
+        background: var(--bg-2);
         border-right: 1px solid var(--line);
-    }
+    }}
 
-    [data-testid="stSidebar"] * { color: var(--text); }
-    [data-testid="stSidebar"] hr { border-color: var(--line); }
-    [data-testid="stMarkdownContainer"], [data-testid="stText"], label, p, li { color: var(--text); }
-    h1, h2, h3, h4 { color: #f7f8fc; letter-spacing: -0.025em; }
-    [data-testid="stMetric"] {
+    [data-testid="stSidebar"] *,
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stText"],
+    label, p, li {{
+        color: var(--text);
+    }}
+
+    h1, h2, h3, h4 {{
+        color: {theme["heading"]};
+        letter-spacing: -0.025em;
+    }}
+
+    [data-testid="stMetric"] {{
         background: var(--panel);
         border: 1px solid var(--line);
         padding: 16px 18px;
         border-radius: 15px;
-        box-shadow: 0 5px 18px rgba(0,0,0,.22);
-    }
-    [data-testid="stMetricLabel"] { color: var(--muted); font-weight: 600; }
-    [data-testid="stMetricValue"] { color: #f5f6fb; }
+        box-shadow: 0 5px 18px rgba(0,0,0,.10);
+    }}
 
-    div.stButton > button, div.stDownloadButton > button {
+    [data-testid="stMetricLabel"] {{
+        color: var(--muted);
+        font-weight: 600;
+    }}
+
+    [data-testid="stMetricValue"] {{
+        color: {theme["heading"]};
+    }}
+
+    div.stButton > button,
+    div.stDownloadButton > button {{
         border-radius: 10px;
         font-weight: 650;
-        border: 1px solid #383e51;
-        background: #202433;
-        color: #f4f5fb;
-        transition: transform .15s ease, box-shadow .15s ease;
-    }
-    div.stButton > button:hover, div.stDownloadButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 5px 14px rgba(139,92,246,.18);
-        border-color: var(--brand);
-        color: white;
-    }
+        border: 1px solid var(--line);
+        background: {theme["button"]};
+        color: {theme["button_text"]};
+        transition: transform .15s ease;
+    }}
 
-    [data-testid="stFileUploader"] {
-        border: 1px dashed #555d75;
+    div.stButton > button:hover,
+    div.stDownloadButton > button:hover {{
+        transform: translateY(-1px);
+        border-color: var(--brand);
+    }}
+
+    [data-testid="stFileUploader"] {{
+        border: 1px dashed var(--line);
         border-radius: 14px;
         padding: 8px;
-        background: rgba(25,28,39,.8);
-    }
+        background: var(--panel);
+    }}
 
-    [data-testid="stDataFrame"], [data-testid="stTable"] {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    [data-baseweb="select"] > div, [data-baseweb="input"] > div, [data-baseweb="textarea"] > div {
-        background: var(--panel-2);
+    [data-baseweb="select"] > div,
+    [data-baseweb="input"] > div,
+    [data-baseweb="textarea"] > div {{
+        background: {theme["input"]};
         border-color: var(--line);
         color: var(--text);
-    }
-    input, textarea { color: var(--text) !important; }
+    }}
 
-    [data-testid="stAlert"] {
-        background: #1b1f2b;
+    input, textarea {{
+        color: var(--text) !important;
+    }}
+
+    [data-testid="stAlert"] {{
+        background: var(--panel);
         border-color: var(--line);
-    }
+    }}
 
-    .hero-panel {
+    .hero-panel {{
         padding: 28px 30px;
         border-radius: 22px;
-        background: linear-gradient(120deg, #21143f 0%, #4c1d95 62%, #7c3aed 125%);
+        background: linear-gradient(
+            120deg,
+            {theme["hero1"]},
+            {theme["hero2"]} 62%,
+            {theme["hero3"]}
+        );
         color: white;
         margin: 4px 0 22px 0;
-        border: 1px solid #5937a1;
-        box-shadow: 0 14px 30px rgba(124,58,237,.18);
-    }
-    .hero-panel h1 {
+        border: 1px solid var(--brand);
+        box-shadow: 0 14px 30px rgba(124,58,237,.15);
+    }}
+
+    .hero-panel h1 {{
         color: white;
         font-size: clamp(1.75rem, 4vw, 2.55rem);
         margin: 0 0 8px 0;
         line-height: 1.15;
-    }
-    .hero-panel p {
-        color: #e9ddff;
+    }}
+
+    .hero-panel p {{
+        color: #f3e8ff;
         margin: 0;
         font-size: 1rem;
         max-width: 850px;
-    }
-    .hero-chip {
+    }}
+
+    .hero-chip {{
         display: inline-block;
         border: 1px solid rgba(255,255,255,.35);
         background: rgba(255,255,255,.12);
@@ -161,40 +226,55 @@ st.markdown(
         margin-bottom: 13px;
         font-size: .78rem;
         font-weight: 700;
-        letter-spacing: .02em;
-    }
+    }}
 
-    .section-note {
+    .section-note {{
         color: var(--muted);
         font-size: .92rem;
         margin-top: -7px;
-    }
+    }}
 
-    .info-card {
+    .info-card {{
         background: var(--panel);
         border: 1px solid var(--line);
         border-radius: 15px;
         padding: 16px 18px;
         height: 100%;
-        box-shadow: 0 4px 14px rgba(0,0,0,.18);
-    }
-    .info-card h3 {
+        box-shadow: 0 4px 14px rgba(0,0,0,.08);
+    }}
+
+    .info-card h3 {{
         margin-top: 0;
-        color: #c4b5fd;
+        color: var(--brand);
         font-size: 1.02rem;
-    }
-    .info-card p {
+    }}
+
+    .info-card p {{
         margin-bottom: 0;
-        color: #c1c7d6;
+        color: var(--muted);
         font-size: .92rem;
-    }
+    }}
 
-    [data-testid="stProgressBar"] > div > div { background: var(--brand); }
+    [data-testid="stProgressBar"] > div > div {{
+        background: var(--brand);
+    }}
 
-    @media (max-width: 640px) {
-        .hero-panel { padding: 22px 19px; border-radius: 16px; }
-        [data-testid="stMetric"] { padding: 12px; }
-    }
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"] {{
+        border-radius: 12px;
+        overflow: hidden;
+    }}
+
+    @media (max-width: 640px) {{
+        .hero-panel {{
+            padding: 22px 19px;
+            border-radius: 16px;
+        }}
+
+        [data-testid="stMetric"] {{
+            padding: 12px;
+        }}
+    }}
     </style>
     """,
     unsafe_allow_html=True,
