@@ -1829,15 +1829,16 @@ if uploaded_video_analysis is not None:
 # Session report saving function
 # ============================================================
 
+
 def save_session_record(
     video_name,
     resolution,
     frames_processed,
     frames_with_phone,
     percentage,
-    detections
+    detections,
+    focus_score
 ):
-
     report_path = Path("reports/session_summary.csv")
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1849,7 +1850,8 @@ def save_session_record(
         "Frames Processed": frames_processed,
         "Frames With Phone": frames_with_phone,
         "Phone Visible Percentage": percentage,
-        "Total Phone Detections": detections
+        "Total Phone Detections": detections,
+        "Focus Score": focus_score
     }])
 
     if report_path.exists():
@@ -1860,6 +1862,7 @@ def save_session_record(
             pass
 
     record.to_csv(report_path, index=False)
+
 
 
 
