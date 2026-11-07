@@ -1794,14 +1794,17 @@ if uploaded_video_analysis is not None:
 
         if analysis_result is not None:
             try:
-                save_session_record(
-                    analysis_result["video_name"],
-                    analysis_result["resolution"],
-                    analysis_result["frames_processed"],
-                    analysis_result["frames_with_phone"],
-                    analysis_result["percentage"],
-                    analysis_result["detections"],
-                )
+                
+save_session_record(
+    analysis_result["video_name"],
+    analysis_result["resolution"],
+    analysis_result["frames_processed"],
+    analysis_result["frames_with_phone"],
+    analysis_result["percentage"],
+    analysis_result["detections"],
+    analysis_result["focus_score"],
+)
+
 
                 st.session_state["last_analysis"] = analysis_result
                 st.success("AI video analysis completed and saved to the report.")
@@ -2623,6 +2626,171 @@ else:
             ascending=True,
             na_position="last"
         )
+
+    # --------------------------------------------------------
+    # SIDE-BY-SIDE SESSION COMPARISON
+    # --------------------------------------------------------
+
+    st.divider()
+    st.markdown("### ⚖️ Side-by-Side Session Comparison")
+    st.caption(
+        "Select two saved sessions to compare their detection statistics."
+    )
+
+    if len(history_df) >= 2:
+
+        comparison_options = {}
+
+        for session_index, session_row in history_df.iterrows():
+            video = str(session_row.get("Video Name", "Study Session"))
+            date = str(session_row.get("Date", "Unknown date"))
+            session_time = str(session_row.get("Session Time", ""))
+            
+            label = (
+                f"{video} | {date} | {session_time} "
+                f"| Record {session_index + 1}"
+            )
+
+            comparison_options[label] = session_index
+
+        comparison_labels = list(comparison_options.keys())
+
+        compare_col1, compare_col2 = st.columns(2)
+
+        with compare_col1:
+            first_session_label = st.selectbox(
+                "🟣 Select First Session",
+                comparison_labels,
+                index=0,
+                key="comparison_session_one",
+            )
+
+        second_options = [
+            label for label in comparison_labels
+            if label != first_session_label
+        ]
+
+        with compare_col2:
+            second_session_label = st.selectbox(
+                "🔵 Select Second Session",
+                second_options,
+                index=0,
+                key="comparison_session_two",
+            )
+
+        first_session = history_df.loc[
+            comparison_options[first_session_label]
+        ]
+
+        second_session = history_df.loc[
+            comparison_options[second_session_label]
+        ]
+
+        comparison_data = []
+
+        metrics_to_compare = [
+            ("Phone Visibility (%)", "Phone Visible Percentage"),
+            ("Frames Processed", "Frames Processed"),
+            ("Total Phone Detections", "Total Phone Detections"),
+            ("Focus Score (%)", "Focus Score"),
+        ]
+
+        for display_name, column_name in metrics_to_compare:
+            first_value = pd.to_numeric(
+                first_session.get(column_name, pd.NA),
+                errors="coerce",
+            )
+
+            second_value = pd.to_numeric(
+                second_session.get(column_name, pd.NA),
+                errors="coerce",
+            )
+
+            comparison_data.append({
+                "Metric": display_name,
+                "First Session": (
+                    round(float(first_value), 2)
+                    if pd.notna(first_value) else "Not available"
+                ),
+                "Second Session": (
+                    round(float(second_value), 2)
+                    if pd.notna(second_value) else "Not available"
+                ),
+            })
+
+        comparison_table = pd.DataFrame(comparison_data)
+
+        st.markdown("#### 📊 Comparison Results")
+
+        st.dataframe(
+            comparison_table,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        chart_data = []
+
+        for session_label, session_row in [
+            (first_session_label, first_session),
+            (second_session_label, second_session),
+        ]:
+            for metric_name, column_name in [
+                ("Phone Visibility", "Phone Visible Percentage"),
+                ("Focus Score", "Focus Score"),
+            ]:
+                value = pd.to_numeric(
+                    session_row.get(column_name, pd.NA),
+                    errors="coerce",
+                )
+
+                if pd.notna(value):
+                    chart_data.append({
+                        "Metric": metric_name,
+                        "Percentage": float(value),
+                        "Session": session_label,
+                    })
+
+        if chart_data:
+            comparison_fig = px.bar(
+                pd.DataFrame(chart_data),
+                x="Metric",
+                y="Percentage",
+                color="Session",
+                barmode="group",
+                title="Session Performance Comparison",
+                text_auto=".1f",
+            )
+
+            comparison_fig.update_layout(
+                template=(
+                    "plotly_dark"
+                    if is_dark_mode
+                    else "plotly_white"
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis_title="Percentage (%)",
+                yaxis_range=[0, 100],
+                margin=dict(l=10, r=10, t=55, b=10),
+                legend_title="Study Sessions",
+            )
+
+            st.plotly_chart(
+                comparison_fig,
+                use_container_width=True,
+            )
+
+        st.caption(
+            "Older sessions without a saved focus score will show "
+            "'Not available'. Phone visibility is an indicator only, "
+            "not a validated measurement of attention."
+        )
+
+    else:
+        st.info(
+            "At least two saved sessions are required for comparison."
+        )
+
 
     # Remove temporary columns
     display_history = history_df.drop(
