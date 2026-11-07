@@ -2064,223 +2064,223 @@ else:
 
     st.divider()
 
-# ------------------------------------------------------------
-# WEEKLY STUDY ACTIVITY CALENDAR
-# ------------------------------------------------------------
-
-st.markdown(
-    """
-    <div style="
-        padding: 20px 22px 12px 22px;
-        border-radius: 16px;
-        background: linear-gradient(120deg, #171326, #21143f);
-        border: 1px solid #493477;
-        margin-bottom: 12px;
-    ">
+    # ------------------------------------------------------------
+    # WEEKLY STUDY ACTIVITY CALENDAR
+    # ------------------------------------------------------------
+    
+    st.markdown(
+        """
         <div style="
-            color: #c4b5fd;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
+            padding: 20px 22px 12px 22px;
+            border-radius: 16px;
+            background: linear-gradient(120deg, #171326, #21143f);
+            border: 1px solid #493477;
+            margin-bottom: 12px;
         ">
-            STUDY CONSISTENCY
+            <div style="
+                color: #c4b5fd;
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+            ">
+                STUDY CONSISTENCY
+            </div>
+            <div style="
+                color: #ffffff;
+                font-size: 23px;
+                font-weight: 750;
+                margin-top: 5px;
+            ">
+                📅 Weekly Activity Calendar
+            </div>
+            <div style="
+                color: #c4bddb;
+                font-size: 13px;
+                margin-top: 5px;
+            ">
+                Your recorded study-analysis activity over the last 12 weeks.
+            </div>
         </div>
-        <div style="
-            color: #ffffff;
-            font-size: 23px;
-            font-weight: 750;
-            margin-top: 5px;
-        ">
-            📅 Weekly Activity Calendar
-        </div>
-        <div style="
-            color: #c4bddb;
-            font-size: 13px;
-            margin-top: 5px;
-        ">
-            Your recorded study-analysis activity over the last 12 weeks.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-if "Date" in report_df.columns:
-
-    activity_dates = pd.to_datetime(
-        report_df["Date"],
-        errors="coerce",
-    ).dropna().dt.normalize()
-
-    if not activity_dates.empty:
-
-        today = pd.Timestamp.now().normalize()
-
-        # Start from Monday, 11 weeks before the current week
-        current_week_start = (
-            today - pd.Timedelta(days=today.weekday())
-        )
-
-        calendar_start = (
-            current_week_start - pd.Timedelta(weeks=11)
-        )
-
-        weekday_labels = [
-            "Mon", "Tue", "Wed", "Thu",
-            "Fri", "Sat", "Sun"
-        ]
-
-        week_labels = [
-            (calendar_start + pd.Timedelta(weeks=i)).strftime("%d %b")
-            for i in range(12)
-        ]
-
-        # Count completed sessions on each date
-        date_counts = activity_dates.dt.date.value_counts().to_dict()
-
-        # Build 7 rows (weekdays) and 12 columns (weeks)
-        activity_matrix = []
-
-        for weekday in range(7):
-
-            row = []
-
-            for week in range(12):
-
-                calendar_day = (
-                    calendar_start
-                    + pd.Timedelta(weeks=week)
-                    + pd.Timedelta(days=weekday)
-                )
-
-                count = date_counts.get(
-                    calendar_day.date(),
-                    0,
-                )
-
-                row.append(count)
-
-            activity_matrix.append(row)
-
-        maximum_activity = max(
-            1,
-            max(max(row) for row in activity_matrix),
-        )
-
-        # Premium purple calendar heatmap
-        activity_fig = px.imshow(
-            activity_matrix,
-            x=week_labels,
-            y=weekday_labels,
-            text_auto=True,
-            aspect="auto",
-            color_continuous_scale=[
-                "#171326",
-                "#31205c",
-                "#5b32a3",
-                "#8b5cf6",
-                "#c4b5fd",
-            ],
-            zmin=0,
-            zmax=maximum_activity,
-            labels={
-                "x": "Week starting",
-                "y": "Day",
-                "color": "Sessions",
-            },
-        )
-
-        activity_fig.update_traces(
-            xgap=6,
-            ygap=6,
-            hovertemplate=(
-                "Week starting: %{x}<br>"
-                "Day: %{y}<br>"
-                "Sessions: %{z}"
-                "<extra></extra>"
-            ),
-        )
-
-        activity_fig.update_layout(
-            template=(
-                "plotly_dark"
-                if is_dark_mode
-                else "plotly_white"
-            ),
-            height=290,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(
-                color=theme["text"],
-                size=12,
-            ),
-            coloraxis_showscale=False,
-            margin=dict(
-                l=35,
-                r=15,
-                t=35,
-                b=35,
-            ),
-            xaxis=dict(
-                side="top",
-                title=None,
-                showgrid=False,
-                zeroline=False,
-                tickangle=0,
-            ),
-            yaxis=dict(
-                title=None,
-                autorange="reversed",
-                showgrid=False,
-                zeroline=False,
-            ),
-        )
-
-        st.plotly_chart(
-            activity_fig,
-            use_container_width=True,
-        )
-
-        # Activity summary
-        total_active_days = sum(
-            1
-            for row in activity_matrix
-            for count in row
-            if count > 0
-        )
-
-        total_calendar_sessions = sum(
-            sum(row) for row in activity_matrix
-        )
-
-        activity_col1, activity_col2 = st.columns(2)
-
-        activity_col1.metric(
-            "Active Study Days",
-            total_active_days,
-        )
-
-        activity_col2.metric(
-            "Sessions in Calendar",
-            total_calendar_sessions,
-        )
-
-        st.caption(
-            "Each square represents one calendar day. "
-            "Only sessions recorded in your report are counted."
-        )
-
-    else:
-        st.info("No valid session dates are available yet.")
-
-else:
-    st.info(
-        "Your session report does not contain a Date column, "
-        "so the activity calendar cannot be generated."
+        """,
+        unsafe_allow_html=True,
     )
-
-st.divider()
+    
+    if "Date" in report_df.columns:
+    
+        activity_dates = pd.to_datetime(
+            report_df["Date"],
+            errors="coerce",
+        ).dropna().dt.normalize()
+    
+        if not activity_dates.empty:
+    
+            today = pd.Timestamp.now().normalize()
+    
+            # Start from Monday, 11 weeks before the current week
+            current_week_start = (
+                today - pd.Timedelta(days=today.weekday())
+            )
+    
+            calendar_start = (
+                current_week_start - pd.Timedelta(weeks=11)
+            )
+    
+            weekday_labels = [
+                "Mon", "Tue", "Wed", "Thu",
+                "Fri", "Sat", "Sun"
+            ]
+    
+            week_labels = [
+                (calendar_start + pd.Timedelta(weeks=i)).strftime("%d %b")
+                for i in range(12)
+            ]
+    
+            # Count completed sessions on each date
+            date_counts = activity_dates.dt.date.value_counts().to_dict()
+    
+            # Build 7 rows (weekdays) and 12 columns (weeks)
+            activity_matrix = []
+    
+            for weekday in range(7):
+    
+                row = []
+    
+                for week in range(12):
+    
+                    calendar_day = (
+                        calendar_start
+                        + pd.Timedelta(weeks=week)
+                        + pd.Timedelta(days=weekday)
+                    )
+    
+                    count = date_counts.get(
+                        calendar_day.date(),
+                        0,
+                    )
+    
+                    row.append(count)
+    
+                activity_matrix.append(row)
+    
+            maximum_activity = max(
+                1,
+                max(max(row) for row in activity_matrix),
+            )
+    
+            # Premium purple calendar heatmap
+            activity_fig = px.imshow(
+                activity_matrix,
+                x=week_labels,
+                y=weekday_labels,
+                text_auto=True,
+                aspect="auto",
+                color_continuous_scale=[
+                    "#171326",
+                    "#31205c",
+                    "#5b32a3",
+                    "#8b5cf6",
+                    "#c4b5fd",
+                ],
+                zmin=0,
+                zmax=maximum_activity,
+                labels={
+                    "x": "Week starting",
+                    "y": "Day",
+                    "color": "Sessions",
+                },
+            )
+    
+            activity_fig.update_traces(
+                xgap=6,
+                ygap=6,
+                hovertemplate=(
+                    "Week starting: %{x}<br>"
+                    "Day: %{y}<br>"
+                    "Sessions: %{z}"
+                    "<extra></extra>"
+                ),
+            )
+    
+            activity_fig.update_layout(
+                template=(
+                    "plotly_dark"
+                    if is_dark_mode
+                    else "plotly_white"
+                ),
+                height=290,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(
+                    color=theme["text"],
+                    size=12,
+                ),
+                coloraxis_showscale=False,
+                margin=dict(
+                    l=35,
+                    r=15,
+                    t=35,
+                    b=35,
+                ),
+                xaxis=dict(
+                    side="top",
+                    title=None,
+                    showgrid=False,
+                    zeroline=False,
+                    tickangle=0,
+                ),
+                yaxis=dict(
+                    title=None,
+                    autorange="reversed",
+                    showgrid=False,
+                    zeroline=False,
+                ),
+            )
+    
+            st.plotly_chart(
+                activity_fig,
+                use_container_width=True,
+            )
+    
+            # Activity summary
+            total_active_days = sum(
+                1
+                for row in activity_matrix
+                for count in row
+                if count > 0
+            )
+    
+            total_calendar_sessions = sum(
+                sum(row) for row in activity_matrix
+            )
+    
+            activity_col1, activity_col2 = st.columns(2)
+    
+            activity_col1.metric(
+                "Active Study Days",
+                total_active_days,
+            )
+    
+            activity_col2.metric(
+                "Sessions in Calendar",
+                total_calendar_sessions,
+            )
+    
+            st.caption(
+                "Each square represents one calendar day. "
+                "Only sessions recorded in your report are counted."
+            )
+    
+        else:
+            st.info("No valid session dates are available yet.")
+    
+    else:
+        st.info(
+            "Your session report does not contain a Date column, "
+            "so the activity calendar cannot be generated."
+        )
+    
+    st.divider()
 
    
     # --------------------------------------------------------
