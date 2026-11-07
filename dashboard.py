@@ -3185,13 +3185,14 @@ else:
     st.divider()
 
    
+   
     # --------------------------------------------------------
-    # STUDY PROGRESS REPORT — PREMIUM DESIGN
+    # STUDY PROGRESS REPORT — PREMIUM ANALYTICS
     # --------------------------------------------------------
 
     st.markdown("### 📊 Study Progress Report")
     st.caption(
-        "Track study-session statistics across weeks and months."
+        "Track your study sessions and compare progress with previous periods."
     )
 
     if not report_df.empty and "Date" in report_df.columns:
@@ -3265,11 +3266,32 @@ else:
 
             latest_period = progress_summary.iloc[-1]
 
+            previous_period = (
+                progress_summary.iloc[-2]
+                if len(progress_summary) > 1
+                else None
+            )
+
+            def progress_delta(current, previous, suffix="", decimals=1):
+                if previous is None:
+                    return None
+
+                if pd.isna(current) or pd.isna(previous):
+                    return None
+
+                difference = current - previous
+
+                return f"{difference:+.{decimals}f}{suffix}"
+
             st.markdown(
                 f"#### 📅 Latest {report_view} Summary"
             )
 
-            # Progress summary metrics
+            st.caption(
+                "Changes are compared with the previous recorded "
+                f"{report_view.lower()}."
+            )
+
             progress_col1, progress_col2, progress_col3, progress_col4 = (
                 st.columns(4)
             )
@@ -3277,6 +3299,13 @@ else:
             progress_col1.metric(
                 "📚 Sessions Completed",
                 int(latest_period["Sessions"]),
+                delta=progress_delta(
+                    latest_period["Sessions"],
+                    previous_period["Sessions"]
+                    if previous_period is not None else None,
+                    decimals=0,
+                ),
+                delta_color="normal",
             )
 
             progress_col2.metric(
@@ -3286,6 +3315,13 @@ else:
                     if pd.notna(latest_period["Average_Visibility"])
                     else "N/A"
                 ),
+                delta=progress_delta(
+                    latest_period["Average_Visibility"],
+                    previous_period["Average_Visibility"]
+                    if previous_period is not None else None,
+                    suffix="%",
+                ),
+                delta_color="inverse",
             )
 
             progress_col3.metric(
@@ -3295,16 +3331,35 @@ else:
                     if pd.notna(latest_period["Average_Focus"])
                     else "N/A"
                 ),
+                delta=progress_delta(
+                    latest_period["Average_Focus"],
+                    previous_period["Average_Focus"]
+                    if previous_period is not None else None,
+                    suffix="%",
+                ),
+                delta_color="normal",
             )
 
             progress_col4.metric(
                 "🔍 Phone Detections",
                 int(latest_period["Total_Detections"]),
+                delta=progress_delta(
+                    latest_period["Total_Detections"],
+                    previous_period["Total_Detections"]
+                    if previous_period is not None else None,
+                    decimals=0,
+                ),
+                delta_color="inverse",
             )
+
+            if previous_period is None:
+                st.info(
+                    "Record another week or month of sessions "
+                    "to unlock period-to-period comparisons."
+                )
 
             st.markdown("---")
 
-            # Prepare period labels
             progress_summary["Period"] = (
                 progress_summary["_Period"].dt.strftime(
                     "%d %b %Y"
@@ -3410,6 +3465,7 @@ else:
 
             st.markdown("---")
             st.markdown("#### 📋 Progress History")
+
             st.caption(
                 "A breakdown of your recorded study sessions "
                 "for each selected period."
