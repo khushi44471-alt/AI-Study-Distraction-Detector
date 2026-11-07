@@ -5144,6 +5144,19 @@ with about3:
 
 st.markdown("#### Technology stack")
 st.write("Python · Streamlit · YOLO · OpenCV · Pandas · Plotly · ReportLab · WebRTC")
+st.markdown("---")
 
+st.subheader("⚠️ Important Limitations")
+
+st.info(
+    """
+    - The system detects the visibility of mobile phones in video frames; it does not directly measure a student's attention or concentration.
+    - Detection accuracy depends on video quality, lighting, camera angle, and phone visibility.
+    - The YOLO model may occasionally produce false positives or miss a phone.
+    - Objects that are partially hidden or outside the camera frame may not be detected.
+    - The system is intended for educational demonstration and study-session monitoring, not for surveillance or disciplinary decisions.
+    - Results should be interpreted as an indication of phone visibility, not proof of distraction.
+    """
+)
 
 
