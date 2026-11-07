@@ -2522,8 +2522,6 @@ else:
             selected_dates = st.date_input(
                 "📅 Select Date Range",
                 value=default_date_range,
-                min_value=default_date_range[0],
-                max_value=default_date_range[1],
                 key="history_date_range"
             )
         else:
