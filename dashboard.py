@@ -2553,7 +2553,7 @@ with st.sidebar:
     )
 
     st.markdown("""
-    <a class="sidebar-link" href="#study-session-dashboard">
+   <a class="sidebar-link" href="#pdf-study-report">
         🏠 Dashboard
     </a>
     <a class="sidebar-link" href="#live-webcam-detection">
@@ -4554,7 +4554,12 @@ if st.session_state.get("last_analysis") is not None:
             st.image(image, channels="BGR", use_container_width=True, caption=f"Snapshot {idx}")
     else:
         st.info("No detection snapshots saved yet.")
+st.markdown(
+    '<div id="pdf-study-report"></div>',
+    unsafe_allow_html=True,
+)
 
+st.markdown("### 📄 PDF Study Report")
     st.download_button(
         "Download PDF Report",
         data=create_pdf_report(saved_analysis),
