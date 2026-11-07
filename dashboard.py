@@ -981,103 +981,174 @@ def play_female_warning(message, volume=0.75):
     """
 
     components.html(js, height=0)
-def play_warning_tone(mode="warning", volume=0.75):
+def play_warning_tone(mode="focus_alert", volume=0.75, preview=False):
+    """Play a longer, multi-cycle warning tone with a click-to-preview control."""
     vol = max(0.0, min(1.0, float(volume)))
+
     configs = {
-        "siren": {
-            "pattern": [420, 520, 620, 760, 620, 520, 420],
-            "durations": [0.40, 0.45, 0.50, 0.55, 0.50, 0.45, 0.60],
-            "type": "sawtooth",
-        },
-        "pulse": {
-            "pattern": [520, 560, 610, 660, 610, 560, 520, 450],
-            "durations": [0.38, 0.35, 0.42, 0.45, 0.42, 0.35, 0.40, 0.55],
+        "focus_alert": {
+            "pattern": [680, 920, 680, 920],
+            "durations": [0.52, 0.62, 0.52, 0.82],
+            "gap": 0.16,
+            "cycles": 3,
+            "cycle_gap": 0.45,
             "type": "triangle",
+            "peak": 0.30,
         },
-        "sweep": {
-            "pattern": [390, 470, 560, 700, 560, 470, 390],
-            "durations": [0.45, 0.50, 0.55, 0.60, 0.55, 0.50, 0.65],
-            "type": "sawtooth",
-        },
-        "bell": {
-            "pattern": [880, 770, 660, 770, 660, 560],
-            "durations": [0.28, 0.35, 0.42, 0.35, 0.42, 0.50],
-            "type": "triangle",
-        },
-        "warning": {
-            "pattern": [700, 760, 820, 760, 700, 680],
-            "durations": [0.24, 0.28, 0.35, 0.30, 0.28, 0.42],
-            "type": "sine",
-        },
-        "urgent": {
-            "pattern": [950, 900, 980, 900, 980, 860, 980, 820],
-            "durations": [0.18, 0.18, 0.20, 0.18, 0.20, 0.18, 0.25, 0.42],
+        "repeat_alert": {
+            "pattern": [820, 820, 640, 820, 980],
+            "durations": [0.30, 0.30, 0.60, 0.30, 0.90],
+            "gap": 0.12,
+            "cycles": 3,
+            "cycle_gap": 0.40,
             "type": "square",
+            "peak": 0.24,
         },
-        "digital": {
-            "pattern": [650, 720, 800, 860, 800, 720, 650],
-            "durations": [0.18, 0.18, 0.22, 0.22, 0.22, 0.18, 0.28],
+        "two_tone": {
+            "pattern": [520, 760, 960, 760],
+            "durations": [0.65, 0.65, 0.65, 1.00],
+            "gap": 0.18,
+            "cycles": 3,
+            "cycle_gap": 0.45,
+            "type": "sawtooth",
+            "peak": 0.22,
+        },
+        "double_pulse": {
+            "pattern": [880, 880, 660, 660, 900],
+            "durations": [0.28, 0.28, 0.55, 0.55, 0.75],
+            "gap": 0.14,
+            "cycles": 4,
+            "cycle_gap": 0.35,
             "type": "triangle",
+            "peak": 0.30,
         },
-        "voice": {
-            "pattern": [430, 520, 610, 520, 610, 520, 430],
-            "durations": [0.30, 0.35, 0.38, 0.35, 0.38, 0.35, 0.50],
-            "type": "sine",
+        "persistent": {
+            "pattern": [740, 980, 740, 980, 620],
+            "durations": [0.42, 0.62, 0.42, 0.62, 1.00],
+            "gap": 0.18,
+            "cycles": 3,
+            "cycle_gap": 0.70,
+            "type": "sawtooth",
+            "peak": 0.22,
         },
     }
 
-    cfg = configs.get(mode, configs["warning"])
-    pattern = cfg["pattern"]
-    durations = cfg["durations"]
-    tone_type = cfg["type"]
+    config = configs.get(mode, configs["focus_alert"])
+    preview_markup = ""
+    if preview:
+        preview_markup = """
+        <div style="font-family:Arial,sans-serif;padding:7px 3px;color:#eee;">
+            <button id="play-study-warning-sample"
+                style="background:#6d4acb;color:white;border:0;border-radius:9px;
+                       padding:10px 16px;font-weight:700;cursor:pointer;">
+                ▶ Play warning sample
+            </button>
+            <span style="margin-left:10px;font-size:12px;opacity:.85;">
+                Long multi-tone sample
+            </span>
+        </div>
+        """
 
     js = f"""
+    {preview_markup}
     <script>
-    (function() {{
-      try {{
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
+    (() => {{
+        const config = {json.dumps(config)};
+        const volume = {vol};
 
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-        const vol = {vol};
-        const pattern = {json.dumps(pattern)};
-        const durations = {json.dumps(durations)};
-        const toneType = "{tone_type}";
+        const playAlert = async () => {{
+            let context = null;
 
-        pattern.forEach((freq, index) => {{
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
+            try {{
+                const AudioContextClass =
+                    window.AudioContext || window.webkitAudioContext;
 
-          osc.type = toneType;
-          osc.frequency.setValueAtTime(freq, now + index * 0.22);
+                if (!AudioContextClass) {{
+                    console.warn("Web Audio is not supported in this browser.");
+                    return;
+                }}
 
-          const start = now + index * 0.22;
-          const duration = durations[index] || 0.35;
-          const peak = 0.08 + (index % 3) * 0.03;
+                context = new AudioContextClass();
 
-          gain.gain.setValueAtTime(0.0001, start);
-          gain.gain.linearRampToValueAtTime(vol * peak, start + 0.04);
-          gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+                if (context.state === "suspended") {{
+                    await context.resume();
+                }}
 
-          osc.connect(gain);
-          gain.connect(ctx.destination);
+                let offset = 0;
+                const baseTime = context.currentTime + 0.06;
 
-          osc.start(start);
-          osc.stop(start + duration + 0.04);
-        }});
+                for (let cycle = 0; cycle < config.cycles; cycle++) {{
+                    config.pattern.forEach((frequency, index) => {{
+                        const duration = config.durations[index] || 0.45;
+                        const start = baseTime + offset;
+                        const oscillator = context.createOscillator();
+                        const gain = context.createGain();
 
-        setTimeout(() => {{
-          try {{ ctx.close(); }} catch (e) {{}}
-        }}, 7000);
+                        oscillator.type = config.type;
+                        oscillator.frequency.setValueAtTime(frequency, start);
 
-      }} catch (e) {{
-        console.log("Warning tone failed:", e);
-      }}
+                        gain.gain.setValueAtTime(0.0001, start);
+                        gain.gain.linearRampToValueAtTime(
+                            volume * config.peak,
+                            start + 0.045
+                        );
+                        gain.gain.exponentialRampToValueAtTime(
+                            0.0001,
+                            start + duration
+                        );
+
+                        oscillator.connect(gain);
+                        gain.connect(context.destination);
+
+                        oscillator.start(start);
+                        oscillator.stop(start + duration + 0.05);
+
+                        offset += duration + config.gap;
+                    }});
+
+                    offset += config.cycle_gap;
+                }}
+
+                window.setTimeout(() => {{
+                    if (context && context.state !== "closed") {{
+                        context.close().catch(() => {{}});
+                    }}
+                }}, (offset + 0.6) * 1000);
+
+            }} catch (error) {{
+                console.warn("Warning alarm could not play:", error);
+                if (context && context.state !== "closed") {{
+                    context.close().catch(() => {{}});
+                }}
+            }}
+        }};
+
+        const previewButton = document.getElementById(
+            "play-study-warning-sample"
+        );
+
+        if (previewButton) {{
+            previewButton.addEventListener("click", async () => {{
+                previewButton.disabled = true;
+                previewButton.textContent = "Playing warning sample…";
+                await playAlert();
+                window.setTimeout(() => {{
+                    previewButton.disabled = false;
+                    previewButton.textContent = "▶ Play warning sample";
+                }}, 15000);
+            }});
+        }} else {{
+            playAlert();
+        }}
     }})();
     </script>
     """
-    components.html(js, height=0)
+
+    components.html(
+        js,
+        height=82 if preview else 0,
+        scrolling=False,
+    )
 
 def speak_warning():
     js = """
@@ -1129,20 +1200,33 @@ alert_cooldown = st.slider(
     key="smart_alert_cooldown",
 )
 
+alert_display_seconds = st.slider(
+    "⚠️ Keep on-screen warning visible (seconds)",
+    min_value=15,
+    max_value=90,
+    value=30,
+    step=5,
+    help="The phone warning banner stays visible for this long after an alert.",
+    key="phone_alert_display_seconds_main",
+)
+
+alert_options = [
+    "1. Female Spoken Warning",
+    "5. Custom MP3/WAV File",
+    "8. Strong Attention Alarm (11 sec)",
+    "9. Repeating Phone Warning (10 sec)",
+    "10. Two-Tone Urgent Alert (12 sec)",
+    "11. Double-Pulse Warning (14 sec)",
+    "12. Persistent Focus Reminder (14 sec)",
+]
+
+# Reset removed selections left over in an existing browser session.
+if st.session_state.get("phone_alert_choice_main") not in alert_options:
+    st.session_state["phone_alert_choice_main"] = alert_options[0]
+
 alert_choice = st.selectbox(
     "🔔 Choose Phone Alert Sound",
-    [
-        "1. Female Spoken Warning",
-        "2. Gentle Warning Siren",
-        "3. Deep Warning Pulse",
-        "4. Emergency Warning Sweep",
-        "5. Custom MP3/WAV File",
-        "6. Soft Warning Bell",
-        "7. Urgent Warning Tone",
-        "8. Warning Chime",
-        "9. Digital Warning Signal",
-        "10. Safety Warning Voice",
-    ],
+    alert_options,
     key="phone_alert_choice_main",
 )
 
@@ -1194,44 +1278,62 @@ def play_custom_warning_audio():
 
 def show_phone_alert(preview=False):
     if not preview:
-        if "phone_alert_placeholder" not in st.session_state:
-            st.session_state.phone_alert_placeholder = True
-
-        if "phone_alert_display" not in st.session_state:
-            st.session_state.phone_alert_display = False
-
-        st.session_state.phone_alert_display = True
-
-        st.warning(
-            "📱 Phone detected repeatedly! Please check whether "
-            "you need your phone for studying."
+        message = (
+            "PHONE VISIBILITY ALERT: A phone has appeared in your study view. "
+            "Put it aside if it is not needed for the task, then return to "
+            "your study block."
+        )
+        st.session_state.active_phone_alert_message = message
+        st.session_state.active_phone_alert_until = (
+            time.monotonic() + float(alert_display_seconds)
         )
 
+    # Keep the two requested existing options exactly as the preserved choices.
     if alert_choice == "1. Female Spoken Warning":
         play_female_warning(
             message="Phone detected during your study session. Please keep your phone aside.",
             volume=volume_level
         )
-    elif alert_choice == "2. Gentle Warning Siren":
-        play_warning_tone("siren", volume=volume_level)
-    elif alert_choice == "3. Deep Warning Pulse":
-        play_warning_tone("pulse", volume=volume_level)
-    elif alert_choice == "4. Emergency Warning Sweep":
-        play_warning_tone("sweep", volume=volume_level)
     elif alert_choice == "5. Custom MP3/WAV File":
         play_custom_warning_audio()
-    elif alert_choice == "6. Soft Warning Bell":
-        play_warning_tone("bell", volume=volume_level)
-    elif alert_choice == "7. Urgent Warning Tone":
-        play_warning_tone("urgent", volume=volume_level)
-    elif alert_choice == "8. Warning Chime":
-        play_warning_tone("warning", volume=volume_level)
-    elif alert_choice == "9. Digital Warning Signal":
-        play_warning_tone("digital", volume=volume_level)
-    else:
-        play_warning_tone("voice", volume=volume_level)
+    elif alert_choice == "8. Strong Attention Alarm (11 sec)":
+        play_warning_tone("focus_alert", volume=volume_level, preview=preview)
+    elif alert_choice == "9. Repeating Phone Warning (10 sec)":
+        play_warning_tone("repeat_alert", volume=volume_level, preview=preview)
+    elif alert_choice == "10. Two-Tone Urgent Alert (12 sec)":
+        play_warning_tone("two_tone", volume=volume_level, preview=preview)
+    elif alert_choice == "11. Double-Pulse Warning (14 sec)":
+        play_warning_tone("double_pulse", volume=volume_level, preview=preview)
+    elif alert_choice == "12. Persistent Focus Reminder (14 sec)":
+        play_warning_tone("persistent", volume=volume_level, preview=preview)
+
+
+@st.fragment(run_every="1s")
+def render_active_phone_alert():
+    alert_until = st.session_state.get("active_phone_alert_until", 0.0)
+    message = st.session_state.get("active_phone_alert_message", "")
+
+    remaining = float(alert_until or 0.0) - time.monotonic()
+
+    if message and remaining > 0:
+        seconds_left = max(1, int(remaining + 0.999))
+        st.warning(
+            f"🚨 **{message}**\n\n"
+            f"**Warning remains on screen for {seconds_left} more seconds.**"
+        )
+        st.caption(
+            "This detector identifies phone visibility only; it cannot "
+            "determine whether a person is distracted or why the phone is present."
+        )
+    elif alert_until:
+        st.session_state.active_phone_alert_until = 0.0
+        st.session_state.active_phone_alert_message = ""
+
+
 if st.button("🔊 Test Selected Sound", key="test_phone_alert_main"):
     show_phone_alert(preview=True)
+
+render_active_phone_alert()
 
 # ============================================================
 # Webcam detection
