@@ -2907,6 +2907,11 @@ def save_session_record(
 # PREMIUM DASHBOARD ANALYTICS
 # ============================================================
 
+st.markdown(
+    '<div id="detection-results"></div>',
+    unsafe_allow_html=True,
+)
+
 st.divider()
 
 st.markdown(
