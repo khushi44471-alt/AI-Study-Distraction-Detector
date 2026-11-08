@@ -4416,11 +4416,15 @@ else:
         "Select two saved sessions to compare their detection statistics."
     )
 
-    if len(history_df) >= 2:
+    # Session comparison must use every saved session, not the
+    # date/search/visibility-filtered Session History view.
+    comparison_df = report_df.copy()
+
+    if len(comparison_df) >= 2:
 
         comparison_options = {}
 
-        for session_index, session_row in history_df.iterrows():
+        for session_index, session_row in comparison_df.iterrows():
             video = str(session_row.get("Video Name", "Study Session"))
             date = str(session_row.get("Date", "Unknown date"))
             session_time = str(session_row.get("Session Time", ""))
@@ -4457,11 +4461,11 @@ else:
                 key="comparison_session_two",
             )
 
-        first_session = history_df.loc[
+        first_session = comparison_df.loc[
             comparison_options[first_session_label]
         ]
 
-        second_session = history_df.loc[
+        second_session = comparison_df.loc[
             comparison_options[second_session_label]
         ]
 
