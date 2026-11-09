@@ -1524,7 +1524,10 @@ def process_uploaded_video_for_live_detection(
     uploaded_file, confidence_threshold, sample_interval
 ):
     temp_video_path = None
+    temp_output_path = None
     capture = None
+    writer = None
+    keep_output_file = False
 
     try:
         model_path = ensure_model_exists()
@@ -1551,7 +1554,6 @@ def process_uploaded_video_for_live_detection(
         frame_count_value = float(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         width = int(width_value) if np.isfinite(width_value) else 0
         height = int(height_value) if np.isfinite(height_value) else 0
-        source_width, source_height = width, height
         fps = float(capture.get(cv2.CAP_PROP_FPS))
         if not np.isfinite(fps) or fps <= 0:
             fps = 24.0
@@ -1566,20 +1568,37 @@ def process_uploaded_video_for_live_detection(
             st.error("Invalid video dimensions.")
             return None
 
-        # Run lightweight inference on sampled frames only. We do not render a
-        # second full-length MP4 during analysis; that duplicated decode/resize/
-        # encode work was the main avoidable delay for short uploads.
-        inference_size = 320
+        inference_size = 480
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".mp4",
+            delete=False,
+        ) as temp_out:
+            temp_output_path = Path(temp_out.name)
+
+        writer = cv2.VideoWriter(
+            str(temp_output_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            (width, height),
+        )
+
+        if not writer.isOpened():
+            st.error("Could not create the processed output video.")
+            return None
 
         st.subheader("⚙️ Processing Uploaded Video")
         st.caption(
-            "Only sampled frames are sent to YOLO. The original video is not "
-            "re-encoded, so analysis avoids the extra full-video export delay."
+            "The source video is processed on the server. Progress tracks source "
+            "frames, while YOLO analyses the configured sampled frames."
         )
-        info_cols = st.columns(3)
-        info_cols[0].metric("Video Duration", format_duration(duration_seconds))
+        info_cols = st.columns(4)
+        info_cols[0].metric("Source Duration", format_duration(duration_seconds))
         info_cols[1].metric("Source Frames", f"{total_frames:,}" if total_frames else "N/A")
         info_cols[2].metric("Source FPS", f"{fps:.1f}")
+        info_cols[3].metric("Resolution", f"{width} × {height}")
+
+        video_display = st.empty()
         status_display = st.empty()
         progress = st.progress(0.0)
         progress_status = st.empty()
@@ -1603,7 +1622,6 @@ def process_uploaded_video_for_live_detection(
         last_display_frame = None
         frame_index = 0
         last_frame_detected = False
-        last_phone_boxes = []
         phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
         while True:
@@ -1615,17 +1633,6 @@ def process_uploaded_video_for_live_detection(
             should_analyze = frame_index % sample_interval == 0
 
             if should_analyze:
-                # Downscale only the frames sent to the model.
-                if max(frame.shape[:2]) > 640:
-                    scale = 640.0 / max(frame.shape[:2])
-                    frame = cv2.resize(
-                        frame,
-                        (
-                            max(1, int(frame.shape[1] * scale)),
-                            max(1, int(frame.shape[0] * scale)),
-                        ),
-                        interpolation=cv2.INTER_AREA,
-                    )
                 prediction = model.predict(
                     source=frame,
                     imgsz=inference_size,
@@ -1719,9 +1726,6 @@ def process_uploaded_video_for_live_detection(
                     candidate_frames += 1
                 detected = phone_filter.update(raw_detected)
                 last_frame_detected = detected
-                # Keep the latest phone boxes so the output video can show them
-                # between inference samples instead of flashing boxes briefly.
-                last_phone_boxes = phone_detections.copy()
 
                 if detected:
                     frames_with_phone += 1
@@ -1769,6 +1773,7 @@ def process_uploaded_video_for_live_detection(
                 })
 
                 last_annotated_frame = frame.copy()
+                last_display_frame = frame.copy()
 
                 if detected:
                     status_display.error("📱 PHONE CONFIRMED · 2 OF LAST 3 SAMPLES")
@@ -1777,13 +1782,46 @@ def process_uploaded_video_for_live_detection(
                 else:
                     status_display.success("✅ NO PHONE DETECTED")
 
-                if total_frames > 0:
-                    progress.progress(min((frame_index + 1) / total_frames, 1.0))
+            else:
+                if last_frame_detected:
+                    cv2.putText(
+                        frame,
+                        "PHONE DETECTED - LAST SAMPLE",
+                        (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (0, 0, 255),
+                        2,
+                        cv2.LINE_AA,
+                    )
+
+                last_display_frame = frame.copy()
+
+            writer.write(frame)
+
+            if frame_index % max(1, sample_interval * 3) == 0:
+                video_display.image(
+                    cv2.cvtColor(
+                        last_display_frame,
+                        cv2.COLOR_BGR2RGB,
+                    ),
+                    channels="RGB",
+                    use_container_width=True,
+                )
+
+            if total_frames > 0 and (
+                frame_index % 10 == 0 or frame_index + 1 == total_frames
+            ):
+                progress_fraction = min((frame_index + 1) / total_frames, 1.0)
+                progress.progress(progress_fraction)
                 progress_status.caption(
-                    f"Read {frame_index + 1:,}/{total_frames:,} frames · "
-                    f"{analyzed_frames:,} analysed"
-                    if total_frames > 0
-                    else f"{analyzed_frames:,} sampled frames analysed"
+                    f"Processed {frame_index + 1:,} of {total_frames:,} source frames "
+                    f"({progress_fraction:.0%}) · {analyzed_frames:,} sampled frames analysed"
+                )
+            elif total_frames <= 0 and frame_index % 10 == 0:
+                progress_status.caption(
+                    f"Processed {frame_index + 1:,} source frames · "
+                    f"{analyzed_frames:,} sampled frames analysed"
                 )
 
             frame_index += 1
@@ -1837,6 +1875,7 @@ def process_uploaded_video_for_live_detection(
             "object_counts": object_counts,
             "detection_events": detection_events,
             "annotated_frame": last_annotated_frame,
+            "output_video_path": str(temp_output_path),
         }
 
     except Exception as exc:
@@ -1851,9 +1890,23 @@ def process_uploaded_video_for_live_detection(
         if capture is not None:
             capture.release()
 
+        if writer is not None:
+            writer.release()
+
         if temp_video_path is not None and temp_video_path.exists():
             try:
                 temp_video_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        # Keep a successful MP4 only until the UI reads it for download.
+        if (
+            temp_output_path is not None
+            and not keep_output_file
+            and temp_output_path.exists()
+        ):
+            try:
+                temp_output_path.unlink(missing_ok=True)
             except OSError:
                 pass
 
@@ -3484,8 +3537,33 @@ if app_page == "video":
 
             if analysis_result is not None:
 
-                # Analysis now returns a sampled annotated frame and report,
-                # rather than spending time re-encoding the entire source video.
+                # Transfer the completed MP4 into the app's download payload,
+                # then remove the temporary server-side file immediately.
+                output_path_value = analysis_result.pop("output_video_path", None)
+                if output_path_value:
+                    output_path = Path(output_path_value)
+                    try:
+                        if output_path.is_file() and output_path.stat().st_size > 0:
+                            analysis_result["processed_video_bytes"] = output_path.read_bytes()
+                            analysis_result["processed_video_filename"] = (
+                                f"{Path(analysis_result['video_name']).stem}_phone_detection.mp4"
+                            )
+                        else:
+                            st.warning(
+                                "The analysis finished, but the processed MP4 was empty "
+                                "or could not be created. You can still download the PDF report."
+                            )
+                    except OSError as error:
+                        st.warning(
+                            "The processed video could not be prepared for download: "
+                            f"{error}"
+                        )
+                    finally:
+                        try:
+                            output_path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+
                 # Preserve the existing warning summary behaviour.
                 if (
                     analysis_result["warning_count"] > 0
@@ -3563,10 +3641,18 @@ if app_page == "video":
                     "A box detection is not a separate distraction event."
                 )
 
-                st.caption(
-                    "To keep analysis fast, the app no longer creates a second "
-                    "full-length annotated MP4. Your original upload remains unchanged."
-                )
+                if analysis_result.get("processed_video_bytes"):
+                    st.subheader("📽️ Processed Video Preview & Downloads")
+                    st.video(analysis_result["processed_video_bytes"])
+                    st.download_button(
+                        "⬇️ Download Processed Video (MP4)",
+                        data=analysis_result["processed_video_bytes"],
+                        file_name=analysis_result.get(
+                            "processed_video_filename", "processed_study_video.mp4"
+                        ),
+                        mime="video/mp4",
+                        key=f"download_processed_video_{analysis_result['session_id']}",
+                    )
 
                 if analysis_result.get("annotated_frame") is not None:
                     st.subheader("📸 Sample Processed Frame")
@@ -5137,25 +5223,26 @@ if app_page == "video":
         max_value=0.60,
         value=0.18,
         step=0.01,
-        key="conf_slider_live_restore", 
+        key="conf_slider",
     )
     st.session_state.detection_confidence = confidence_threshold
 
     sample_interval = st.slider(
-        "Frame sampling interval (faster processing)",
+        "Frame sampling interval",
         min_value=1,
-        max_value=30,
-        value=10,
+        max_value=15,
+        value=5,
         step=1,
-        help="Analyze every 10th frame by default for faster processing. Choose 5 for more frequent checks or 1 for every frame.",
-        key="sample_slider_ultrafast",
+        help="Analyze every Nth frame to keep performance efficient.",
+        key="sample_slider",
     )
     st.session_state.frame_sample_interval = sample_interval
 
     st.info(
-        "Fast defaults: 320-pixel inference and every 10th source frame. "
-        "A phone candidate must appear in at least 2 of the last 3 analysed "
-        "samples before it is counted as confirmed. Choose 5 or 1 for more frequent checks."
+        "AI false-positive guard: a phone candidate must appear in at least "
+        "2 of the last 3 analyzed samples before it is counted as confirmed "
+        "for the main warning and visibility summary. This reduces isolated "
+        "detections but cannot eliminate model errors."
     )
 
     # ============================================================
