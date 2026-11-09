@@ -2646,6 +2646,8 @@ if app_page in ("video", "webcam"):
     # Alert UI
     # ============================================================
 
+    st.markdown('<div id="alert-settings"></div>', unsafe_allow_html=True)
+
     smart_alerts_enabled = st.checkbox(
         "🔔 Enable Smart Detection Alerts",
         value=True,
