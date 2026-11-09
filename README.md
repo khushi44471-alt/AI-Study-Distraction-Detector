@@ -6,14 +6,30 @@ A Class 12 Artificial Intelligence project that uses computer vision to identify
 
 ## Features
 
-- Live webcam phone detection using YOLO and Streamlit WebRTC.
-- Uploaded-video analysis with annotated frame previews and an exported processed video.
+- A responsive home dashboard with consistent light/dark styling and quick project statistics.
+- Live webcam phone detection using YOLO and Streamlit WebRTC, with camera permission guidance, connection status, and a built-in START/STOP control.
+- Uploaded-video analysis with source duration, processing progress, sampled-frame counts, annotated preview, and a downloadable processed MP4.
 - Configurable detection confidence, sampling interval, alert threshold, cooldown, and warning sound.
-- Session history, comparison charts, study calendar, weekly/monthly progress, recent-versus-previous insights, and visibility trends.
+- Session history with date/time-aware sorting and filters, comparison charts, study calendar, weekly/monthly progress, recent-versus-previous insights, and visibility trends.
 - Temporal 2-of-3 sample confirmation to reduce isolated phone false positives in live and uploaded-video detection.
-- Pomodoro timer, eight achievement milestones, study levels, warning log, and downloadable PDF analysis report.
+- Clearly separated metrics for raw phone-candidate frames, temporally confirmed phone frames, and individual phone bounding-box detections.
+- Pomodoro timer, eight achievement milestones, study levels, warning log, and a paginated PDF analysis report.
 - Built-in presentation flow, common viva answers, and a downloadable project demonstration brief.
 - Desktop video-processing entry point in main.py.
+
+## Understanding the detection metrics
+
+- **Sampled frames analysed:** the number of frames passed to the YOLO model, based on the selected sampling interval.
+- **Frames with a raw phone candidate:** sampled frames where YOLO returned at least one phone bounding box before temporal confirmation.
+- **Frames with a confirmed phone:** sampled frames where the temporal 2-of-3 filter confirmed phone visibility.
+- **Phone box detections:** the total number of individual phone bounding boxes across the sampled frames. Multiple boxes in one frame are not multiple distraction events.
+- **Phone visibility percentage:** confirmed phone frames divided by sampled frames analysed.
+
+Phone visibility is an indicator only. It does not establish that a student was distracted or measure attention, concentration, or learning.
+
+## Webcam connection notes
+
+The webcam workspace uses the public STUN servers already configured in the app. A TURN relay is optional and requires provider-issued settings; placeholder values are ignored. Some school, mobile, or restrictive networks may still prevent a direct WebRTC connection when no TURN relay is available. In that case, use the recorded-video workspace—no additional relay account is needed for video analysis.
 
 ## Project structure
 
