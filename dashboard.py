@@ -1225,6 +1225,56 @@ def speak_warning():
     components.html(js, height=0)
 
 # ============================================================
+# WebRTC ICE configuration
+# ============================================================
+
+def get_webrtc_ice_servers():
+    """
+    Return public STUN servers plus optional TURN servers configured
+    in Streamlit Cloud > App settings > Secrets.
+
+    TURN credentials are intentionally kept out of source control.
+    """
+    ice_servers = [
+        {"urls": ["stun:stun.l.google.com:19302"]},
+        {"urls": ["stun:stun1.l.google.com:19302"]},
+        {"urls": ["stun:stun2.l.google.com:19302"]},
+    ]
+
+    try:
+        turn_urls = st.secrets.get("TURN_SERVER_URLS", [])
+        if isinstance(turn_urls, str):
+            turn_urls = [
+                url.strip()
+                for url in turn_urls.split(",")
+                if url.strip()
+            ]
+
+        # Also accept one URL for providers that supply a single endpoint.
+        if not turn_urls:
+            single_turn_url = st.secrets.get("TURN_SERVER_URL", "")
+            if single_turn_url:
+                turn_urls = [single_turn_url]
+
+        turn_username = st.secrets.get("TURN_SERVER_USERNAME", "")
+        turn_credential = st.secrets.get("TURN_SERVER_CREDENTIAL", "")
+
+        if turn_urls and turn_username and turn_credential:
+            ice_servers.append(
+                {
+                    "urls": turn_urls,
+                    "username": turn_username,
+                    "credential": turn_credential,
+                }
+            )
+    except Exception:
+        # Streamlit secrets are optional; STUN-only mode remains available.
+        pass
+
+    return ice_servers
+
+
+# ============================================================
 # Webcam detection
 # ============================================================
 
@@ -3055,11 +3105,7 @@ if app_page == "webcam":
             "audio": False,
         },
         rtc_configuration={
-            "iceServers": [
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                {"urls": ["stun:stun1.l.google.com:19302"]},
-                {"urls": ["stun:stun2.l.google.com:19302"]},
-            ]
+            "iceServers": get_webrtc_ice_servers()
         },
         async_processing=True,
     )
