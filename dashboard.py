@@ -2239,8 +2239,9 @@ def create_pdf_report(analysis):
 
     def safe_number(value, default=0.0):
         try:
-            return float(value)
-        except (TypeError, ValueError):
+            number = float(value)
+            return number if np.isfinite(number) else default
+        except (TypeError, ValueError, OverflowError):
             return default
 
     def safe_paragraph(value, style):
@@ -2297,10 +2298,12 @@ def create_pdf_report(analysis):
         ["SESSION METRIC", "RESULT"],
         ["Video Name", str(analysis.get("video_name", "N/A"))],
         ["Video Resolution", str(analysis.get("resolution", "N/A"))],
-        ["Frames Processed", str(analysis.get("frames_processed", 0))],
-        ["Frames With Phone", str(analysis.get("frames_with_phone", 0))],
+        ["Source Video Duration", format_duration(analysis.get("duration_seconds"))],
+        ["Sampled Frames Analysed", str(analysis.get("frames_processed", 0))],
+        ["Frames With Confirmed Phone", str(analysis.get("frames_with_phone", 0))],
+        ["Frames With Raw Phone Candidate", str(analysis.get("frames_with_phone_candidate", 0))],
         ["Phone Visibility", f"{percentage:.2f}%"],
-        ["Total Phone Detections", str(analysis.get("detections", 0))],
+        ["Individual Phone Box Detections", str(analysis.get("detections", 0))],
         ["Estimated Focus Indicator", f"{focus_score:.2f}%"],
         ["Alert Level", str(analysis.get("alert_level", "N/A"))],
         ["Study Status", str(analysis.get("study_status", "N/A"))],
@@ -2388,12 +2391,13 @@ def create_pdf_report(analysis):
     ]
 
     timeline_data = [
-        ["Frame Number", "Phone Count", "Confidence"]
+        ["Frame Number", "Video Time", "Phone Boxes", "Confidence"]
     ]
 
     for event in detected_events[:15]:
         timeline_data.append([
             str(event.get("frame_index", "N/A")),
+            str(event.get("video_time", "N/A")),
             str(event.get("phone_count", 0)),
             f"{safe_number(event.get('confidence', 0)):.1%}",
         ])
@@ -2407,7 +2411,7 @@ def create_pdf_report(analysis):
 
     timeline_table = Table(
         timeline_data,
-        colWidths=[160, 160, 160],
+        colWidths=[90, 120, 120, 130],
         repeatRows=1,
     )
 
@@ -2578,7 +2582,22 @@ def create_pdf_report(analysis):
     # GENERATE PDF
     # --------------------------------------------------------
 
-    document.build(story)
+    def draw_report_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#DDD6FE"))
+        canvas.setLineWidth(0.6)
+        canvas.line(40, 32, A4[0] - 40, 32)
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.drawString(40, 20, "AI Study Distraction Detector · Educational prototype")
+        canvas.drawRightString(A4[0] - 40, 20, f"Page {doc.page}")
+        canvas.restoreState()
+
+    document.build(
+        story,
+        onFirstPage=draw_report_footer,
+        onLaterPages=draw_report_footer,
+    )
 
     pdf_buffer.seek(0)
 
@@ -3603,7 +3622,7 @@ if app_page == "video":
                 report_df[column] = pd.to_numeric(
                     report_df[column],
                     errors="coerce",
-                ).fillna(0)
+                )
 
         # Calculate dashboard statistics
         total_sessions = len(report_df)
@@ -3617,7 +3636,12 @@ if app_page == "video":
         ) if "Total Phone Detections" in report_df.columns else 0
 
         average_visibility = (
-            report_df["Phone Visible Percentage"].mean()
+            report_df.loc[
+                pd.to_numeric(
+                    report_df["Phone Visible Percentage"], errors="coerce"
+                ).between(0, 100),
+                "Phone Visible Percentage",
+            ].mean()
             if "Phone Visible Percentage" in report_df.columns
             else float("nan")
         )
@@ -3636,22 +3660,22 @@ if app_page == "video":
             """
             <style>
             div[data-testid="stMetric"] {
-                background: linear-gradient(145deg, #211b38, #30234f);
-                border: 1px solid rgba(167, 139, 250, 0.35);
+                background: linear-gradient(145deg, var(--panel), var(--panel-2));
+                border: 1px solid var(--line);
                 border-radius: 18px;
                 padding: 20px 16px;
-                box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
+                box-shadow: 0 8px 22px var(--shadow);
                 min-height: 125px;
             }
 
             div[data-testid="stMetricLabel"] p {
-                color: #c4b5fd !important;
+                color: var(--muted) !important;
                 font-size: 14px !important;
                 font-weight: 600 !important;
             }
 
             div[data-testid="stMetricValue"] {
-                color: #ffffff !important;
+                color: var(--heading) !important;
                 font-size: 28px !important;
                 font-weight: 700 !important;
             }
@@ -3673,8 +3697,9 @@ if app_page == "video":
         )
 
         metric3.metric(
-            "📱 Phone Detections",
+            "📱 Phone Box Detections",
             f"{total_detections:,}",
+            help="Counts individual detected phone bounding boxes, not separate distraction events.",
         )
 
         metric4.metric(
@@ -4650,6 +4675,16 @@ if app_page == "video":
         else:
             history_df["_Visibility"] = pd.NA
 
+        if {"Date", "Session Time"}.issubset(history_df.columns):
+            history_df["_SortTime"] = pd.to_datetime(
+                history_df["Date"].astype("string").fillna("")
+                + " "
+                + history_df["Session Time"].astype("string").fillna(""),
+                errors="coerce",
+            ).fillna(history_df["_Date"])
+        else:
+            history_df["_SortTime"] = history_df["_Date"]
+
         # Default filter values
         valid_dates = history_df["_Date"].dropna()
 
@@ -4753,14 +4788,14 @@ if app_page == "video":
         # Apply sorting
         if sort_order == "Newest First":
             history_df = history_df.sort_values(
-                "_Date",
+                "_SortTime",
                 ascending=False,
                 na_position="last"
             )
 
         elif sort_order == "Oldest First":
             history_df = history_df.sort_values(
-                "_Date",
+                "_SortTime",
                 ascending=True,
                 na_position="last"
             )
@@ -4804,8 +4839,18 @@ if app_page == "video":
 
             for session_index, session_row in comparison_df.iterrows():
                 video = str(session_row.get("Video Name", "Study Session"))
-                date = str(session_row.get("Date", "Unknown date"))
-                session_time = str(session_row.get("Session Time", ""))
+                date_value = pd.to_datetime(session_row.get("Date"), errors="coerce")
+                date = (
+                    date_value.strftime("%d %b %Y")
+                    if pd.notna(date_value) else "Date unavailable"
+                )
+                time_value = pd.to_datetime(
+                    str(session_row.get("Session Time", "")), errors="coerce"
+                )
+                session_time = (
+                    time_value.strftime("%I:%M %p")
+                    if pd.notna(time_value) else "Time unavailable"
+                )
                 
                 label = (
                     f"{video} | {date} | {session_time} "
@@ -4955,9 +5000,18 @@ if app_page == "video":
 
         # Remove temporary columns
         display_history = history_df.drop(
-            columns=["_Date", "_Visibility"],
+            columns=["_Date", "_Visibility", "_SortTime"],
             errors="ignore"
-        )
+        ).copy()
+
+        if "Date" in display_history.columns:
+            display_history["Date"] = pd.to_datetime(
+                display_history["Date"], errors="coerce"
+            ).dt.strftime("%d %b %Y").fillna("Not available")
+        if "Session Time" in display_history.columns:
+            display_history["Session Time"] = pd.to_datetime(
+                display_history["Session Time"].astype("string"), errors="coerce"
+            ).dt.strftime("%I:%M %p").fillna("Not available")
 
         # Display filtered results
         st.markdown("#### 📊 Filtered Results")
@@ -5080,10 +5134,22 @@ if app_page == "video":
         phone_percentage = saved_analysis["percentage"]
 
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Focus Score", f"{focus_score:.1f}%")
+        col1.metric("Prototype Focus Indicator", f"{focus_score:.1f}%")
         col2.metric("Phone Visibility", f"{phone_percentage:.1f}%")
-        col3.metric("Alert Level", saved_analysis["alert_level"])
-        col4.metric("Study Status", saved_analysis["study_status"])
+        col3.metric(
+            "Confirmed Phone Frames",
+            f"{saved_analysis.get('frames_with_phone', 0):,}",
+        )
+        col4.metric(
+            "Phone Box Detections",
+            f"{saved_analysis.get('detections', 0):,}",
+        )
+        st.caption(
+            "Confirmed phone frames count sampled frames that passed the 2-of-3 "
+            "temporal filter. Phone box detections count individual bounding boxes. "
+            "Neither value is a count of distraction events; phone visibility does "
+            "not prove that a student was distracted."
+        )
 
         st.subheader("💡 Session Insight")
         insight = generate_session_insight(saved_analysis)
@@ -5091,7 +5157,7 @@ if app_page == "video":
         st.write(insight["summary"])
         st.write(insight["recommendation"])
 
-        st.subheader("📉 Distraction Timeline")
+        st.subheader("📉 Phone Visibility Timeline")
         timeline_df = pd.DataFrame(saved_analysis["timeline"])
         if not timeline_df.empty:
             fig = px.line(
@@ -5103,7 +5169,7 @@ if app_page == "video":
                 range_y=[0, 1.2],
             )
             fig.update_layout(
-                template="plotly_dark",
+                template=chart_theme,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
             )
@@ -5535,7 +5601,8 @@ st.subheader("⚠️ Important Limitations")
 
 st.info(
     """
-    - The system detects the visibility of mobile phones in video frames; it does not directly measure a student's attention or concentration.
+    - The system detects visible mobile phones in sampled video frames; it does not directly measure a student's attention or concentration.
+    - Phone box detections are bounding boxes, confirmed phone frames are sampled frames, and neither is a count of separate distraction events.
     - Detection accuracy depends on video quality, lighting, camera angle, and phone visibility.
     - The YOLO model may occasionally produce false positives or miss a phone.
     - Objects that are partially hidden or outside the camera frame may not be detected.
