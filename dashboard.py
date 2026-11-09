@@ -2900,7 +2900,7 @@ if app_page == "home":
         font-size: 1rem;
     }
     .home-feature p {
-        color: ${theme['text']} !important;
+        color: var(--text) !important;
         font-size: 0.9rem;
         line-height: 1.55;
         margin: 0;
