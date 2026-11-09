@@ -3195,7 +3195,20 @@ if app_page == "webcam":
     st.subheader("📹 Live Webcam Detection")
     st.caption("This is a real webcam stream with a live phone detection overlay.")
 
-    webrtc_streamer(
+    st.markdown(
+        "Select **START** in the camera panel and allow camera access when your "
+        "browser asks. Use the **STOP** control in that same panel when finished."
+    )
+    with st.expander("Camera permission and connection help", expanded=False):
+        st.markdown(
+            "1. Open this app using its secure HTTPS address in Chrome or Edge.\n"
+            "2. Select **START** in the camera panel.\n"
+            "3. Choose **Allow** when the browser requests camera permission.\n"
+            "4. Close other tabs or apps that may already be using the camera.\n"
+            "5. If the connection times out on a school or mobile network, use Video Analysis with a recorded clip instead."
+        )
+
+    webrtc_ctx = webrtc_streamer(
         key="webcam_phone_detector",
         video_processor_factory=WebcamPhoneDetector,
         media_stream_constraints={
@@ -3212,37 +3225,87 @@ if app_page == "webcam":
         },
         async_processing=True,
     )
+    camera_playing = bool(getattr(webrtc_ctx.state, "playing", False))
+
+    if camera_playing:
+        st.success("Camera stream is active. Use STOP in the camera panel when you finish.")
+    else:
+        st.warning(
+            "Camera is not active yet. It may be stopped, waiting for permission, "
+            "or unable to connect through the current network."
+        )
+        if st.button(
+            "🎬 Switch to Video Analysis",
+            key="webcam_fallback_to_video",
+            use_container_width=True,
+        ):
+            st.session_state["app_page"] = "video"
+            st.rerun()
 
     if st.session_state.get("live_warning_triggered", False):
         trigger_live_warning_once()
 
-    live_detected = st.session_state.get("live_phone_detected", False)
-    st.session_state.live_status = "PHONE DETECTED" if live_detected else "FOCUSED / NO PHONE"
+    if camera_playing:
+        live_detected = st.session_state.get("live_phone_detected", False)
+        st.session_state.live_status = (
+            "PHONE DETECTED" if live_detected else "NO PHONE CONFIRMED"
+        )
+        risk_score = 40.0 if live_detected else 100.0
+        risk_band = get_risk_band(risk_score)
 
-    risk_score = 100.0 if not live_detected else max(0.0, 100.0 - 60.0)
-    risk_band = get_risk_band(risk_score)
+        live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
+        live_status_col1.metric("Live Status", st.session_state.live_status)
+        live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
+        live_status_col3.metric("Prototype Indicator", risk_band)
+        st.progress(min(1.0, risk_score / 100.0))
+        st.caption(
+            "The progress indicator reflects the prototype's phone-visibility rule; "
+            "it is not a measurement of attention or academic focus."
+        )
 
-    live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
-    live_status_col1.metric("Live Status", st.session_state.live_status)
-    live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
-    live_status_col3.metric("Risk Level", risk_band)
-
-    st.progress(min(1.0, risk_score / 100.0))
-    st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
-
-    if live_detected:
-        st.session_state.live_focus_streak = 0
+        if live_detected:
+            st.session_state.live_focus_streak = 0
+        else:
+            st.session_state.live_focus_streak = update_focus_streak(
+                st.session_state.live_focus_streak, False
+            )
+        st.caption(
+            f"Session indicator message: "
+            f"{calculate_focus_streak_label(st.session_state.live_focus_streak)}"
+        )
     else:
-        st.session_state.live_focus_streak = update_focus_streak(st.session_state.live_focus_streak, False)
+        live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
+        live_status_col1.metric("Live Status", "CAMERA NOT ACTIVE")
+        live_status_col2.metric("Focus Streak", "—")
+        live_status_col3.metric("Prototype Indicator", "Unavailable")
+        st.caption("Live statistics will appear after the camera stream starts.")
 
     st.markdown('<div id="live-camera-statistics"></div>', unsafe_allow_html=True)
     st.subheader("📊 Live Camera Statistics")
     live_stats = st.session_state.live_stats
     stat1, stat2, stat3, stat4 = st.columns(4)
-    stat1.metric("Status", live_stats["status"])
-    stat2.metric("Phones Found", live_stats["phone_count"])
-    stat3.metric("Max Confidence", f"{live_stats['confidence']:.1%}")
-    stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
+    stat1.metric(
+        "Detection Status",
+        live_stats.get("status", "Not started") if camera_playing else "Camera not active",
+    )
+    stat2.metric(
+        "Phone Boxes in Latest Frame",
+        live_stats.get("phone_count", 0) if camera_playing else 0,
+    )
+    stat3.metric(
+        "Maximum Box Confidence",
+        f"{live_stats.get('confidence', 0.0):.1%}" if camera_playing else "—",
+    )
+    stat4.metric(
+        "Last Frame Check",
+        (live_stats.get("last_check") or "Not checked yet") if camera_playing else "—",
+    )
+    if camera_playing and live_stats.get("error"):
+        st.error(f"Webcam detection error: {live_stats['error']}")
+    st.caption(
+        "Phone boxes count individual bounding boxes in the latest processed frame. "
+        "They do not count unique study distractions or sessions."
+    )
 
 
 
