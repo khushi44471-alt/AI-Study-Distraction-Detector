@@ -1475,9 +1475,6 @@ def trigger_live_warning_once():
 def process_uploaded_video_for_live_detection(
     uploaded_file, confidence_threshold, sample_interval
 ):
-    model_path = ensure_model_exists()
-    model = load_yolo_model(str(model_path))
-
     temp_video_path = None
     temp_output_path = None
     capture = None
@@ -1485,6 +1482,9 @@ def process_uploaded_video_for_live_detection(
     keep_output_file = False
 
     try:
+        model_path = ensure_model_exists()
+        model = load_yolo_model(str(model_path))
+
         uploaded_file.seek(0)
         suffix = Path(uploaded_file.name).suffix.lower() or ".mp4"
 
@@ -1824,9 +1824,11 @@ def process_uploaded_video_for_live_detection(
         }
 
     except Exception as exc:
-        import traceback
-        st.error(f"Live processing failed: {exc}")
-        st.code(traceback.format_exc())
+        st.error(
+            "Video processing could not finish. Check that the uploaded file is "
+            "valid and that the AI model is available, then try again. "
+            f"Details: {exc}"
+        )
         return None
 
     finally:
