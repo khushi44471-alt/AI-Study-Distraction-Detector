@@ -40,11 +40,28 @@ from project_utils import (
     load_integer_setting,
     load_session_history,
     normalize_warning_entries,
-    resolve_model_checkpoint,
     safe_float,
     save_integer_setting,
     validate_analysis_result,
 )
+
+
+def resolve_model_checkpoint(candidate_paths, downloaded_checkpoint=None):
+    """Resolve a local or downloaded YOLO checkpoint without relying on project_utils."""
+    paths = list(candidate_paths or [])
+    if downloaded_checkpoint:
+        paths.append(downloaded_checkpoint)
+
+    for candidate in paths:
+        if candidate is None:
+            continue
+        try:
+            path = Path(candidate).expanduser()
+            if path.is_file():
+                return path.resolve()
+        except (OSError, TypeError, ValueError):
+            continue
+    return None
 
 def format_duration(seconds):
     """Format a duration locally so the dashboard is independent of helper-module versions."""
