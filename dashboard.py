@@ -1637,251 +1637,9 @@ def build_phone_heatmap(detection_events):
     return fig
 
 
-def analyze_video(uploaded_file):
-    temp_path = None
-    capture = None
-    warning_log = []
-    detection_events = []
-    snapshots = []
+# Legacy uploaded-video analysis removed; analytics helpers remain below.
 
-    try:
-        resolved_model_path = ensure_model_exists()
-    except FileNotFoundError as exc:
-        st.error(str(exc))
-        return None
 
-    try:
-        extension = Path(uploaded_file.name).suffix.lower() or ".mp4"
-
-        with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
-            temp_file.write(uploaded_file.getvalue())
-            temp_path = Path(temp_file.name)
-
-        capture = cv2.VideoCapture(str(temp_path))
-
-        if not capture.isOpened():
-            st.error("Unable to open this video. Try another MP4, MOV, or AVI file.")
-            return None
-
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-
-        if width <= 0 or height <= 0:
-            st.error("Video dimensions could not be read. Try another video.")
-            return None
-
-        model = load_yolo_model(str(resolved_model_path))
-        sample_interval = max(1, int(st.session_state.frame_sample_interval))
-        confidence_threshold = float(st.session_state.detection_confidence)
-
-        sampled_frames = 0
-        frames_with_phone = 0
-        total_detections = 0
-        object_counts = {}
-        detection_confidences = []
-        detection_flags = []
-
-        progress = st.progress(0.0)
-        status = st.empty()
-        last_annotated_frame = None
-        frame_index = 0
-
-        while True:
-            success, frame = capture.read()
-
-            if not success:
-                break
-
-            if frame_index % sample_interval != 0:
-                frame_index += 1
-                continue
-
-            sampled_frames += 1
-
-            prediction = model.predict(
-                source=frame,
-                imgsz=640,
-                conf=confidence_threshold,
-                verbose=False,
-                max_det=20,
-            )[0]
-
-            phone_count = 0
-            phone_detections = []
-
-            if prediction.boxes is not None:
-                for box in prediction.boxes:
-                    cls_id = int(box.cls[0].item())
-
-                    class_name = (
-                        model.names[cls_id]
-                        if not isinstance(model.names, dict)
-                        else model.names.get(cls_id, "")
-                    )
-
-                    class_name = str(class_name).strip().lower()
-                    object_counts[class_name] = object_counts.get(class_name, 0) + 1
-
-                    if any(keyword in class_name for keyword in PHONE_KEYWORDS):
-                        phone_count += 1
-                        total_detections += 1
-                        confidence = float(box.conf[0].item())
-                        detection_confidences.append(confidence)
-
-                        x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
-
-                        phone_detections.append({
-                            "class": class_name,
-                            "confidence": confidence,
-                            "bbox": [x1, y1, x2, y2],
-                        })
-
-                        cv2.rectangle(
-                            frame,
-                            (x1, y1),
-                            (x2, y2),
-                            (0, 0, 255),
-                            3,
-                        )
-
-                        cv2.putText(
-                            frame,
-                            f"PHONE {confidence:.0%}",
-                            (x1, max(20, y1 - 10)),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7,
-                            (0, 0, 255),
-                            2,
-                            cv2.LINE_AA,
-                        )
-
-            if phone_count > 0:
-                frames_with_phone += 1
-                detection_flags.append(True)
-
-                warning_log = append_warning_log(
-                    warning_log,
-                    "Phone detected in sampled frame",
-                )
-
-                detection_events.append({
-                    "frame_index": frame_index,
-                    "phone_detected": True,
-                    "phone_count": phone_count,
-                    "confidence": max(
-                        item["confidence"] for item in phone_detections
-                    ),
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                })
-
-                snapshots.append(frame.copy())
-
-            else:
-                detection_flags.append(False)
-
-                detection_events.append({
-                    "frame_index": frame_index,
-                    "phone_detected": False,
-                    "phone_count": 0,
-                    "confidence": 0.0,
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                })
-
-            if len(snapshots) > 5:
-                snapshots = snapshots[-5:]
-
-            st.session_state.detection_snapshots = snapshots
-
-            last_annotated_frame = frame.copy()
-
-            if total_frames > 0:
-                progress.progress(
-                    min((frame_index + 1) / total_frames, 1.0)
-                )
-
-            status.write(
-                f"Analyzing sampled frames... {sampled_frames}"
-            )
-
-            frame_index += 1
-
-        phone_percentage = compute_phone_percentage(
-            frames_with_phone,
-            sampled_frames,
-        )
-
-        focus_score = get_focus_score(phone_percentage)
-
-        average_confidence = (
-            float(np.mean(detection_confidences))
-            if detection_confidences else 0.0
-        )
-
-        highest_confidence = (
-            float(np.max(detection_confidences))
-            if detection_confidences else 0.0
-        )
-
-        result = {
-            "video_name": uploaded_file.name,
-            "resolution": f"{width}x{height}",
-            "frames_processed": sampled_frames,
-            "frames_with_phone": frames_with_phone,
-            "percentage": round(float(phone_percentage), 2),
-            "detections": total_detections,
-            "focus_score": focus_score,
-            "alert_level": get_alert_level(focus_score),
-            "average_confidence": average_confidence,
-            "highest_confidence": highest_confidence,
-            "warnings": warning_log,
-            "warning_count": len(warning_log),
-            "timeline": generate_timeline(detection_flags),
-            "object_counts": object_counts,
-            "detection_events": detection_events,
-            "annotated_frame": last_annotated_frame,
-            "study_status": get_study_status(focus_score),
-            "risk_band": get_risk_band(focus_score),
-        }
-
-        if (
-            result["warning_count"] > 0
-            and not st.session_state.analysis_warning_triggered
-        ):
-            st.session_state.analysis_warning_triggered = True
-            st.session_state.last_warning_reason = (
-                "Phone detected in video analysis"
-            )
-
-            st.session_state.warning_summary = append_warning_summary(
-                st.session_state.warning_summary,
-                st.session_state.last_warning_reason,
-            )
-
-            st.session_state.warning_log.append({
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "message": "Phone detected in video analysis",
-            })
-
-            show_phone_alert(preview=False)
-
-        return result
-
-    except Exception as error:
-        st.error(f"Video analysis failed: {error}")
-        return None
-
-    finally:
-        if capture is not None:
-            capture.release()
-
-        if temp_path is not None and temp_path.exists():
-            try:
-                temp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-                
 def save_session_record_legacy(
     video_name,
     resolution,
@@ -2673,8 +2431,8 @@ if app_page == "home":
 
 
 if app_page == "video":
-    st.markdown("## 🎬 Video Analysis Workspace")
-    st.caption("Analyse recorded study videos and explore the saved detection results.")
+    st.markdown("## 📊 Study Analytics Workspace")
+    st.caption("Explore saved study-session statistics, detection history, and reports.")
 elif app_page == "webcam":
     st.markdown("## 📹 Webcam Detection Workspace")
     st.caption("Use your camera for live phone-visibility detection, real-time status, and alerts.")
@@ -2916,7 +2674,7 @@ if app_page == "webcam":
             "2. Select **START** in the camera panel.\n"
             "3. Choose **Allow** when the browser requests camera permission.\n"
             "4. Close other tabs or apps that may already be using the camera.\n"
-            "5. If the connection times out on a school or mobile network, use Video Analysis with a recorded clip instead."
+            "5. If the connection times out on a school or mobile network, check camera permissions or try a different network."
         )
 
     webcam_ice_servers = get_webrtc_ice_servers()
@@ -2924,8 +2682,7 @@ if app_page == "webcam":
         st.caption(
             "Connection mode: public STUN only. No valid TURN relay settings are "
             "configured, so some restrictive mobile or school networks may still "
-            "block live video. Recorded Video Analysis remains available without "
-            "a separate relay account."
+            "block live video. Try a different network or device if the camera cannot connect."
         )
 
     webrtc_ctx = webrtc_streamer(
@@ -4744,7 +4501,7 @@ if app_page == "video":
         )
     else:
         st.info(
-            "Run a video analysis first to generate your downloadable PDF report."
+            "Complete and save a study session first to generate your downloadable PDF report."
         )
 
     # ============================================================
