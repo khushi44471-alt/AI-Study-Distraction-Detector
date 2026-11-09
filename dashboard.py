@@ -121,6 +121,7 @@ else:
     shadow = "rgba(75, 50, 120, 0.08)"
     glow = "rgba(128, 85, 217, 0.12)"
 
+chart_theme = "plotly_dark" if is_dark_mode else "plotly_white"
 
 st.markdown(
     f"""
@@ -140,6 +141,9 @@ st.markdown(
         --muted: {theme["muted"]};
         --line: {theme["line"]};
         --heading: {theme["heading"]};
+        --hero1: {theme["hero1"]};
+        --hero2: {theme["hero2"]};
+        --hero3: {theme["hero3"]};
         --shadow: {shadow};
         --glow: {glow};
     }}
@@ -1919,10 +1923,11 @@ def build_phone_heatmap(detection_events):
         margin=dict(l=25, r=25, t=70, b=65),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        template=chart_theme,
         font=dict(
             family="Arial",
             size=12,
-            color="#CBD5E1",
+            color=theme["text"],
         ),
         coloraxis_colorbar=dict(
             title="Visibility",
@@ -3745,12 +3750,6 @@ if app_page == "video":
 
             chart_col1, chart_col2 = st.columns([1.3, 1])
 
-            chart_theme = (
-                "plotly_dark"
-                if is_dark_mode
-                else "plotly_white"
-            )
-
             with chart_col1:
 
                 donut_fig = px.pie(
@@ -4369,7 +4368,7 @@ if app_page == "video":
                         pd.Series(index=progress_df.index, dtype=float),
                     ),
                     errors="coerce",
-                ).fillna(0)
+                )
 
                 report_view = st.radio(
                     "Choose Progress Report",
@@ -4621,7 +4620,7 @@ if app_page == "video":
                 ].rename(columns={
                     "Average_Visibility": "Average Phone Visibility (%)",
                     "Average_Focus": "Average Focus Score (%)",
-                    "Total_Detections": "Total Phone Detections",
+                    "Total_Detections": "Phone Box Detections",
                 })
 
                 progress_display["Average Phone Visibility (%)"] = (
@@ -4781,14 +4780,16 @@ if app_page == "video":
                 )
             ]
 
-        # Apply visibility filter
+        # Apply visibility filter. Keep unknown historic values visible only
+        # when the user has left the full 0–100% range selected.
         if "_Visibility" in history_df.columns:
-            history_df = history_df[
-                history_df["_Visibility"].between(
-                    visibility_range[0],
-                    visibility_range[1]
-                )
-            ]
+            visibility_match = history_df["_Visibility"].between(
+                visibility_range[0],
+                visibility_range[1]
+            )
+            if visibility_range[0] <= 0 and visibility_range[1] >= 100:
+                visibility_match = visibility_match | history_df["_Visibility"].isna()
+            history_df = history_df[visibility_match]
 
         # Apply sorting
         if sort_order == "Newest First":
