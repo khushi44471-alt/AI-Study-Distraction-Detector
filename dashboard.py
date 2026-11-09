@@ -3755,7 +3755,7 @@ if app_page == "video":
         )
 
         metric2.metric(
-            "🎞️ Frames Processed",
+            "🎞️ Frames Analysed",
             f"{total_frames:,}",
         )
 
@@ -4516,7 +4516,7 @@ if app_page == "video":
                 )
 
                 progress_col3.metric(
-                    "🎯 Average Focus Score",
+                    "🎯 Average Prototype Focus Indicator",
                     (
                         f'{latest_period["Average_Focus"]:.1f}%'
                         if pd.notna(latest_period["Average_Focus"])
@@ -4529,10 +4529,11 @@ if app_page == "video":
                         suffix="%",
                     ),
                     delta_color="normal",
+                    help="Derived from phone visibility; it is not a validated measurement of attention.",
                 )
 
                 progress_col4.metric(
-                    "🔍 Phone Detections",
+                    "🔍 Phone Box Detections",
                     int(latest_period["Total_Detections"]),
                     delta=progress_delta(
                         latest_period["Total_Detections"],
@@ -4541,6 +4542,7 @@ if app_page == "video":
                         decimals=0,
                     ),
                     delta_color="inverse",
+                    help="Counts individual phone bounding boxes, not unique distraction events.",
                 )
 
                 if previous_period is None:
@@ -4590,7 +4592,7 @@ if app_page == "video":
                         markers=True,
                         color_discrete_map={
                             "Phone Visibility": "#a78bfa",
-                            "Focus Score": "#22c55e",
+                            "Prototype Focus Indicator": "#22c55e",
                         },
                         title=f"{report_view} Study Progress",
                     )
