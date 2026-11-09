@@ -13,6 +13,7 @@ import json
 import tempfile
 import time
 from datetime import datetime
+from uuid import uuid4
 from pathlib import Path
 
 from reportlab.platypus import (
@@ -36,6 +37,7 @@ from project_utils import (
     append_session_record,
     build_session_record,
     calculate_study_streaks,
+    format_duration,
     load_integer_setting,
     load_session_history,
     normalize_warning_entries,
@@ -137,8 +139,13 @@ st.markdown(
         --text: {theme["text"]};
         --muted: {theme["muted"]};
         --line: {theme["line"]};
+        --heading: {theme["heading"]};
         --shadow: {shadow};
         --glow: {glow};
+    }}
+
+    body, button, input, textarea, select {{
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }}
 
     .stApp {{
@@ -680,6 +687,7 @@ if "live_stats" not in st.session_state:
         "phone_count": 0,
         "confidence": 0.0,
         "last_check": None,
+        "error": None,
     }
 
 if "warning_log" not in st.session_state:
@@ -727,7 +735,11 @@ def load_achievements():
             data = json.load(file)
 
         if isinstance(data, list):
-            return data
+            # Remove corrupt/duplicate IDs before calculating unlocked totals.
+            return list(dict.fromkeys(
+                item for item in data
+                if isinstance(item, str) and item.strip()
+            ))
 
         return []
 
@@ -847,7 +859,8 @@ def load_completed_focus_count():
 
 def check_achievements():
     completed = st.session_state.completed_focus_sessions
-    unlocked = st.session_state.unlocked_achievements
+    unlocked = list(dict.fromkeys(st.session_state.unlocked_achievements))
+    st.session_state.unlocked_achievements = unlocked
 
     newly_unlocked = []
 
@@ -1397,6 +1410,7 @@ class WebcamPhoneDetector(VideoProcessorBase):
                     default=0.0,
                 ),
                 "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": None,
             }
 
             st.session_state.live_status = (
@@ -1405,9 +1419,17 @@ class WebcamPhoneDetector(VideoProcessorBase):
                 else "FOCUSED / NO PHONE"
             )
 
-        except Exception:
+        except Exception as error:
             st.session_state.live_phone_detected = False
-            st.session_state.live_status = "FOCUSED / NO PHONE"
+            st.session_state.live_status = "DETECTION ERROR"
+            st.session_state.live_stats = {
+                "status": "DETECTION ERROR",
+                "phone_detected": False,
+                "phone_count": 0,
+                "confidence": 0.0,
+                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": str(error)[:240],
+            }
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
@@ -2699,9 +2721,9 @@ if app_page == "home":
     .home-hero {
         padding: 38px 34px;
         border-radius: 25px;
-        background: linear-gradient(120deg, #30205b, #6338a8 62%, #9875ef);
+        background: linear-gradient(120deg, var(--hero1), var(--hero2) 62%, var(--hero3));
         border: 1px solid rgba(255,255,255,0.20);
-        box-shadow: 0 18px 42px rgba(85,55,150,0.18);
+        box-shadow: 0 18px 42px var(--shadow);
         margin: 8px 0 26px 0;
     }
     .home-hero h1 {
@@ -2720,38 +2742,39 @@ if app_page == "home":
         min-height: 245px;
         padding: 25px;
         border-radius: 20px;
-        border: 1px solid rgba(167,139,250,0.38);
-        background: linear-gradient(145deg, #211b38, #30234f);
-        box-shadow: 0 9px 25px rgba(0,0,0,0.13);
+        border: 1px solid var(--line);
+        background: linear-gradient(145deg, var(--panel), var(--panel-2));
+        box-shadow: 0 9px 25px var(--shadow);
         margin-bottom: 12px;
     }
     .workspace-choice h2 {
-        color: #ffffff !important;
+        color: var(--heading) !important;
         margin: 8px 0 12px 0;
         font-size: 1.45rem;
     }
     .workspace-choice p {
-        color: #d7d0ed !important;
+        color: var(--muted) !important;
         line-height: 1.65;
         min-height: 74px;
     }
     .workspace-icon {
+        color: var(--brand);
         font-size: 34px;
     }
     .home-feature {
         min-height: 132px;
         padding: 18px;
         border-radius: 16px;
-        border: 1px solid rgba(167,139,250,0.25);
-        background: rgba(139,92,246,0.08);
+        border: 1px solid var(--line);
+        background: var(--panel-2);
     }
     .home-feature h3 {
-        color: #a78bfa !important;
+        color: var(--brand) !important;
         margin: 0 0 8px 0;
         font-size: 1rem;
     }
     .home-feature p {
-        color: var(--text) !important;
+        color: var(--muted) !important;
         font-size: 0.9rem;
         line-height: 1.55;
         margin: 0;
@@ -2772,6 +2795,37 @@ if app_page == "home":
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    # Small live summary cards make the landing page useful even before
+    # opening a workspace. Missing or invalid historic values stay harmless.
+    try:
+        home_history = load_session_history(REPORT_FILE)
+    except (OSError, pd.errors.ParserError, ValueError):
+        home_history = pd.DataFrame()
+
+    def _home_total(column_name):
+        values = pd.to_numeric(
+            home_history.get(column_name, pd.Series(dtype="float64")),
+            errors="coerce",
+        )
+        return int(values.fillna(0).sum())
+
+    home_sessions = int(len(home_history))
+    home_frames = _home_total("Frames Processed")
+    home_confirmed_frames = _home_total("Frames With Phone")
+    home_box_detections = _home_total("Total Phone Detections")
+
+    st.markdown("### Your Project at a Glance")
+    home_stat_cols = st.columns(4)
+    home_stat_cols[0].metric("Saved Sessions", f"{home_sessions:,}")
+    home_stat_cols[1].metric("Frames Analysed", f"{home_frames:,}")
+    home_stat_cols[2].metric("Confirmed Phone Frames", f"{home_confirmed_frames:,}")
+    home_stat_cols[3].metric("Phone Box Detections", f"{home_box_detections:,}")
+    st.caption(
+        "A confirmed phone frame is one analysed sample where phone visibility "
+        "passed the temporal confirmation filter. Box detections count individual "
+        "bounding boxes, not separate distraction events."
+    )
 
     st.markdown("### Choose Your Workspace")
     st.caption("Open one workspace at a time. You can switch at any moment from the sidebar.")
