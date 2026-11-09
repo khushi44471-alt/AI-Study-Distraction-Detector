@@ -1246,12 +1246,7 @@ def speak_warning():
 # ============================================================
 
 def get_webrtc_ice_servers():
-    """
-    Return public STUN servers plus optional TURN servers configured
-    in Streamlit Cloud > App settings > Secrets.
-
-    TURN credentials are intentionally kept out of source control.
-    """
+    """Return public STUN servers and only valid, provider-issued TURN settings."""
     ice_servers = [
         {"urls": ["stun:stun.l.google.com:19302"]},
         {"urls": ["stun:stun1.l.google.com:19302"]},
@@ -1261,27 +1256,48 @@ def get_webrtc_ice_servers():
     try:
         turn_urls = st.secrets.get("TURN_SERVER_URLS", [])
         if isinstance(turn_urls, str):
-            turn_urls = [
-                url.strip()
-                for url in turn_urls.split(",")
-                if url.strip()
-            ]
+            turn_urls = turn_urls.split(",")
+        elif not isinstance(turn_urls, (list, tuple)):
+            turn_urls = []
 
         # Also accept one URL for providers that supply a single endpoint.
         if not turn_urls:
             single_turn_url = st.secrets.get("TURN_SERVER_URL", "")
-            if single_turn_url:
-                turn_urls = [single_turn_url]
+            turn_urls = [single_turn_url] if single_turn_url else []
+
+        valid_turn_urls = []
+        for url in turn_urls:
+            if not isinstance(url, str):
+                continue
+            clean_url = url.strip()
+            upper_url = clean_url.upper()
+            is_turn_scheme = clean_url.lower().startswith(("turn:", "turns:"))
+            is_placeholder = any(
+                marker in upper_url
+                for marker in ("YOUR_", "REPLACE_ME", "<", ">")
+            )
+            if clean_url and is_turn_scheme and not is_placeholder:
+                valid_turn_urls.append(clean_url)
 
         turn_username = st.secrets.get("TURN_SERVER_USERNAME", "")
         turn_credential = st.secrets.get("TURN_SERVER_CREDENTIAL", "")
+        valid_username = (
+            isinstance(turn_username, str)
+            and bool(turn_username.strip())
+            and not turn_username.strip().upper().startswith(("YOUR_", "REPLACE_ME"))
+        )
+        valid_credential = (
+            isinstance(turn_credential, str)
+            and bool(turn_credential.strip())
+            and not turn_credential.strip().upper().startswith(("YOUR_", "REPLACE_ME"))
+        )
 
-        if turn_urls and turn_username and turn_credential:
+        if valid_turn_urls and valid_username and valid_credential:
             ice_servers.append(
                 {
-                    "urls": turn_urls,
-                    "username": turn_username,
-                    "credential": turn_credential,
+                    "urls": valid_turn_urls,
+                    "username": turn_username.strip(),
+                    "credential": turn_credential.strip(),
                 }
             )
     except Exception:
@@ -3232,6 +3248,15 @@ if app_page == "webcam":
             "5. If the connection times out on a school or mobile network, use Video Analysis with a recorded clip instead."
         )
 
+    webcam_ice_servers = get_webrtc_ice_servers()
+    if len(webcam_ice_servers) == 3:
+        st.caption(
+            "Connection mode: public STUN only. No valid TURN relay settings are "
+            "configured, so some restrictive mobile or school networks may still "
+            "block live video. Recorded Video Analysis remains available without "
+            "a separate relay account."
+        )
+
     webrtc_ctx = webrtc_streamer(
         key="webcam_phone_detector",
         video_processor_factory=WebcamPhoneDetector,
@@ -3245,17 +3270,23 @@ if app_page == "webcam":
             "audio": False,
         },
         rtc_configuration={
-            "iceServers": get_webrtc_ice_servers()
+            "iceServers": webcam_ice_servers
         },
         async_processing=True,
     )
     camera_playing = bool(getattr(webrtc_ctx.state, "playing", False))
+    camera_connecting = bool(getattr(webrtc_ctx.state, "signalling", False))
 
     if camera_playing:
         st.success("Camera stream is active. Use STOP in the camera panel when you finish.")
+    elif camera_connecting:
+        st.info(
+            "Connecting to your camera... Keep this page open and make sure "
+            "the browser has permission to use the camera."
+        )
     else:
         st.warning(
-            "Camera is not active yet. It may be stopped, waiting for permission, "
+            "Camera is not active. It may be stopped, waiting for permission, "
             "or unable to connect through the current network."
         )
         if st.button(
