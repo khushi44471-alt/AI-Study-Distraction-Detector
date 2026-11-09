@@ -723,7 +723,7 @@ if "analysis_warning_triggered" not in st.session_state:
     st.session_state.analysis_warning_triggered = False
 
 if "detection_confidence" not in st.session_state:
-    st.session_state.detection_confidence = 0.12
+    st.session_state.detection_confidence = 0.18
 
 if "frame_sample_interval" not in st.session_state:
     st.session_state.frame_sample_interval = 5
@@ -5135,9 +5135,9 @@ if app_page == "video":
         "Adjust detection confidence",
         min_value=0.05,
         max_value=0.60,
-        value=0.12,
+        value=0.18,
         step=0.01,
-        key="conf_slider", 
+        key="conf_slider_live_restore", 
     )
     st.session_state.detection_confidence = confidence_threshold
 
