@@ -1532,7 +1532,7 @@ def process_uploaded_video_for_live_detection(
             st.error("Could not create the processed output video.")
             return None
 
-        st.subheader("🔴 Live AI Detection")
+        st.subheader("⚙️ Processing Uploaded Video")
         st.caption(
             "The source video is processed on the server. Progress tracks source "
             "frames, while YOLO analyses the configured sampled frames."
@@ -2432,6 +2432,7 @@ def create_pdf_report(analysis):
     if len(timeline_data) == 1:
         timeline_data.append([
             "No phone detections",
+            "-",
             "-",
             "-",
         ])
@@ -3475,10 +3476,15 @@ if app_page == "video":
                 if output_path_value:
                     output_path = Path(output_path_value)
                     try:
-                        if output_path.is_file():
+                        if output_path.is_file() and output_path.stat().st_size > 0:
                             analysis_result["processed_video_bytes"] = output_path.read_bytes()
                             analysis_result["processed_video_filename"] = (
                                 f"{Path(analysis_result['video_name']).stem}_phone_detection.mp4"
+                            )
+                        else:
+                            st.warning(
+                                "The analysis finished, but the processed MP4 was empty "
+                                "or could not be created. You can still download the PDF report."
                             )
                     except OSError as error:
                         st.warning(
@@ -5040,7 +5046,7 @@ if app_page == "video":
 
         # Remove temporary columns
         display_history = history_df.drop(
-            columns=["_Date", "_Visibility", "_SortTime"],
+            columns=["_Date", "_Visibility", "_SortTime", "Session ID"],
             errors="ignore"
         ).copy()
 
