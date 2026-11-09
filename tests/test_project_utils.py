@@ -11,8 +11,9 @@ from dashboard_enhancements import (
 
 from project_utils import (
     append_session_record, build_session_record, calculate_study_streaks,
-    load_integer_setting, load_session_history, normalize_session_history,
-    normalize_warning_entries, safe_float, save_integer_setting,
+    format_duration, load_integer_setting, load_session_history,
+    normalize_session_history, normalize_warning_entries, safe_float,
+    save_integer_setting,
     validate_analysis_result,
 )
 
@@ -23,6 +24,13 @@ class ProjectUtilsTests(unittest.TestCase):
         self.assertEqual(safe_float("bad", default=7), 7)
         self.assertEqual(safe_float(float("inf"), default=3), 3)
         self.assertEqual(safe_float(140, minimum=0, maximum=100), 100)
+
+    def test_format_duration_handles_valid_and_missing_values(self):
+        self.assertEqual(format_duration(0), "00:00:00")
+        self.assertEqual(format_duration(65), "00:01:05")
+        self.assertEqual(format_duration(3661), "01:01:01")
+        self.assertEqual(format_duration(float("nan")), "Not available")
+        self.assertEqual(format_duration(-1), "Not available")
 
     def test_normalize_warning_entries_supports_strings_and_dicts(self):
         result = normalize_warning_entries([
@@ -87,6 +95,22 @@ class ProjectUtilsTests(unittest.TestCase):
             self.assertEqual(loaded.loc[0, "Video Name"], "older.mp4")
             self.assertEqual(loaded.loc[1, "Video Name"], "new.mp4")
             self.assertEqual(loaded.loc[1, "Focus Score"], 80.0)
+
+    def test_append_session_record_is_idempotent_for_a_session_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "session_summary.csv"
+            record = build_session_record(
+                "study.mp4", "1280x720", 100, 20, 20, 24,
+                timestamp=datetime(2026, 11, 7, 10, 0, 0),
+            )
+            record["Session ID"] = "same-analysis-run"
+
+            first = append_session_record(report_path, record)
+            second = append_session_record(report_path, record)
+
+            self.assertEqual(len(first), 1)
+            self.assertEqual(len(second), 1)
+            self.assertEqual(second.iloc[0]["Session ID"], "same-analysis-run")
 
     def test_integer_setting_survives_reload_and_preserves_other_keys(self):
         with tempfile.TemporaryDirectory() as directory:
