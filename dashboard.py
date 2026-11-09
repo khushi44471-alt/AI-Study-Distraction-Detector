@@ -3271,6 +3271,7 @@ if app_page == "video":
         percentage,
         detections,
         focus_score=None,
+        session_id=None,
     ):
         """Validate and save a session in the shared, backwards-compatible schema."""
         report_path = REPORT_FILE
@@ -3303,6 +3304,9 @@ if app_page == "video":
             focus_score=focus_score,
             timestamp=datetime.now(),
         )
+
+        if session_id:
+            record["Session ID"] = str(session_id)
 
         append_session_record(report_path, record)
 
@@ -3344,6 +3348,28 @@ if app_page == "video":
 
             if analysis_result is not None:
 
+                # Transfer the completed MP4 into the app's download payload,
+                # then remove the temporary server-side file immediately.
+                output_path_value = analysis_result.pop("output_video_path", None)
+                if output_path_value:
+                    output_path = Path(output_path_value)
+                    try:
+                        if output_path.is_file():
+                            analysis_result["processed_video_bytes"] = output_path.read_bytes()
+                            analysis_result["processed_video_filename"] = (
+                                f"{Path(analysis_result['video_name']).stem}_phone_detection.mp4"
+                            )
+                    except OSError as error:
+                        st.warning(
+                            "The processed video could not be prepared for download: "
+                            f"{error}"
+                        )
+                    finally:
+                        try:
+                            output_path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+
                 # Preserve the existing warning summary behaviour.
                 if (
                     analysis_result["warning_count"] > 0
@@ -3379,51 +3405,70 @@ if app_page == "video":
                         analysis_result["frames_with_phone"],
                         analysis_result["percentage"],
                         analysis_result["detections"],
+                        session_id=analysis_result.get("session_id"),
                     )
 
                     st.success(
-                        "AI video analysis completed and saved to the report."
+                        "✅ Analysis complete. Your session summary has been saved."
                     )
 
                 except Exception as error:
-                    st.error(
-                        f"The analysis finished, but the report "
+                    st.warning(
+                        "The video analysis completed, but its session summary "
                         f"could not be saved: {error}"
                     )
 
-                if analysis_result.get("output_video_path"):
+                st.markdown("### Completed Video Summary")
+                summary_cols = st.columns(4)
+                summary_cols[0].metric(
+                    "Video Duration",
+                    format_duration(analysis_result.get("duration_seconds")),
+                )
+                summary_cols[1].metric(
+                    "Sampled Frames Analysed",
+                    f"{analysis_result['frames_processed']:,}",
+                )
+                summary_cols[2].metric(
+                    "Frames With Confirmed Phone",
+                    f"{analysis_result['frames_with_phone']:,}",
+                )
+                summary_cols[3].metric(
+                    "Phone Box Detections",
+                    f"{analysis_result['detections']:,}",
+                )
+                st.caption(
+                    f"{analysis_result.get('frames_with_phone_candidate', 0):,} sampled "
+                    "frames contained a raw phone candidate before temporal confirmation. "
+                    "A box detection is not a separate distraction event."
+                )
 
-                    st.subheader("📽️ Processed Video Preview")
-                    st.video(analysis_result["output_video_path"])
-
-                    processed_col1, processed_col2 = st.columns(2)
-
-                    processed_col1.metric(
-                        "Frames Processed",
-                        analysis_result["frames_processed"],
+                if analysis_result.get("processed_video_bytes"):
+                    st.subheader("📽️ Processed Video Preview & Downloads")
+                    st.video(analysis_result["processed_video_bytes"])
+                    st.download_button(
+                        "⬇️ Download Processed Video (MP4)",
+                        data=analysis_result["processed_video_bytes"],
+                        file_name=analysis_result.get(
+                            "processed_video_filename", "processed_study_video.mp4"
+                        ),
+                        mime="video/mp4",
+                        key=f"download_processed_video_{analysis_result['session_id']}",
                     )
 
-                    processed_col2.metric(
-                        "Frames With Phone",
-                        analysis_result["frames_with_phone"],
+                if analysis_result.get("annotated_frame") is not None:
+                    st.subheader("📸 Sample Processed Frame")
+                    st.image(
+                        cv2.cvtColor(
+                            analysis_result["annotated_frame"],
+                            cv2.COLOR_BGR2RGB,
+                        ),
+                        channels="RGB",
+                        use_container_width=True,
+                        caption=(
+                            "Example processed frame. Phone candidates are confirmed "
+                            "using the recent-sample filter before they enter the summary."
+                        ),
                     )
-
-                    if analysis_result.get("annotated_frame") is not None:
-
-                        st.subheader("📸 Sample Processed Frame")
-
-                        st.image(
-                            cv2.cvtColor(
-                                analysis_result["annotated_frame"],
-                                cv2.COLOR_BGR2RGB,
-                            ),
-                            channels="RGB",
-                            use_container_width=True,
-                            caption=(
-                                "Example processed frame with "
-                                "detected object bounding boxes"
-                            ),
-                        )
 
 
     # ============================================================
