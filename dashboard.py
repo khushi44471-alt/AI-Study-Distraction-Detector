@@ -1225,204 +1225,6 @@ def speak_warning():
     components.html(js, height=0)
 
 # ============================================================
-# Alert UI
-# ============================================================
-
-smart_alerts_enabled = st.checkbox(
-    "🔔 Enable Smart Detection Alerts",
-    value=True,
-    help="Receive an alert when a phone is detected repeatedly.",
-    key="smart_alerts_enabled",
-)
-
-alert_threshold = st.slider(
-    "📱 Consecutive Phone Detections Required",
-    min_value=1,
-    max_value=20,
-    value=3,
-    step=1,
-    help="Number of consecutive detected frames required before an alert.",
-    key="smart_alert_threshold",
-)
-
-alert_cooldown = st.slider(
-    "⏱️ Alert Cooldown (seconds)",
-    min_value=10,
-    max_value=120,
-    value=30,
-    step=5,
-    help="Minimum waiting time between repeated alerts.",
-    key="smart_alert_cooldown",
-)
-
-alert_display_seconds = st.slider(
-    "🚨 Warning banner duration (seconds)",
-    min_value=30,
-    max_value=180,
-    value=60,
-    step=10,
-    help="Keep the red phone-visibility warning on screen for 1–3 minutes.",
-    key="phone_alert_display_seconds_main",
-)
-
-alert_options = [
-    "1. Female Spoken Warning",
-    "2. Custom MP3/WAV File",
-    "3. Triple-Pulse Phone Alert",
-    "4. Rising Double-Tone Warning",
-    "5. Siren Sweep Warning",
-    "6. Short-Short-Long Warning",
-    "7. Descending Alert Signal",
-    "8. Alternating Burst Warning",
-    "9. Double-Sweep Warning",
-    "10. Persistent Pulse Warning",
-]
-
-# Migrate selections from the previous numbered list without changing the
-# actual first two choices or unexpectedly resetting a user's selection.
-old_alert_labels = {
-    "5. Custom MP3/WAV File": "2. Custom MP3/WAV File",
-    "8. Strong Attention Alarm (11 sec)": "3. Triple-Pulse Phone Alert",
-    "9. Repeating Phone Warning (10 sec)": "4. Rising Double-Tone Warning",
-    "10. Two-Tone Urgent Alert (12 sec)": "5. Siren Sweep Warning",
-    "11. Double-Pulse Warning (14 sec)": "6. Short-Short-Long Warning",
-    "12. Persistent Focus Reminder (14 sec)": "7. Descending Alert Signal",
-}
-previous_alert_choice = st.session_state.get("phone_alert_choice_main")
-if previous_alert_choice in old_alert_labels:
-    st.session_state["phone_alert_choice_main"] = old_alert_labels[previous_alert_choice]
-elif previous_alert_choice not in alert_options:
-    st.session_state["phone_alert_choice_main"] = alert_options[0]
-
-alert_choice = st.selectbox(
-    "🚨 Choose a Phone Warning",
-    alert_options,
-    key="phone_alert_choice_main",
-)
-
-alert_volume = st.slider(
-    "🔊 Alert Volume",
-    min_value=0,
-    max_value=100,
-    value=75,
-    step=5,
-    help="Controls the warning volume.",
-    key="phone_alert_volume_main",
-)
-
-volume_level = alert_volume / 100.0
-custom_audio = None
-custom_audio_type = None
-
-if alert_choice == "2. Custom MP3/WAV File":
-    uploaded_audio = st.file_uploader(
-        "Upload your warning sound",
-        type=["mp3", "wav"],
-        key="custom_phone_alert_audio_main",
-    )
-    if uploaded_audio is not None:
-        custom_audio = base64.b64encode(
-            uploaded_audio.getvalue()
-        ).decode("utf-8")
-        custom_audio_type = uploaded_audio.type or "audio/mpeg"
-
-def play_custom_warning_audio():
-    if custom_audio is None:
-        st.info("Upload a custom MP3 or WAV file first.")
-        return
-
-    audio_html = f"""
-    <audio controls autoplay style="width:100%;">
-        <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
-        Your browser does not support this audio file.
-    </audio>
-    <script>
-    const player = document.querySelector("audio");
-    player.volume = {volume_level};
-    player.play().catch(() => {{
-        console.log("Custom warning autoplay blocked by browser.");
-    }});
-    </script>
-    """
-    components.html(audio_html, height=90)
-
-def show_phone_alert(preview=False):
-    if not preview:
-        st.session_state.active_phone_alert_message = (
-            "PHONE DETECTED — CHECK YOUR STUDY SPACE"
-        )
-        st.session_state.active_phone_alert_detail = (
-            "A phone is visible in the camera frame. If you do not need it "
-            "for this task, place it aside and return to your study session."
-        )
-        st.session_state.active_phone_alert_until = (
-            time.monotonic() + float(alert_display_seconds)
-        )
-        st.session_state.active_phone_alert_started = datetime.now().strftime(
-            "%H:%M:%S"
-        )
-
-    if alert_choice == "1. Female Spoken Warning":
-        play_female_warning(
-            message="Phone detected during your study session. Please keep your phone aside.",
-            volume=volume_level
-        )
-    elif alert_choice == "2. Custom MP3/WAV File":
-        play_custom_warning_audio()
-    elif alert_choice == "3. Triple-Pulse Phone Alert":
-        play_warning_tone("triple_pulse", volume=volume_level, preview=preview)
-    elif alert_choice == "4. Rising Double-Tone Warning":
-        play_warning_tone("rising_double", volume=volume_level, preview=preview)
-    elif alert_choice == "5. Siren Sweep Warning":
-        play_warning_tone("siren_sweep", volume=volume_level, preview=preview)
-    elif alert_choice == "6. Short-Short-Long Warning":
-        play_warning_tone("short_short_long", volume=volume_level, preview=preview)
-    elif alert_choice == "7. Descending Alert Signal":
-        play_warning_tone("descending_alert", volume=volume_level, preview=preview)
-    elif alert_choice == "8. Alternating Burst Warning":
-        play_warning_tone("alternating_burst", volume=volume_level, preview=preview)
-    elif alert_choice == "9. Double-Sweep Warning":
-        play_warning_tone("double_sweep", volume=volume_level, preview=preview)
-    elif alert_choice == "10. Persistent Pulse Warning":
-        play_warning_tone("persistent_pulse", volume=volume_level, preview=preview)
-
-
-@st.fragment(run_every="1s")
-def render_active_phone_alert():
-    alert_until = st.session_state.get("active_phone_alert_until", 0.0)
-    message = st.session_state.get("active_phone_alert_message", "")
-    detail = st.session_state.get("active_phone_alert_detail", "")
-    started = st.session_state.get("active_phone_alert_started", "")
-
-    remaining = float(alert_until or 0.0) - time.monotonic()
-
-    if message and remaining > 0:
-        seconds_left = max(1, int(remaining + 0.999))
-        st.error(
-            f"🚨 **{message}**\n\n"
-            f"{detail}\n\n"
-            f"**WARNING ACTIVE · {seconds_left} seconds remaining**"
-            + (f" · Triggered at {started}" if started else "")
-        )
-        st.caption(
-            "Detection note: this system identifies phone visibility only. "
-            "It does not determine a person's attention or intention."
-        )
-    elif alert_until:
-        st.session_state.active_phone_alert_until = 0.0
-        st.session_state.active_phone_alert_message = ""
-        st.session_state.active_phone_alert_detail = ""
-        st.session_state.active_phone_alert_started = ""
-
-
-
-
-if st.button("🚨 TEST SELECTED WARNING", key="test_phone_alert_main"):
-    show_phone_alert(preview=True)
-
-render_active_phone_alert()
-
-# ============================================================
 # Webcam detection
 # ============================================================
 
@@ -2669,26 +2471,6 @@ def create_pdf_report(analysis):
 
 
 # ============================================================
-# PREMIUM HERO SECTION — SIMPLE HTML TEST
-# ============================================================
-
-st.markdown(
-    '<div id="study-session-dashboard"></div>',
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    """
-    <div style="background-color:#4c1d95; color:white; padding:35px; border-radius:20px;">
-        <h1 style="color:white;">AI Study Distraction Detector</h1>
-        <p style="color:white;">Computer vision for monitoring phone visibility during study sessions.</p>
-        <p style="color:white;">✦ CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ============================================================
 # PREMIUM SIDEBAR NAVIGATION
 # ============================================================
 
@@ -2777,9 +2559,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# Remember the selected workspace across Streamlit reruns.
+if st.session_state.get("app_page") not in ("home", "video", "webcam"):
+    st.session_state["app_page"] = "home"
+
+app_page = st.session_state["app_page"]
+
+
 with st.sidebar:
 
-    # BRAND HEADER
     st.markdown("""
     <div class="sidebar-brand">
         <h2>📱 Study Detector</h2>
@@ -2787,1107 +2575,1370 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------
-    # QUICK NAVIGATION
-    # --------------------------------------------------------
-
     st.markdown(
-        '<div class="sidebar-section">⚡ Quick Navigation</div>',
-        unsafe_allow_html=True
+        '<div class="sidebar-section">🏠 Main Navigation</div>',
+        unsafe_allow_html=True,
     )
 
-    st.markdown("""
-   <a class="sidebar-link" href="#pdf-study-report">
-        🏠 Dashboard
-    </a>
-    <a class="sidebar-link" href="#live-webcam-detection">
-        📹 Live Detection
-    </a>
-    <a class="sidebar-link" href="#ai-video-analysis">
-        🎬 Video Analysis
-    </a>
-    <a class="sidebar-link" href="#session-history-and-advanced-filters">
-        📚 Session History
-    </a>
-    """, unsafe_allow_html=True)
-
-    # --------------------------------------------------------
-    # STUDY TOOLS
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div class="sidebar-section">🎯 Study Tools</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown("""
-    <a class="sidebar-link" href="#study-session-timer">
-        ⏱️ Focus Timer
-    </a>
-    <a class="sidebar-link" href="#study-progress-report">
-        📈 Study Progress
-    </a>
-    <a class="sidebar-link" href="#session-comparison">
-        ⚖️ Session Comparison
-    </a>
-    """, unsafe_allow_html=True)
-
-    # --------------------------------------------------------
-    # REPORTS AND ANALYTICS
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div class="sidebar-section">📊 Reports & Analytics</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown("""
-    <a class="sidebar-link" href="#study-session-dashboard">
-        📄 PDF Study Report
-    </a>
-    <a class="sidebar-link" href="#detection-results">
-        📊 Detection Analytics
-    </a>
-    """, unsafe_allow_html=True)
-
-    # --------------------------------------------------------
-    # QUICK ACTIONS
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div class="sidebar-section">🛠️ Quick Actions</div>',
-        unsafe_allow_html=True
-    )
-
-    if st.button("🔄 Refresh Dashboard", use_container_width=True):
+    if st.button("🏠 Home Dashboard", key="nav_home_sidebar", use_container_width=True):
+        st.session_state["app_page"] = "home"
         st.rerun()
 
-    if st.button("🧹 Reset Filters", use_container_width=True):
-        filter_terms = ("filter", "date_range", "search", "sort")
-
-        for key in list(st.session_state.keys()):
-            if any(term in key.lower() for term in filter_terms):
-                del st.session_state[key]
-
-        st.rerun()
-
-    # --------------------------------------------------------
-    # HELP AND PROJECT INFORMATION
-    # --------------------------------------------------------
-
     st.markdown(
-        '<div class="sidebar-section">ℹ️ Help & Information</div>',
-        unsafe_allow_html=True
+        '<div class="sidebar-section">🧭 Workspaces</div>',
+        unsafe_allow_html=True,
     )
 
-    with st.expander("📖 About this project", expanded=False):
-        st.write(
-            "**Objective:** Identify visible phone appearances "
-            "during study sessions."
+    if st.button("🎬 Video Analysis", key="nav_video_sidebar", use_container_width=True):
+        st.session_state["app_page"] = "video"
+        st.rerun()
+
+    if st.button("📹 Webcam Detection", key="nav_webcam_sidebar", use_container_width=True):
+        st.session_state["app_page"] = "webcam"
+        st.rerun()
+
+    if app_page == "video":
+        st.markdown(
+            '<div class="sidebar-section">🎬 Video Workspace</div>',
+            unsafe_allow_html=True,
         )
+        st.markdown("""
+        <a class="sidebar-link" href="#ai-video-analysis">🎞️ Upload & Analyse Video</a>
+        <a class="sidebar-link" href="#video-analytics-overview">📊 Analytics Overview</a>
+        <a class="sidebar-link" href="#monthly-study-calendar">📅 Activity Calendar</a>
+        <a class="sidebar-link" href="#study-progress-report">📈 Study Progress</a>
+        <a class="sidebar-link" href="#session-history-and-advanced-filters">📚 Session History</a>
+        <a class="sidebar-link" href="#session-comparison">⚖️ Session Comparison</a>
+        <a class="sidebar-link" href="#detection-results">🔎 Detection Results</a>
+        <a class="sidebar-link" href="#pdf-study-report">📄 PDF Report</a>
+        <a class="sidebar-link" href="#alert-settings">🔔 Alert Settings</a>
+        <a class="sidebar-link" href="#study-session-timer">⏱️ Focus Timer</a>
+        <a class="sidebar-link" href="#achievement-centre">🏆 Achievements</a>
+        """, unsafe_allow_html=True)
 
-        st.write(
-            "**Technology:** Python, Streamlit, OpenCV, "
-            "YOLO, Pandas and Plotly."
+    elif app_page == "webcam":
+        st.markdown(
+            '<div class="sidebar-section">📹 Webcam Workspace</div>',
+            unsafe_allow_html=True,
         )
+        st.markdown("""
+        <a class="sidebar-link" href="#live-webcam-detection">📹 Live Camera</a>
+        <a class="sidebar-link" href="#live-camera-statistics">📊 Camera Statistics</a>
+        <a class="sidebar-link" href="#alert-settings">🔔 Alert Settings</a>
+        <a class="sidebar-link" href="#study-session-timer">⏱️ Focus Timer</a>
+        <a class="sidebar-link" href="#achievement-centre">🏆 Achievements</a>
+        """, unsafe_allow_html=True)
 
-        st.write(
-            "**Features:** Live detection, video analysis, "
-            "focus score, session history and reports."
-        )
-
-        st.caption(
-            "This is a prototype. Phone visibility is only "
-            "an indicator and does not directly measure attention."
-        )
-
-    with st.expander("💡 How to use the dashboard", expanded=False):
-        st.write("1. Open Live Detection or Video Analysis.")
-        st.write("2. Start a study session or upload a video.")
-        st.write("3. Review detection results.")
-        st.write("4. Compare sessions and track progress.")
-        st.write("5. View or download available reports.")
-
-    # FOOTER
     st.markdown("---")
+    if st.button("🔄 Refresh Workspace", key="nav_refresh_workspace", use_container_width=True):
+        st.rerun()
 
     st.markdown("""
     <div class="sidebar-note">
         ✨ <b>Study smarter, stay focused.</b><br>
-        Your AI study workspace is ready.
+        Phone visibility is an indicator, not proof of distraction.
     </div>
     """, unsafe_allow_html=True)
 
-# ============================================================
-# Live webcam detection
-# ============================================================
-st.markdown(
-    '<div id="live-webcam-detection"></div>',
-    unsafe_allow_html=True,
-)
 
-st.divider()
-st.subheader("📹 Live Webcam Detection")
-st.caption("This is a real webcam stream with a live phone detection overlay.")
+if app_page in ("video", "webcam"):
+    # ============================================================
+    # Alert UI
+    # ============================================================
 
-webrtc_streamer(
-    key="webcam_phone_detector",
-    video_processor_factory=WebcamPhoneDetector,
-    media_stream_constraints={
-        "video": {
-            "frameRate": 10,
-            "width": 640,
-            "height": 480,
-            "facingMode": "user",
-        },
-        "audio": False,
-    },
-    rtc_configuration={
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-            {"urls": ["stun:stun1.l.google.com:19302"]},
-            {"urls": ["stun:stun2.l.google.com:19302"]},
-        ]
-    },
-    async_processing=True,
-)
-
-if st.session_state.get("live_warning_triggered", False):
-    trigger_live_warning_once()
-
-live_detected = st.session_state.get("live_phone_detected", False)
-st.session_state.live_status = "PHONE DETECTED" if live_detected else "FOCUSED / NO PHONE"
-
-risk_score = 100.0 if not live_detected else max(0.0, 100.0 - 60.0)
-risk_band = get_risk_band(risk_score)
-
-live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
-live_status_col1.metric("Live Status", st.session_state.live_status)
-live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
-live_status_col3.metric("Risk Level", risk_band)
-
-st.progress(min(1.0, risk_score / 100.0))
-st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
-
-if live_detected:
-    st.session_state.live_focus_streak = 0
-else:
-    st.session_state.live_focus_streak = update_focus_streak(st.session_state.live_focus_streak, False)
-
-st.subheader("📊 Live Camera Statistics")
-live_stats = st.session_state.live_stats
-stat1, stat2, stat3, stat4 = st.columns(4)
-stat1.metric("Status", live_stats["status"])
-stat2.metric("Phones Found", live_stats["phone_count"])
-stat3.metric("Max Confidence", f"{live_stats['confidence']:.1%}")
-stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
-
-
-# ============================================================
-# AI video analysis section
-# ============================================================
-
-st.markdown(
-    '<div id="ai-video-analysis"></div>',
-    unsafe_allow_html=True,
-)
-
-st.divider()
-# ============================================================
-# Session report saving function
-# ============================================================
-
-
-def save_session_record(
-    video_name,
-    resolution,
-    frames_processed,
-    frames_with_phone,
-    percentage,
-    detections,
-    focus_score=None,
-):
-    """Validate and save a session in the shared, backwards-compatible schema."""
-    report_path = REPORT_FILE
-
-    analysis_for_validation = {
-        "video_name": video_name,
-        "resolution": resolution,
-        "frames_processed": frames_processed,
-        "frames_with_phone": frames_with_phone,
-        "percentage": percentage,
-        "detections": detections,
-    }
-    if focus_score is not None:
-        analysis_for_validation["focus_score"] = focus_score
-
-    validation_errors = validate_analysis_result(analysis_for_validation)
-    if validation_errors:
-        raise ValueError(
-            "Session results were not saved: "
-            + "; ".join(validation_errors)
-        )
-
-    record = build_session_record(
-        video_name=video_name,
-        resolution=resolution,
-        frames_processed=frames_processed,
-        frames_with_phone=frames_with_phone,
-        percentage=percentage,
-        detections=detections,
-        focus_score=focus_score,
-        timestamp=datetime.now(),
+    smart_alerts_enabled = st.checkbox(
+        "🔔 Enable Smart Detection Alerts",
+        value=True,
+        help="Receive an alert when a phone is detected repeatedly.",
+        key="smart_alerts_enabled",
     )
 
-    append_session_record(report_path, record)
-
-
-st.subheader("🎬 AI Video Analysis")
-st.caption(
-    "Upload a study video, run the AI detector, "
-    "and view the processed live detection preview directly here."
-)
-
-uploaded_video_analysis = st.file_uploader(
-    "Choose a study video",
-    type=["mp4", "mov", "avi"],
-    key="uploaded_video_main",
-)
-
-if uploaded_video_analysis is not None:
-
-    st.video(uploaded_video_analysis)
-
-    if st.button(
-        "Start AI Detection",
-        type="primary",
-        key="start_ai_detection_main",
-    ):
-
-        st.session_state.analysis_warning_triggered = False
-
-        # Run YOLO only once.
-        analysis_result = process_uploaded_video_for_live_detection(
-            uploaded_video_analysis,
-            confidence_threshold=float(
-                st.session_state.detection_confidence
-            ),
-            sample_interval=int(
-                st.session_state.frame_sample_interval
-            ),
-        )
-
-        if analysis_result is not None:
-
-            # Preserve the existing warning summary behaviour.
-            if (
-                analysis_result["warning_count"] > 0
-                and not st.session_state.analysis_warning_triggered
-            ):
-                st.session_state.analysis_warning_triggered = True
-                st.session_state.last_warning_reason = (
-                    "Phone detected in video analysis"
-                )
-
-                st.session_state.warning_summary = append_warning_summary(
-                    st.session_state.warning_summary,
-                    st.session_state.last_warning_reason,
-                )
-
-                st.session_state.warning_log.append({
-                    "time": datetime.now().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
-                    "message": "Phone detected in video analysis",
-                })
-
-                show_phone_alert(preview=False)
-
-            # Keep the completed analysis visible even if report saving fails.
-            st.session_state["last_analysis"] = analysis_result
-
-            try:
-                save_session_record(
-                    analysis_result["video_name"],
-                    analysis_result["resolution"],
-                    analysis_result["frames_processed"],
-                    analysis_result["frames_with_phone"],
-                    analysis_result["percentage"],
-                    analysis_result["detections"],
-                )
-
-                st.success(
-                    "AI video analysis completed and saved to the report."
-                )
-
-            except Exception as error:
-                st.error(
-                    f"The analysis finished, but the report "
-                    f"could not be saved: {error}"
-                )
-
-            if analysis_result.get("output_video_path"):
-
-                st.subheader("📽️ Processed Video Preview")
-                st.video(analysis_result["output_video_path"])
-
-                processed_col1, processed_col2 = st.columns(2)
-
-                processed_col1.metric(
-                    "Frames Processed",
-                    analysis_result["frames_processed"],
-                )
-
-                processed_col2.metric(
-                    "Frames With Phone",
-                    analysis_result["frames_with_phone"],
-                )
-
-                if analysis_result.get("annotated_frame") is not None:
-
-                    st.subheader("📸 Sample Processed Frame")
-
-                    st.image(
-                        cv2.cvtColor(
-                            analysis_result["annotated_frame"],
-                            cv2.COLOR_BGR2RGB,
-                        ),
-                        channels="RGB",
-                        use_container_width=True,
-                        caption=(
-                            "Example processed frame with "
-                            "detected object bounding boxes"
-                        ),
-                    )
-
-
-# ============================================================
-# PREMIUM DASHBOARD ANALYTICS
-# ============================================================
-
-st.markdown(
-    '<div id="detection-results"></div>',
-    unsafe_allow_html=True,
-)
-
-st.divider()
-
-st.markdown(
-    """
-    <div class="analytics-heading">
-        <h2>📊 Study Analytics Overview</h2>
-        <p>Your study-session statistics and phone visibility insights.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# Load saved session records
-def load_report():
-    report_path = REPORT_FILE
-
-    try:
-        return load_session_history(report_path)
-    except (OSError, pd.errors.ParserError) as error:
-        st.warning(
-            "The saved session report could not be read. "
-            f"Please download a backup and check the CSV file. Details: {error}"
-        )
-        return pd.DataFrame()
-
-
-report_df = load_report()
-
-if report_df.empty:
-
-    st.info(
-        "No completed sessions yet. Upload and analyze a study video "
-        "to see your analytics here."
+    alert_threshold = st.slider(
+        "📱 Consecutive Phone Detections Required",
+        min_value=1,
+        max_value=20,
+        value=3,
+        step=1,
+        help="Number of consecutive detected frames required before an alert.",
+        key="smart_alert_threshold",
     )
 
-else:
-    # Ensure older report files use the expected column name
-    if (
-        "Video Name" not in report_df.columns
-        and "Video" in report_df.columns
-    ):
-        report_df = report_df.rename(
-            columns={"Video": "Video Name"}
-        )
+    alert_cooldown = st.slider(
+        "⏱️ Alert Cooldown (seconds)",
+        min_value=10,
+        max_value=120,
+        value=30,
+        step=5,
+        help="Minimum waiting time between repeated alerts.",
+        key="smart_alert_cooldown",
+    )
 
-    # Convert numeric columns safely
-    numeric_columns = [
-        "Frames Processed",
-        "Frames With Phone",
-        "Phone Visible Percentage",
-        "Total Phone Detections",
+    alert_display_seconds = st.slider(
+        "🚨 Warning banner duration (seconds)",
+        min_value=30,
+        max_value=180,
+        value=60,
+        step=10,
+        help="Keep the red phone-visibility warning on screen for 1–3 minutes.",
+        key="phone_alert_display_seconds_main",
+    )
+
+    alert_options = [
+        "1. Female Spoken Warning",
+        "2. Custom MP3/WAV File",
+        "3. Triple-Pulse Phone Alert",
+        "4. Rising Double-Tone Warning",
+        "5. Siren Sweep Warning",
+        "6. Short-Short-Long Warning",
+        "7. Descending Alert Signal",
+        "8. Alternating Burst Warning",
+        "9. Double-Sweep Warning",
+        "10. Persistent Pulse Warning",
     ]
 
-    for column in numeric_columns:
-        if column in report_df.columns:
-            report_df[column] = pd.to_numeric(
-                report_df[column],
-                errors="coerce",
-            ).fillna(0)
+    # Migrate selections from the previous numbered list without changing the
+    # actual first two choices or unexpectedly resetting a user's selection.
+    old_alert_labels = {
+        "5. Custom MP3/WAV File": "2. Custom MP3/WAV File",
+        "8. Strong Attention Alarm (11 sec)": "3. Triple-Pulse Phone Alert",
+        "9. Repeating Phone Warning (10 sec)": "4. Rising Double-Tone Warning",
+        "10. Two-Tone Urgent Alert (12 sec)": "5. Siren Sweep Warning",
+        "11. Double-Pulse Warning (14 sec)": "6. Short-Short-Long Warning",
+        "12. Persistent Focus Reminder (14 sec)": "7. Descending Alert Signal",
+    }
+    previous_alert_choice = st.session_state.get("phone_alert_choice_main")
+    if previous_alert_choice in old_alert_labels:
+        st.session_state["phone_alert_choice_main"] = old_alert_labels[previous_alert_choice]
+    elif previous_alert_choice not in alert_options:
+        st.session_state["phone_alert_choice_main"] = alert_options[0]
 
-    # Calculate dashboard statistics
-    total_sessions = len(report_df)
-
-    total_frames = int(
-        report_df["Frames Processed"].sum()
-    ) if "Frames Processed" in report_df.columns else 0
-
-    total_detections = int(
-        report_df["Total Phone Detections"].sum()
-    ) if "Total Phone Detections" in report_df.columns else 0
-
-    average_visibility = (
-        report_df["Phone Visible Percentage"].mean()
-        if "Phone Visible Percentage" in report_df.columns
-        else float("nan")
+    alert_choice = st.selectbox(
+        "🚨 Choose a Phone Warning",
+        alert_options,
+        key="phone_alert_choice_main",
     )
 
-    render_smart_insights(st, report_df)
+    alert_volume = st.slider(
+        "🔊 Alert Volume",
+        min_value=0,
+        max_value=100,
+        value=75,
+        step=5,
+        help="Controls the warning volume.",
+        key="phone_alert_volume_main",
+    )
 
-    st.divider()
+    volume_level = alert_volume / 100.0
+    custom_audio = None
+    custom_audio_type = None
 
-    # --------------------------------------------------------
-    # TOP ANALYTICS CARDS — PREMIUM KPI DESIGN
-    # --------------------------------------------------------
+    if alert_choice == "2. Custom MP3/WAV File":
+        uploaded_audio = st.file_uploader(
+            "Upload your warning sound",
+            type=["mp3", "wav"],
+            key="custom_phone_alert_audio_main",
+        )
+        if uploaded_audio is not None:
+            custom_audio = base64.b64encode(
+                uploaded_audio.getvalue()
+            ).decode("utf-8")
+            custom_audio_type = uploaded_audio.type or "audio/mpeg"
 
-    st.markdown("### 📌 Performance at a Glance")
+    def play_custom_warning_audio():
+        if custom_audio is None:
+            st.info("Upload a custom MP3 or WAV file first.")
+            return
 
-    st.markdown(
+        audio_html = f"""
+        <audio controls autoplay style="width:100%;">
+            <source src="data:{custom_audio_type};base64,{custom_audio}" type="{custom_audio_type}">
+            Your browser does not support this audio file.
+        </audio>
+        <script>
+        const player = document.querySelector("audio");
+        player.volume = {volume_level};
+        player.play().catch(() => {{
+            console.log("Custom warning autoplay blocked by browser.");
+        }});
+        </script>
         """
-        <style>
-        div[data-testid="stMetric"] {
-            background: linear-gradient(145deg, #211b38, #30234f);
-            border: 1px solid rgba(167, 139, 250, 0.35);
-            border-radius: 18px;
-            padding: 20px 16px;
-            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
-            min-height: 125px;
-        }
+        components.html(audio_html, height=90)
 
-        div[data-testid="stMetricLabel"] p {
-            color: #c4b5fd !important;
-            font-size: 14px !important;
-            font-weight: 600 !important;
-        }
-
-        div[data-testid="stMetricValue"] {
-            color: #ffffff !important;
-            font-size: 28px !important;
-            font-weight: 700 !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    metric1, metric2, metric3, metric4 = st.columns(4)
-
-    metric1.metric(
-        "📚 Sessions Analyzed",
-        f"{total_sessions:,}",
-    )
-
-    metric2.metric(
-        "🎞️ Frames Processed",
-        f"{total_frames:,}",
-    )
-
-    metric3.metric(
-        "📱 Phone Detections",
-        f"{total_detections:,}",
-    )
-
-    metric4.metric(
-        "📊 Average Phone Visibility",
-        f"{average_visibility:.1f}%"
-        if pd.notna(average_visibility)
-        else "N/A",
-    )
-
-    st.divider()
-
-   
-    # --------------------------------------------------------
-    # PHONE VISIBILITY DONUT CHART — PREMIUM DESIGN
-    # --------------------------------------------------------
-
-    st.markdown("### 📱 Phone Visibility Distribution")
-
-    if pd.notna(average_visibility):
-
-        phone_visible = max(
-            0.0,
-            min(float(average_visibility), 100.0),
-        )
-
-        phone_not_detected = 100.0 - phone_visible
-
-        visibility_df = pd.DataFrame({
-            "Category": [
-                "Phone Visible",
-                "Phone Not Detected",
-            ],
-            "Percentage": [
-                phone_visible,
-                phone_not_detected,
-            ],
-        })
-
-        chart_col1, chart_col2 = st.columns([1.3, 1])
-
-        chart_theme = (
-            "plotly_dark"
-            if is_dark_mode
-            else "plotly_white"
-        )
-
-        with chart_col1:
-
-            donut_fig = px.pie(
-                visibility_df,
-                names="Category",
-                values="Percentage",
-                hole=0.70,
-                color="Category",
-                color_discrete_map={
-                    "Phone Visible": "#a78bfa",
-                    "Phone Not Detected": "#22c55e",
-                },
+    def show_phone_alert(preview=False):
+        if not preview:
+            st.session_state.active_phone_alert_message = (
+                "PHONE DETECTED — CHECK YOUR STUDY SPACE"
+            )
+            st.session_state.active_phone_alert_detail = (
+                "A phone is visible in the camera frame. If you do not need it "
+                "for this task, place it aside and return to your study session."
+            )
+            st.session_state.active_phone_alert_until = (
+                time.monotonic() + float(alert_display_seconds)
+            )
+            st.session_state.active_phone_alert_started = datetime.now().strftime(
+                "%H:%M:%S"
             )
 
-            donut_fig.update_traces(
-                textinfo="percent",
-                textposition="inside",
-                hole=0.70,
-                marker=dict(
-                    line=dict(
-                        color="rgba(255,255,255,0.15)",
-                        width=3,
-                    )
-                ),
-                hovertemplate=(
-                    "<b>%{label}</b><br>"
-                    "%{value:.1f}%<extra></extra>"
-                ),
+        if alert_choice == "1. Female Spoken Warning":
+            play_female_warning(
+                message="Phone detected during your study session. Please keep your phone aside.",
+                volume=volume_level
             )
+        elif alert_choice == "2. Custom MP3/WAV File":
+            play_custom_warning_audio()
+        elif alert_choice == "3. Triple-Pulse Phone Alert":
+            play_warning_tone("triple_pulse", volume=volume_level, preview=preview)
+        elif alert_choice == "4. Rising Double-Tone Warning":
+            play_warning_tone("rising_double", volume=volume_level, preview=preview)
+        elif alert_choice == "5. Siren Sweep Warning":
+            play_warning_tone("siren_sweep", volume=volume_level, preview=preview)
+        elif alert_choice == "6. Short-Short-Long Warning":
+            play_warning_tone("short_short_long", volume=volume_level, preview=preview)
+        elif alert_choice == "7. Descending Alert Signal":
+            play_warning_tone("descending_alert", volume=volume_level, preview=preview)
+        elif alert_choice == "8. Alternating Burst Warning":
+            play_warning_tone("alternating_burst", volume=volume_level, preview=preview)
+        elif alert_choice == "9. Double-Sweep Warning":
+            play_warning_tone("double_sweep", volume=volume_level, preview=preview)
+        elif alert_choice == "10. Persistent Pulse Warning":
+            play_warning_tone("persistent_pulse", volume=volume_level, preview=preview)
 
-            donut_fig.update_layout(
-                template=chart_theme,
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                title=dict(
-                    text="Average Phone Visibility",
-                    x=0.5,
-                    xanchor="center",
-                    font=dict(size=18),
-                ),
-                legend_title_text="",
-                margin=dict(l=15, r=15, t=65, b=15),
-                font=dict(size=13),
-                showlegend=True,
+
+    @st.fragment(run_every="1s")
+    def render_active_phone_alert():
+        alert_until = st.session_state.get("active_phone_alert_until", 0.0)
+        message = st.session_state.get("active_phone_alert_message", "")
+        detail = st.session_state.get("active_phone_alert_detail", "")
+        started = st.session_state.get("active_phone_alert_started", "")
+
+        remaining = float(alert_until or 0.0) - time.monotonic()
+
+        if message and remaining > 0:
+            seconds_left = max(1, int(remaining + 0.999))
+            st.error(
+                f"🚨 **{message}**\n\n"
+                f"{detail}\n\n"
+                f"**WARNING ACTIVE · {seconds_left} seconds remaining**"
+                + (f" · Triggered at {started}" if started else "")
             )
-
-            st.plotly_chart(
-                donut_fig,
-                use_container_width=True,
-                config={"displayModeBar": False},
-            )
-
-        with chart_col2:
-
-            st.markdown("#### 📊 Visibility Summary")
-
-            st.markdown(
-                """
-                <style>
-                .visibility-card {
-                    background: linear-gradient(145deg, #211b38, #30234f);
-                    border: 1px solid rgba(167,139,250,0.3);
-                    border-radius: 16px;
-                    padding: 18px;
-                    margin: 12px 0;
-                }
-                .visibility-label {
-                    color: #c4b5fd;
-                    font-size: 14px;
-                    font-weight: 600;
-                }
-                .visibility-value {
-                    color: white;
-                    font-size: 29px;
-                    font-weight: 700;
-                    margin-top: 5px;
-                }
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            st.markdown(
-                f"""
-                <div class="visibility-card">
-                    <div class="visibility-label">
-                        📱 Phone Visible
-                    </div>
-                    <div class="visibility-value">
-                        {phone_visible:.1f}%
-                    </div>
-                </div>
-
-                <div class="visibility-card">
-                    <div class="visibility-label">
-                        ✅ Phone Not Detected
-                    </div>
-                    <div class="visibility-value">
-                        {phone_not_detected:.1f}%
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
             st.caption(
-                "These percentages describe phone visibility "
-                "in analyzed video frames. They do not measure "
-                "or prove a student's attention."
+                "Detection note: this system identifies phone visibility only. "
+                "It does not determine a person's attention or intention."
+            )
+        elif alert_until:
+            st.session_state.active_phone_alert_until = 0.0
+            st.session_state.active_phone_alert_message = ""
+            st.session_state.active_phone_alert_detail = ""
+            st.session_state.active_phone_alert_started = ""
+
+
+
+
+    if st.button("🚨 TEST SELECTED WARNING", key="test_phone_alert_main"):
+        show_phone_alert(preview=True)
+
+    render_active_phone_alert()
+
+if app_page == "home":
+    st.markdown('<div id="study-session-dashboard"></div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <style>
+    .home-hero {
+        padding: 38px 34px;
+        border-radius: 25px;
+        background: linear-gradient(120deg, #30205b, #6338a8 62%, #9875ef);
+        border: 1px solid rgba(255,255,255,0.20);
+        box-shadow: 0 18px 42px rgba(85,55,150,0.18);
+        margin: 8px 0 26px 0;
+    }
+    .home-hero h1 {
+        color: #ffffff !important;
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        margin: 0 0 10px 0;
+    }
+    .home-hero p {
+        color: #f1eaff !important;
+        font-size: 1rem;
+        line-height: 1.65;
+        max-width: 850px;
+        margin-bottom: 0;
+    }
+    .workspace-choice {
+        min-height: 245px;
+        padding: 25px;
+        border-radius: 20px;
+        border: 1px solid rgba(167,139,250,0.38);
+        background: linear-gradient(145deg, #211b38, #30234f);
+        box-shadow: 0 9px 25px rgba(0,0,0,0.13);
+        margin-bottom: 12px;
+    }
+    .workspace-choice h2 {
+        color: #ffffff !important;
+        margin: 8px 0 12px 0;
+        font-size: 1.45rem;
+    }
+    .workspace-choice p {
+        color: #d7d0ed !important;
+        line-height: 1.65;
+        min-height: 74px;
+    }
+    .workspace-icon {
+        font-size: 34px;
+    }
+    .home-feature {
+        min-height: 132px;
+        padding: 18px;
+        border-radius: 16px;
+        border: 1px solid rgba(167,139,250,0.25);
+        background: rgba(139,92,246,0.08);
+    }
+    .home-feature h3 {
+        color: #a78bfa !important;
+        margin: 0 0 8px 0;
+        font-size: 1rem;
+    }
+    .home-feature p {
+        color: ${theme['text']} !important;
+        font-size: 0.9rem;
+        line-height: 1.55;
+        margin: 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="home-hero">
+        <div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#ddd6fe;">
+            CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT
+        </div>
+        <h1>AI Study Distraction Detector</h1>
+        <p>
+            Welcome to your study workspace. Choose how you want to analyse
+            phone visibility: review a recorded study video or use your live webcam.
+            Your tools and navigation will adapt to the workspace you choose.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### Choose Your Workspace")
+    st.caption("Open one workspace at a time. You can switch at any moment from the sidebar.")
+
+    home_video_col, home_webcam_col = st.columns(2, gap="large")
+
+    with home_video_col:
+        st.markdown("""
+        <div class="workspace-choice">
+            <div class="workspace-icon">🎬</div>
+            <h2>Video Analysis</h2>
+            <p>
+                Upload a recorded study video, view the processed detection preview,
+                explore phone-visibility charts and heatmaps, compare sessions,
+                track study history, and download reports.
+            </p>
+            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
+                UPLOADED VIDEO · ANALYTICS · HISTORY · REPORTS
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Open Video Analysis →", key="home_open_video", type="primary", use_container_width=True):
+            st.session_state["app_page"] = "video"
+            st.rerun()
+
+    with home_webcam_col:
+        st.markdown("""
+        <div class="workspace-choice">
+            <div class="workspace-icon">📹</div>
+            <h2>Webcam Detection</h2>
+            <p>
+                Start a live camera session, view phone-detection overlays,
+                monitor live camera statistics, and use configurable warning alerts
+                while your webcam is active.
+            </p>
+            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
+                LIVE CAMERA · REAL-TIME STATUS · WARNING ALERTS
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Open Webcam Detection →", key="home_open_webcam", use_container_width=True):
+            st.session_state["app_page"] = "webcam"
+            st.rerun()
+
+    st.markdown("### Shared Study Tools")
+    shared_col1, shared_col2, shared_col3 = st.columns(3)
+
+    with shared_col1:
+        st.markdown("""
+        <div class="home-feature">
+            <h3>⏱️ Pomodoro Timer</h3>
+            <p>Manage focus periods and breaks from either workspace.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with shared_col2:
+        st.markdown("""
+        <div class="home-feature">
+            <h3>🏆 Achievements</h3>
+            <p>Track completed focus sessions, milestones, and study levels.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with shared_col3:
+        st.markdown("""
+        <div class="home-feature">
+            <h3>🎨 Consistent Workspace</h3>
+            <p>Keep the same purple theme and familiar sidebar navigation throughout.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("### About This Project")
+    st.write(
+        "The prototype uses Python, Streamlit, YOLO, OpenCV, Pandas, and Plotly "
+        "to identify visible mobile phones in video frames and summarize detections."
+    )
+    st.info(
+        "Important: phone visibility does not prove that a student is distracted "
+        "or measure attention. Lighting, camera angle, video quality, and object "
+        "visibility can affect detection results."
+    )
+    st.stop()
+
+
+if app_page == "webcam":
+    st.markdown("## 📹 Webcam Detection Workspace")
+    st.caption("Use your camera for live phone-visibility detection, real-time status, and alerts.")
+
+    st.markdown("#### Camera Detection Settings")
+    webcam_confidence = st.slider(
+        "Webcam detection confidence",
+        min_value=0.05,
+        max_value=0.60,
+        value=float(st.session_state.detection_confidence),
+        step=0.01,
+        key="webcam_confidence_slider",
+    )
+    st.session_state.detection_confidence = webcam_confidence
+
+    # ============================================================
+    # Live webcam detection
+    # ============================================================
+    st.markdown(
+        '<div id="live-webcam-detection"></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+    st.subheader("📹 Live Webcam Detection")
+    st.caption("This is a real webcam stream with a live phone detection overlay.")
+
+    webrtc_streamer(
+        key="webcam_phone_detector",
+        video_processor_factory=WebcamPhoneDetector,
+        media_stream_constraints={
+            "video": {
+                "frameRate": 10,
+                "width": 640,
+                "height": 480,
+                "facingMode": "user",
+            },
+            "audio": False,
+        },
+        rtc_configuration={
+            "iceServers": [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {"urls": ["stun:stun1.l.google.com:19302"]},
+                {"urls": ["stun:stun2.l.google.com:19302"]},
+            ]
+        },
+        async_processing=True,
+    )
+
+    if st.session_state.get("live_warning_triggered", False):
+        trigger_live_warning_once()
+
+    live_detected = st.session_state.get("live_phone_detected", False)
+    st.session_state.live_status = "PHONE DETECTED" if live_detected else "FOCUSED / NO PHONE"
+
+    risk_score = 100.0 if not live_detected else max(0.0, 100.0 - 60.0)
+    risk_band = get_risk_band(risk_score)
+
+    live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
+    live_status_col1.metric("Live Status", st.session_state.live_status)
+    live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
+    live_status_col3.metric("Risk Level", risk_band)
+
+    st.progress(min(1.0, risk_score / 100.0))
+    st.caption(f"Focus streak message: {calculate_focus_streak_label(st.session_state.live_focus_streak)}")
+
+    if live_detected:
+        st.session_state.live_focus_streak = 0
+    else:
+        st.session_state.live_focus_streak = update_focus_streak(st.session_state.live_focus_streak, False)
+
+    st.markdown('<div id="live-camera-statistics"></div>', unsafe_allow_html=True)
+    st.subheader("📊 Live Camera Statistics")
+    live_stats = st.session_state.live_stats
+    stat1, stat2, stat3, stat4 = st.columns(4)
+    stat1.metric("Status", live_stats["status"])
+    stat2.metric("Phones Found", live_stats["phone_count"])
+    stat3.metric("Max Confidence", f"{live_stats['confidence']:.1%}")
+    stat4.metric("Last Check", live_stats["last_check"] or "Not checked yet")
+
+
+
+
+if app_page == "video":
+    st.markdown("## 🎬 Video Analysis Workspace")
+    st.caption("Analyse recorded study videos and explore the saved detection results.")
+
+    # ============================================================
+    # AI video analysis section
+    # ============================================================
+
+    st.markdown(
+        '<div id="ai-video-analysis"></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+    # ============================================================
+    # Session report saving function
+    # ============================================================
+
+
+    def save_session_record(
+        video_name,
+        resolution,
+        frames_processed,
+        frames_with_phone,
+        percentage,
+        detections,
+        focus_score=None,
+    ):
+        """Validate and save a session in the shared, backwards-compatible schema."""
+        report_path = REPORT_FILE
+
+        analysis_for_validation = {
+            "video_name": video_name,
+            "resolution": resolution,
+            "frames_processed": frames_processed,
+            "frames_with_phone": frames_with_phone,
+            "percentage": percentage,
+            "detections": detections,
+        }
+        if focus_score is not None:
+            analysis_for_validation["focus_score"] = focus_score
+
+        validation_errors = validate_analysis_result(analysis_for_validation)
+        if validation_errors:
+            raise ValueError(
+                "Session results were not saved: "
+                + "; ".join(validation_errors)
             )
 
-    else:
-        st.info("No phone visibility data is available yet.")
+        record = build_session_record(
+            video_name=video_name,
+            resolution=resolution,
+            frames_processed=frames_processed,
+            frames_with_phone=frames_with_phone,
+            percentage=percentage,
+            detections=detections,
+            focus_score=focus_score,
+            timestamp=datetime.now(),
+        )
+
+        append_session_record(report_path, record)
+
+
+    st.subheader("🎬 AI Video Analysis")
+    st.caption(
+        "Upload a study video, run the AI detector, "
+        "and view the processed live detection preview directly here."
+    )
+
+    uploaded_video_analysis = st.file_uploader(
+        "Choose a study video",
+        type=["mp4", "mov", "avi"],
+        key="uploaded_video_main",
+    )
+
+    if uploaded_video_analysis is not None:
+
+        st.video(uploaded_video_analysis)
+
+        if st.button(
+            "Start AI Detection",
+            type="primary",
+            key="start_ai_detection_main",
+        ):
+
+            st.session_state.analysis_warning_triggered = False
+
+            # Run YOLO only once.
+            analysis_result = process_uploaded_video_for_live_detection(
+                uploaded_video_analysis,
+                confidence_threshold=float(
+                    st.session_state.detection_confidence
+                ),
+                sample_interval=int(
+                    st.session_state.frame_sample_interval
+                ),
+            )
+
+            if analysis_result is not None:
+
+                # Preserve the existing warning summary behaviour.
+                if (
+                    analysis_result["warning_count"] > 0
+                    and not st.session_state.analysis_warning_triggered
+                ):
+                    st.session_state.analysis_warning_triggered = True
+                    st.session_state.last_warning_reason = (
+                        "Phone detected in video analysis"
+                    )
+
+                    st.session_state.warning_summary = append_warning_summary(
+                        st.session_state.warning_summary,
+                        st.session_state.last_warning_reason,
+                    )
+
+                    st.session_state.warning_log.append({
+                        "time": datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                        "message": "Phone detected in video analysis",
+                    })
+
+                    show_phone_alert(preview=False)
+
+                # Keep the completed analysis visible even if report saving fails.
+                st.session_state["last_analysis"] = analysis_result
+
+                try:
+                    save_session_record(
+                        analysis_result["video_name"],
+                        analysis_result["resolution"],
+                        analysis_result["frames_processed"],
+                        analysis_result["frames_with_phone"],
+                        analysis_result["percentage"],
+                        analysis_result["detections"],
+                    )
+
+                    st.success(
+                        "AI video analysis completed and saved to the report."
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"The analysis finished, but the report "
+                        f"could not be saved: {error}"
+                    )
+
+                if analysis_result.get("output_video_path"):
+
+                    st.subheader("📽️ Processed Video Preview")
+                    st.video(analysis_result["output_video_path"])
+
+                    processed_col1, processed_col2 = st.columns(2)
+
+                    processed_col1.metric(
+                        "Frames Processed",
+                        analysis_result["frames_processed"],
+                    )
+
+                    processed_col2.metric(
+                        "Frames With Phone",
+                        analysis_result["frames_with_phone"],
+                    )
+
+                    if analysis_result.get("annotated_frame") is not None:
+
+                        st.subheader("📸 Sample Processed Frame")
+
+                        st.image(
+                            cv2.cvtColor(
+                                analysis_result["annotated_frame"],
+                                cv2.COLOR_BGR2RGB,
+                            ),
+                            channels="RGB",
+                            use_container_width=True,
+                            caption=(
+                                "Example processed frame with "
+                                "detected object bounding boxes"
+                            ),
+                        )
+
+
+    # ============================================================
+    # PREMIUM DASHBOARD ANALYTICS
+    # ============================================================
+
+    st.markdown(
+        '<div id="detection-results"></div>',
+        unsafe_allow_html=True,
+    )
 
     st.divider()
 
-
-   
-    # ------------------------------------------------------------
-    # MONTHLY STUDY ACTIVITY CALENDAR
-    # ------------------------------------------------------------
+    st.markdown('<div id="video-analytics-overview"></div>', unsafe_allow_html=True)
 
     st.markdown(
         """
-        <div style="margin-bottom:15px;">
-            <div style="font-size:12px;color:#a78bfa;
-                        font-weight:700;letter-spacing:2px;">
-                STUDY CONSISTENCY
-            </div>
-            <div style="font-size:25px;font-weight:750;
-                        margin-top:5px;">
-                📅 Monthly Activity Calendar
-            </div>
-            <div style="font-size:13px;color:gray;">
-                Track your recorded study sessions day by day.
-            </div>
+        <div class="analytics-heading">
+            <h2>📊 Study Analytics Overview</h2>
+            <p>Your study-session statistics and phone visibility insights.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    if "Date" in report_df.columns:
+    # Load saved session records
+    def load_report():
+        report_path = REPORT_FILE
 
-        activity_dates = pd.to_datetime(
-            report_df["Date"],
-            errors="coerce",
-        ).dropna().dt.normalize()
-
-        today = pd.Timestamp.now().normalize()
-        month_start = today.replace(day=1)
-        next_month = month_start + pd.offsets.MonthBegin(1)
-        days_in_month = (next_month - month_start).days
-        first_weekday = month_start.weekday()
-
-        date_counts = (
-            activity_dates.dt.date.value_counts().to_dict()
-        )
-
-        month_name = today.strftime("%B %Y")
-
-        calendar_bg = (
-            "#11141c" if is_dark_mode else "#ffffff"
-        )
-        empty_bg = (
-            "#242033" if is_dark_mode else "#eef2f7"
-        )
-        border_color = (
-            "#302a43" if is_dark_mode else "#dbe2ea"
-        )
-        text_color = theme["text"]
-
-        calendar_cells = []
-
-        # Empty cells before the first day
-        for _ in range(first_weekday):
-            calendar_cells.append(
-                '<div class="month-empty"></div>'
+        try:
+            return load_session_history(report_path)
+        except (OSError, pd.errors.ParserError) as error:
+            st.warning(
+                "The saved session report could not be read. "
+                f"Please download a backup and check the CSV file. Details: {error}"
             )
+            return pd.DataFrame()
 
-        # Actual days of the current month
-        for day in range(1, days_in_month + 1):
 
-            current_date = month_start.replace(day=day)
-            session_count = date_counts.get(
-                current_date.date(),
-                0,
-            )
+    report_df = load_report()
 
-            if session_count == 0:
-                level = 0
-            elif session_count == 1:
-                level = 1
-            elif session_count <= 3:
-                level = 2
-            else:
-                level = 3
+    if report_df.empty:
 
-            count_label = (
-                f"{session_count} session"
-                if session_count == 1
-                else f"{session_count} sessions"
-            )
-
-            calendar_cells.append(
-                f"""
-                <div class="month-day level-{level}"
-                     title="{current_date.strftime('%d %B %Y')} · {count_label}">
-                    <span class="day-number">{day}</span>
-                    <span class="day-count">
-                        {session_count if session_count else ""}
-                    </span>
-                </div>
-                """
-            )
-
-        # Empty cells after the last day
-        while len(calendar_cells) % 7 != 0:
-            calendar_cells.append(
-                '<div class="month-empty"></div>'
-            )
-
-        calendar_html = f"""
-        <style>
-            .month-calendar {{
-                background: {calendar_bg};
-                border: 1px solid {border_color};
-                border-radius: 18px;
-                padding: 20px;
-                color: {text_color};
-            }}
-
-            .month-title {{
-                font-size: 22px;
-                font-weight: 750;
-                margin-bottom: 20px;
-            }}
-
-            .month-grid {{
-                display: grid;
-                grid-template-columns: repeat(7, minmax(0, 1fr));
-                gap: 8px;
-            }}
-
-            .month-weekday {{
-                text-align: center;
-                color: #a78bfa;
-                font-size: 12px;
-                font-weight: 700;
-                padding-bottom: 10px;
-            }}
-
-            .month-day {{
-                min-height: 65px;
-                border-radius: 10px;
-                padding: 9px 5px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                transition: transform .15s ease;
-                cursor: default;
-            }}
-
-            .month-day:hover {{
-                transform: translateY(-3px);
-                outline: 1px solid #c4b5fd;
-            }}
-
-            .month-empty {{
-                min-height: 65px;
-            }}
-
-            .level-0 {{
-                background: {empty_bg};
-            }}
-
-            .level-1 {{
-                background: #4c1d95;
-                color: white;
-            }}
-
-            .level-2 {{
-                background: #7c3aed;
-                color: white;
-            }}
-
-            .level-3 {{
-                background: #a78bfa;
-                color: #171326;
-            }}
-
-            .day-number {{
-                font-size: 15px;
-                font-weight: 700;
-            }}
-
-            .day-count {{
-                font-size: 10px;
-                margin-top: 4px;
-                opacity: .9;
-            }}
-
-            @media(max-width:600px) {{
-                .month-calendar {{
-                    padding: 10px;
-                }}
-                .month-grid {{
-                    gap: 4px;
-                }}
-                .month-day, .month-empty {{
-                    min-height: 48px;
-                }}
-                .day-number {{
-                    font-size: 12px;
-                }}
-            }}
-        </style>
-
-        <div class="month-calendar">
-            <div class="month-title">📅 {month_name}</div>
-
-            <div class="month-grid">
-                <div class="month-weekday">MON</div>
-                <div class="month-weekday">TUE</div>
-                <div class="month-weekday">WED</div>
-                <div class="month-weekday">THU</div>
-                <div class="month-weekday">FRI</div>
-                <div class="month-weekday">SAT</div>
-                <div class="month-weekday">SUN</div>
-
-                {''.join(calendar_cells)}
-            </div>
-        </div>
-        """
-
-        st.components.v1.html(
-            calendar_html,
-            height=480,
-            scrolling=False,
-        )
-
-        # Monthly statistics
-        month_dates = activity_dates[
-            (activity_dates >= month_start)
-            & (activity_dates < next_month)
-        ]
-
-        active_days = month_dates.dt.date.nunique()
-        monthly_sessions = len(month_dates)
-
-        st.markdown("")
-
-        calendar_col1, calendar_col2 = st.columns(2)
-
-        calendar_col1.metric(
-            "Active Study Days",
-            active_days,
-        )
-
-        calendar_col2.metric(
-            "Sessions This Month",
-            monthly_sessions,
-        )
-
-        # Weekly activity and study streak statistics
-        today = pd.Timestamp.now().normalize()
-
-        past_dates = activity_dates[
-            activity_dates <= today
-        ]
-
-        streak_statistics = calculate_study_streaks(
-            past_dates.tolist(),
-            today=today.date(),
-        )
-        current_streak = streak_statistics["current"]
-        longest_streak = streak_statistics["longest"]
-
-        # Calculate this week's activity
-        week_start = today - pd.Timedelta(days=today.weekday())
-
-        weekly_dates = activity_dates[
-            (activity_dates >= week_start)
-            & (activity_dates <= today)
-        ]
-
-        weekly_active_days = weekly_dates.dt.date.nunique()
-        weekly_sessions = len(weekly_dates)
-
-        st.markdown("#### 🔥 Study Consistency")
-
-        streak_col1, streak_col2 = st.columns(2)
-
-        streak_col1.metric(
-            "🔥 Current Study Streak",
-            f"{current_streak} days",
-        )
-
-        streak_col2.metric(
-            "🏆 Longest Study Streak",
-            f"{longest_streak} days",
-        )
-
-        weekly_col1, weekly_col2 = st.columns(2)
-
-        weekly_col1.metric(
-            "📅 Active Days This Week",
-            weekly_active_days,
-        )
-
-        weekly_col2.metric(
-            "📚 Sessions This Week",
-            weekly_sessions,
-        )
-
-        st.caption(
-            "Purple intensity represents the number of recorded "
-            "sessions. It does not measure attention or productivity."
+        st.info(
+            "No completed sessions yet. Upload and analyze a study video "
+            "to see your analytics here."
         )
 
     else:
-        st.info("Your session report does not contain a Date column.")
-
-    st.divider()
-
-   
-    # --------------------------------------------------------
-    # SESSION VISIBILITY TREND
-    # --------------------------------------------------------
-
-    st.markdown("### 📈 Session Visibility Trend")
-
-    if (
-        "Phone Visible Percentage" in report_df.columns
-        and not report_df.empty
-    ):
-        trend_df = report_df.copy()
-
-        if "Video Name" in trend_df.columns:
-            trend_df["Session"] = (
-                trend_df["Video Name"]
-                .fillna("Study Session")
-                .astype(str)
-            )
-        else:
-            trend_df["Session"] = [
-                f"Session {i + 1}"
-                for i in range(len(trend_df))
-            ]
-
-        if "Session Time" in trend_df.columns:
-            trend_df["Session"] = (
-                trend_df["Session"]
-                + " ("
-                + trend_df["Session Time"].fillna("").astype(str)
-                + ")"
+        # Ensure older report files use the expected column name
+        if (
+            "Video Name" not in report_df.columns
+            and "Video" in report_df.columns
+        ):
+            report_df = report_df.rename(
+                columns={"Video": "Video Name"}
             )
 
-        trend_df["Session Number"] = range(
-            1,
-            len(trend_df) + 1,
+        # Convert numeric columns safely
+        numeric_columns = [
+            "Frames Processed",
+            "Frames With Phone",
+            "Phone Visible Percentage",
+            "Total Phone Detections",
+        ]
+
+        for column in numeric_columns:
+            if column in report_df.columns:
+                report_df[column] = pd.to_numeric(
+                    report_df[column],
+                    errors="coerce",
+                ).fillna(0)
+
+        # Calculate dashboard statistics
+        total_sessions = len(report_df)
+
+        total_frames = int(
+            report_df["Frames Processed"].sum()
+        ) if "Frames Processed" in report_df.columns else 0
+
+        total_detections = int(
+            report_df["Total Phone Detections"].sum()
+        ) if "Total Phone Detections" in report_df.columns else 0
+
+        average_visibility = (
+            report_df["Phone Visible Percentage"].mean()
+            if "Phone Visible Percentage" in report_df.columns
+            else float("nan")
         )
 
-        trend_fig = px.line(
-            trend_df,
-            x="Session Number",
-            y="Phone Visible Percentage",
-            markers=True,
-            hover_name="Session",
-            title="Phone Visibility Across Sessions",
+        render_smart_insights(st, report_df)
+
+        st.divider()
+
+        # --------------------------------------------------------
+        # TOP ANALYTICS CARDS — PREMIUM KPI DESIGN
+        # --------------------------------------------------------
+
+        st.markdown("### 📌 Performance at a Glance")
+
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stMetric"] {
+                background: linear-gradient(145deg, #211b38, #30234f);
+                border: 1px solid rgba(167, 139, 250, 0.35);
+                border-radius: 18px;
+                padding: 20px 16px;
+                box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
+                min-height: 125px;
+            }
+
+            div[data-testid="stMetricLabel"] p {
+                color: #c4b5fd !important;
+                font-size: 14px !important;
+                font-weight: 600 !important;
+            }
+
+            div[data-testid="stMetricValue"] {
+                color: #ffffff !important;
+                font-size: 28px !important;
+                font-weight: 700 !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
         )
 
-        trend_fig.update_traces(
-            line=dict(color="#8b5cf6", width=3),
-            marker=dict(size=9),
+        metric1, metric2, metric3, metric4 = st.columns(4)
+
+        metric1.metric(
+            "📚 Sessions Analyzed",
+            f"{total_sessions:,}",
         )
 
-        trend_fig.update_layout(
-            template=(
+        metric2.metric(
+            "🎞️ Frames Processed",
+            f"{total_frames:,}",
+        )
+
+        metric3.metric(
+            "📱 Phone Detections",
+            f"{total_detections:,}",
+        )
+
+        metric4.metric(
+            "📊 Average Phone Visibility",
+            f"{average_visibility:.1f}%"
+            if pd.notna(average_visibility)
+            else "N/A",
+        )
+
+        st.divider()
+
+       
+        # --------------------------------------------------------
+        # PHONE VISIBILITY DONUT CHART — PREMIUM DESIGN
+        # --------------------------------------------------------
+
+        st.markdown("### 📱 Phone Visibility Distribution")
+
+        if pd.notna(average_visibility):
+
+            phone_visible = max(
+                0.0,
+                min(float(average_visibility), 100.0),
+            )
+
+            phone_not_detected = 100.0 - phone_visible
+
+            visibility_df = pd.DataFrame({
+                "Category": [
+                    "Phone Visible",
+                    "Phone Not Detected",
+                ],
+                "Percentage": [
+                    phone_visible,
+                    phone_not_detected,
+                ],
+            })
+
+            chart_col1, chart_col2 = st.columns([1.3, 1])
+
+            chart_theme = (
                 "plotly_dark"
                 if is_dark_mode
                 else "plotly_white"
-            ),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis_title="Study Session",
-            yaxis_title="Phone Visibility (%)",
-            yaxis_range=[0, 100],
-            margin=dict(l=10, r=10, t=55, b=10),
-        )
-
-        st.plotly_chart(
-            trend_fig,
-            use_container_width=True,
-        )
-
-    else:
-        st.info("No session trend data is available.")
-
-    st.divider()
-
-
-    # --------------------------------------------------------
-    # VIDEO COMPARISON
-    # --------------------------------------------------------
-
-    st.markdown("### 🎬 Study Video Comparison")
-
-    if (
-        "Video Name" in report_df.columns
-        and "Phone Visible Percentage" in report_df.columns
-    ):
-        comparison_df = report_df[
-            ["Video Name", "Phone Visible Percentage"]
-        ].copy()
-
-        comparison_df = comparison_df.dropna(
-            subset=["Phone Visible Percentage"]
-        )
-
-        if not comparison_df.empty:
-
-            comparison_df["Video Name"] = (
-                comparison_df["Video Name"]
-                .fillna("Unknown Video")
-                .astype(str)
             )
 
-            comparison_fig = px.bar(
-                comparison_df,
-                x="Video Name",
+            with chart_col1:
+
+                donut_fig = px.pie(
+                    visibility_df,
+                    names="Category",
+                    values="Percentage",
+                    hole=0.70,
+                    color="Category",
+                    color_discrete_map={
+                        "Phone Visible": "#a78bfa",
+                        "Phone Not Detected": "#22c55e",
+                    },
+                )
+
+                donut_fig.update_traces(
+                    textinfo="percent",
+                    textposition="inside",
+                    hole=0.70,
+                    marker=dict(
+                        line=dict(
+                            color="rgba(255,255,255,0.15)",
+                            width=3,
+                        )
+                    ),
+                    hovertemplate=(
+                        "<b>%{label}</b><br>"
+                        "%{value:.1f}%<extra></extra>"
+                    ),
+                )
+
+                donut_fig.update_layout(
+                    template=chart_theme,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    title=dict(
+                        text="Average Phone Visibility",
+                        x=0.5,
+                        xanchor="center",
+                        font=dict(size=18),
+                    ),
+                    legend_title_text="",
+                    margin=dict(l=15, r=15, t=65, b=15),
+                    font=dict(size=13),
+                    showlegend=True,
+                )
+
+                st.plotly_chart(
+                    donut_fig,
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                )
+
+            with chart_col2:
+
+                st.markdown("#### 📊 Visibility Summary")
+
+                st.markdown(
+                    """
+                    <style>
+                    .visibility-card {
+                        background: linear-gradient(145deg, #211b38, #30234f);
+                        border: 1px solid rgba(167,139,250,0.3);
+                        border-radius: 16px;
+                        padding: 18px;
+                        margin: 12px 0;
+                    }
+                    .visibility-label {
+                        color: #c4b5fd;
+                        font-size: 14px;
+                        font-weight: 600;
+                    }
+                    .visibility-value {
+                        color: white;
+                        font-size: 29px;
+                        font-weight: 700;
+                        margin-top: 5px;
+                    }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    f"""
+                    <div class="visibility-card">
+                        <div class="visibility-label">
+                            📱 Phone Visible
+                        </div>
+                        <div class="visibility-value">
+                            {phone_visible:.1f}%
+                        </div>
+                    </div>
+
+                    <div class="visibility-card">
+                        <div class="visibility-label">
+                            ✅ Phone Not Detected
+                        </div>
+                        <div class="visibility-value">
+                            {phone_not_detected:.1f}%
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                st.caption(
+                    "These percentages describe phone visibility "
+                    "in analyzed video frames. They do not measure "
+                    "or prove a student's attention."
+                )
+
+        else:
+            st.info("No phone visibility data is available yet.")
+
+        st.divider()
+
+
+       
+        # ------------------------------------------------------------
+        # MONTHLY STUDY ACTIVITY CALENDAR
+        # ------------------------------------------------------------
+
+        st.markdown('<div id="monthly-study-calendar"></div>', unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div style="margin-bottom:15px;">
+                <div style="font-size:12px;color:#a78bfa;
+                            font-weight:700;letter-spacing:2px;">
+                    STUDY CONSISTENCY
+                </div>
+                <div style="font-size:25px;font-weight:750;
+                            margin-top:5px;">
+                    📅 Monthly Activity Calendar
+                </div>
+                <div style="font-size:13px;color:gray;">
+                    Track your recorded study sessions day by day.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if "Date" in report_df.columns:
+
+            activity_dates = pd.to_datetime(
+                report_df["Date"],
+                errors="coerce",
+            ).dropna().dt.normalize()
+
+            today = pd.Timestamp.now().normalize()
+            month_start = today.replace(day=1)
+            next_month = month_start + pd.offsets.MonthBegin(1)
+            days_in_month = (next_month - month_start).days
+            first_weekday = month_start.weekday()
+
+            date_counts = (
+                activity_dates.dt.date.value_counts().to_dict()
+            )
+
+            month_name = today.strftime("%B %Y")
+
+            calendar_bg = (
+                "#11141c" if is_dark_mode else "#ffffff"
+            )
+            empty_bg = (
+                "#242033" if is_dark_mode else "#eef2f7"
+            )
+            border_color = (
+                "#302a43" if is_dark_mode else "#dbe2ea"
+            )
+            text_color = theme["text"]
+
+            calendar_cells = []
+
+            # Empty cells before the first day
+            for _ in range(first_weekday):
+                calendar_cells.append(
+                    '<div class="month-empty"></div>'
+                )
+
+            # Actual days of the current month
+            for day in range(1, days_in_month + 1):
+
+                current_date = month_start.replace(day=day)
+                session_count = date_counts.get(
+                    current_date.date(),
+                    0,
+                )
+
+                if session_count == 0:
+                    level = 0
+                elif session_count == 1:
+                    level = 1
+                elif session_count <= 3:
+                    level = 2
+                else:
+                    level = 3
+
+                count_label = (
+                    f"{session_count} session"
+                    if session_count == 1
+                    else f"{session_count} sessions"
+                )
+
+                calendar_cells.append(
+                    f"""
+                    <div class="month-day level-{level}"
+                         title="{current_date.strftime('%d %B %Y')} · {count_label}">
+                        <span class="day-number">{day}</span>
+                        <span class="day-count">
+                            {session_count if session_count else ""}
+                        </span>
+                    </div>
+                    """
+                )
+
+            # Empty cells after the last day
+            while len(calendar_cells) % 7 != 0:
+                calendar_cells.append(
+                    '<div class="month-empty"></div>'
+                )
+
+            calendar_html = f"""
+            <style>
+                .month-calendar {{
+                    background: {calendar_bg};
+                    border: 1px solid {border_color};
+                    border-radius: 18px;
+                    padding: 20px;
+                    color: {text_color};
+                }}
+
+                .month-title {{
+                    font-size: 22px;
+                    font-weight: 750;
+                    margin-bottom: 20px;
+                }}
+
+                .month-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(7, minmax(0, 1fr));
+                    gap: 8px;
+                }}
+
+                .month-weekday {{
+                    text-align: center;
+                    color: #a78bfa;
+                    font-size: 12px;
+                    font-weight: 700;
+                    padding-bottom: 10px;
+                }}
+
+                .month-day {{
+                    min-height: 65px;
+                    border-radius: 10px;
+                    padding: 9px 5px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    transition: transform .15s ease;
+                    cursor: default;
+                }}
+
+                .month-day:hover {{
+                    transform: translateY(-3px);
+                    outline: 1px solid #c4b5fd;
+                }}
+
+                .month-empty {{
+                    min-height: 65px;
+                }}
+
+                .level-0 {{
+                    background: {empty_bg};
+                }}
+
+                .level-1 {{
+                    background: #4c1d95;
+                    color: white;
+                }}
+
+                .level-2 {{
+                    background: #7c3aed;
+                    color: white;
+                }}
+
+                .level-3 {{
+                    background: #a78bfa;
+                    color: #171326;
+                }}
+
+                .day-number {{
+                    font-size: 15px;
+                    font-weight: 700;
+                }}
+
+                .day-count {{
+                    font-size: 10px;
+                    margin-top: 4px;
+                    opacity: .9;
+                }}
+
+                @media(max-width:600px) {{
+                    .month-calendar {{
+                        padding: 10px;
+                    }}
+                    .month-grid {{
+                        gap: 4px;
+                    }}
+                    .month-day, .month-empty {{
+                        min-height: 48px;
+                    }}
+                    .day-number {{
+                        font-size: 12px;
+                    }}
+                }}
+            </style>
+
+            <div class="month-calendar">
+                <div class="month-title">📅 {month_name}</div>
+
+                <div class="month-grid">
+                    <div class="month-weekday">MON</div>
+                    <div class="month-weekday">TUE</div>
+                    <div class="month-weekday">WED</div>
+                    <div class="month-weekday">THU</div>
+                    <div class="month-weekday">FRI</div>
+                    <div class="month-weekday">SAT</div>
+                    <div class="month-weekday">SUN</div>
+
+                    {''.join(calendar_cells)}
+                </div>
+            </div>
+            """
+
+            st.components.v1.html(
+                calendar_html,
+                height=480,
+                scrolling=False,
+            )
+
+            # Monthly statistics
+            month_dates = activity_dates[
+                (activity_dates >= month_start)
+                & (activity_dates < next_month)
+            ]
+
+            active_days = month_dates.dt.date.nunique()
+            monthly_sessions = len(month_dates)
+
+            st.markdown("")
+
+            calendar_col1, calendar_col2 = st.columns(2)
+
+            calendar_col1.metric(
+                "Active Study Days",
+                active_days,
+            )
+
+            calendar_col2.metric(
+                "Sessions This Month",
+                monthly_sessions,
+            )
+
+            # Weekly activity and study streak statistics
+            today = pd.Timestamp.now().normalize()
+
+            past_dates = activity_dates[
+                activity_dates <= today
+            ]
+
+            streak_statistics = calculate_study_streaks(
+                past_dates.tolist(),
+                today=today.date(),
+            )
+            current_streak = streak_statistics["current"]
+            longest_streak = streak_statistics["longest"]
+
+            # Calculate this week's activity
+            week_start = today - pd.Timedelta(days=today.weekday())
+
+            weekly_dates = activity_dates[
+                (activity_dates >= week_start)
+                & (activity_dates <= today)
+            ]
+
+            weekly_active_days = weekly_dates.dt.date.nunique()
+            weekly_sessions = len(weekly_dates)
+
+            st.markdown("#### 🔥 Study Consistency")
+
+            streak_col1, streak_col2 = st.columns(2)
+
+            streak_col1.metric(
+                "🔥 Current Study Streak",
+                f"{current_streak} days",
+            )
+
+            streak_col2.metric(
+                "🏆 Longest Study Streak",
+                f"{longest_streak} days",
+            )
+
+            weekly_col1, weekly_col2 = st.columns(2)
+
+            weekly_col1.metric(
+                "📅 Active Days This Week",
+                weekly_active_days,
+            )
+
+            weekly_col2.metric(
+                "📚 Sessions This Week",
+                weekly_sessions,
+            )
+
+            st.caption(
+                "Purple intensity represents the number of recorded "
+                "sessions. It does not measure attention or productivity."
+            )
+
+        else:
+            st.info("Your session report does not contain a Date column.")
+
+        st.divider()
+
+       
+        # --------------------------------------------------------
+        # SESSION VISIBILITY TREND
+        # --------------------------------------------------------
+
+        st.markdown("### 📈 Session Visibility Trend")
+
+        if (
+            "Phone Visible Percentage" in report_df.columns
+            and not report_df.empty
+        ):
+            trend_df = report_df.copy()
+
+            if "Video Name" in trend_df.columns:
+                trend_df["Session"] = (
+                    trend_df["Video Name"]
+                    .fillna("Study Session")
+                    .astype(str)
+                )
+            else:
+                trend_df["Session"] = [
+                    f"Session {i + 1}"
+                    for i in range(len(trend_df))
+                ]
+
+            if "Session Time" in trend_df.columns:
+                trend_df["Session"] = (
+                    trend_df["Session"]
+                    + " ("
+                    + trend_df["Session Time"].fillna("").astype(str)
+                    + ")"
+                )
+
+            trend_df["Session Number"] = range(
+                1,
+                len(trend_df) + 1,
+            )
+
+            trend_fig = px.line(
+                trend_df,
+                x="Session Number",
                 y="Phone Visible Percentage",
-                color="Phone Visible Percentage",
-                color_continuous_scale=[
-                    "#312e81",
-                    "#7c3aed",
-                    "#c084fc",
-                ],
-                title="Phone Visibility by Study Video",
+                markers=True,
+                hover_name="Session",
+                title="Phone Visibility Across Sessions",
             )
 
-            comparison_fig.update_layout(
+            trend_fig.update_traces(
+                line=dict(color="#8b5cf6", width=3),
+                marker=dict(size=9),
+            )
+
+            trend_fig.update_layout(
                 template=(
                     "plotly_dark"
                     if is_dark_mode
@@ -3895,257 +3946,63 @@ else:
                 ),
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                xaxis_title="Study Video",
+                xaxis_title="Study Session",
                 yaxis_title="Phone Visibility (%)",
                 yaxis_range=[0, 100],
-                coloraxis_showscale=False,
                 margin=dict(l=10, r=10, t=55, b=10),
             )
 
             st.plotly_chart(
-                comparison_fig,
+                trend_fig,
                 use_container_width=True,
             )
 
         else:
-            st.info("No video comparison data is available.")
+            st.info("No session trend data is available.")
 
-    else:
-        st.info("The report is missing required comparison columns.")
+        st.divider()
 
-    st.divider()
 
-   
-   
-    # --------------------------------------------------------
-    # STUDY PROGRESS REPORT — PREMIUM ANALYTICS
-    # --------------------------------------------------------
+        # --------------------------------------------------------
+        # VIDEO COMPARISON
+        # --------------------------------------------------------
 
-    st.markdown("### 📊 Study Progress Report")
-    st.caption(
-        "Track your study sessions and compare progress with previous periods."
-    )
+        st.markdown("### 🎬 Study Video Comparison")
 
-    if not report_df.empty and "Date" in report_df.columns:
+        if (
+            "Video Name" in report_df.columns
+            and "Phone Visible Percentage" in report_df.columns
+        ):
+            comparison_df = report_df[
+                ["Video Name", "Phone Visible Percentage"]
+            ].copy()
 
-        progress_df = report_df.copy()
-
-        progress_df["_Date"] = pd.to_datetime(
-            progress_df["Date"],
-            errors="coerce",
-        )
-
-        progress_df = progress_df.dropna(subset=["_Date"])
-
-        if not progress_df.empty:
-
-            progress_df["_Visibility"] = pd.to_numeric(
-                progress_df.get(
-                    "Phone Visible Percentage",
-                    pd.Series(index=progress_df.index, dtype=float),
-                ),
-                errors="coerce",
+            comparison_df = comparison_df.dropna(
+                subset=["Phone Visible Percentage"]
             )
 
-            progress_df["_Focus"] = pd.to_numeric(
-                progress_df.get(
-                    "Focus Score",
-                    pd.Series(index=progress_df.index, dtype=float),
-                ),
-                errors="coerce",
-            )
+            if not comparison_df.empty:
 
-            progress_df["_Detections"] = pd.to_numeric(
-                progress_df.get(
-                    "Total Phone Detections",
-                    pd.Series(index=progress_df.index, dtype=float),
-                ),
-                errors="coerce",
-            ).fillna(0)
-
-            report_view = st.radio(
-                "Choose Progress Report",
-                ["Weekly", "Monthly"],
-                horizontal=True,
-                key="study_progress_view",
-            )
-
-            if report_view == "Weekly":
-                progress_df["_Period"] = (
-                    progress_df["_Date"]
-                    .dt.to_period("W")
-                    .dt.start_time
-                )
-            else:
-                progress_df["_Period"] = (
-                    progress_df["_Date"]
-                    .dt.to_period("M")
-                    .dt.start_time
+                comparison_df["Video Name"] = (
+                    comparison_df["Video Name"]
+                    .fillna("Unknown Video")
+                    .astype(str)
                 )
 
-            progress_summary = (
-                progress_df.groupby("_Period")
-                .agg(
-                    Sessions=("Date", "count"),
-                    Average_Visibility=("_Visibility", "mean"),
-                    Average_Focus=("_Focus", "mean"),
-                    Total_Detections=("_Detections", "sum"),
-                )
-                .reset_index()
-                .sort_values("_Period")
-            )
-
-            latest_period = progress_summary.iloc[-1]
-
-            previous_period = (
-                progress_summary.iloc[-2]
-                if len(progress_summary) > 1
-                else None
-            )
-
-            def progress_delta(current, previous, suffix="", decimals=1):
-                if previous is None:
-                    return None
-
-                if pd.isna(current) or pd.isna(previous):
-                    return None
-
-                difference = current - previous
-
-                return f"{difference:+.{decimals}f}{suffix}"
-
-            st.markdown(
-                f"#### 📅 Latest {report_view} Summary"
-            )
-
-            st.caption(
-                "Changes are compared with the previous recorded "
-                f"{report_view.lower()}."
-            )
-
-            progress_col1, progress_col2, progress_col3, progress_col4 = (
-                st.columns(4)
-            )
-
-            progress_col1.metric(
-                "📚 Sessions Completed",
-                int(latest_period["Sessions"]),
-                delta=progress_delta(
-                    latest_period["Sessions"],
-                    previous_period["Sessions"]
-                    if previous_period is not None else None,
-                    decimals=0,
-                ),
-                delta_color="normal",
-            )
-
-            progress_col2.metric(
-                "📱 Average Phone Visibility",
-                (
-                    f'{latest_period["Average_Visibility"]:.1f}%'
-                    if pd.notna(latest_period["Average_Visibility"])
-                    else "N/A"
-                ),
-                delta=progress_delta(
-                    latest_period["Average_Visibility"],
-                    previous_period["Average_Visibility"]
-                    if previous_period is not None else None,
-                    suffix="%",
-                ),
-                delta_color="inverse",
-            )
-
-            progress_col3.metric(
-                "🎯 Average Focus Score",
-                (
-                    f'{latest_period["Average_Focus"]:.1f}%'
-                    if pd.notna(latest_period["Average_Focus"])
-                    else "N/A"
-                ),
-                delta=progress_delta(
-                    latest_period["Average_Focus"],
-                    previous_period["Average_Focus"]
-                    if previous_period is not None else None,
-                    suffix="%",
-                ),
-                delta_color="normal",
-            )
-
-            progress_col4.metric(
-                "🔍 Phone Detections",
-                int(latest_period["Total_Detections"]),
-                delta=progress_delta(
-                    latest_period["Total_Detections"],
-                    previous_period["Total_Detections"]
-                    if previous_period is not None else None,
-                    decimals=0,
-                ),
-                delta_color="inverse",
-            )
-
-            if previous_period is None:
-                st.info(
-                    "Record another week or month of sessions "
-                    "to unlock period-to-period comparisons."
+                comparison_fig = px.bar(
+                    comparison_df,
+                    x="Video Name",
+                    y="Phone Visible Percentage",
+                    color="Phone Visible Percentage",
+                    color_continuous_scale=[
+                        "#312e81",
+                        "#7c3aed",
+                        "#c084fc",
+                    ],
+                    title="Phone Visibility by Study Video",
                 )
 
-            st.markdown("---")
-
-            progress_summary["Period"] = (
-                progress_summary["_Period"].dt.strftime(
-                    "%d %b %Y"
-                    if report_view == "Weekly"
-                    else "%b %Y"
-                )
-            )
-
-            st.markdown("#### 📈 Progress Over Time")
-
-            chart_data = progress_summary.melt(
-                id_vars=["Period"],
-                value_vars=[
-                    "Average_Visibility",
-                    "Average_Focus",
-                ],
-                var_name="Metric",
-                value_name="Percentage",
-            )
-
-            chart_data["Metric"] = chart_data["Metric"].map({
-                "Average_Visibility": "Phone Visibility",
-                "Average_Focus": "Focus Score",
-            })
-
-            chart_data = chart_data.dropna(
-                subset=["Percentage"]
-            )
-
-            if not chart_data.empty:
-
-                progress_fig = px.line(
-                    chart_data,
-                    x="Period",
-                    y="Percentage",
-                    color="Metric",
-                    markers=True,
-                    color_discrete_map={
-                        "Phone Visibility": "#a78bfa",
-                        "Focus Score": "#22c55e",
-                    },
-                    title=f"{report_view} Study Progress",
-                )
-
-                progress_fig.update_traces(
-                    line=dict(width=3),
-                    marker=dict(size=9),
-                    hovertemplate=(
-                        "<b>%{fullData.name}</b><br>"
-                        "%{x}<br>"
-                        "%{y:.1f}%<extra></extra>"
-                    ),
-                )
-
-                progress_fig.update_layout(
+                comparison_fig.update_layout(
                     template=(
                         "plotly_dark"
                         if is_dark_mode
@@ -4153,676 +4010,937 @@ else:
                     ),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(size=13),
-                    title=dict(
-                        x=0.5,
-                        xanchor="center",
-                        font=dict(size=19),
-                    ),
-                    yaxis_title="Percentage (%)",
+                    xaxis_title="Study Video",
+                    yaxis_title="Phone Visibility (%)",
                     yaxis_range=[0, 100],
-                    xaxis_title=report_view,
-                    legend_title_text="",
-                    hovermode="x unified",
-                    margin=dict(l=15, r=15, t=65, b=20),
-                )
-
-                progress_fig.update_xaxes(
-                    showgrid=False,
-                    zeroline=False,
-                )
-
-                progress_fig.update_yaxes(
-                    showgrid=True,
-                    gridcolor=(
-                        "rgba(255,255,255,0.10)"
-                        if is_dark_mode
-                        else "rgba(0,0,0,0.08)"
-                    ),
-                    zeroline=False,
+                    coloraxis_showscale=False,
+                    margin=dict(l=10, r=10, t=55, b=10),
                 )
 
                 st.plotly_chart(
-                    progress_fig,
+                    comparison_fig,
                     use_container_width=True,
-                    config={"displayModeBar": False},
                 )
 
             else:
-                st.info(
-                    "Focus and phone visibility data are not "
-                    "available for the selected periods yet."
+                st.info("No video comparison data is available.")
+
+        else:
+            st.info("The report is missing required comparison columns.")
+
+        st.divider()
+
+       
+       
+        # --------------------------------------------------------
+        # STUDY PROGRESS REPORT — PREMIUM ANALYTICS
+        # --------------------------------------------------------
+
+        st.markdown('<div id="study-progress-report"></div>', unsafe_allow_html=True)
+        st.markdown("### 📊 Study Progress Report")
+        st.caption(
+            "Track your study sessions and compare progress with previous periods."
+        )
+
+        if not report_df.empty and "Date" in report_df.columns:
+
+            progress_df = report_df.copy()
+
+            progress_df["_Date"] = pd.to_datetime(
+                progress_df["Date"],
+                errors="coerce",
+            )
+
+            progress_df = progress_df.dropna(subset=["_Date"])
+
+            if not progress_df.empty:
+
+                progress_df["_Visibility"] = pd.to_numeric(
+                    progress_df.get(
+                        "Phone Visible Percentage",
+                        pd.Series(index=progress_df.index, dtype=float),
+                    ),
+                    errors="coerce",
                 )
 
-            st.markdown("---")
-            st.markdown("#### 📋 Progress History")
+                progress_df["_Focus"] = pd.to_numeric(
+                    progress_df.get(
+                        "Focus Score",
+                        pd.Series(index=progress_df.index, dtype=float),
+                    ),
+                    errors="coerce",
+                )
 
-            st.caption(
-                "A breakdown of your recorded study sessions "
-                "for each selected period."
+                progress_df["_Detections"] = pd.to_numeric(
+                    progress_df.get(
+                        "Total Phone Detections",
+                        pd.Series(index=progress_df.index, dtype=float),
+                    ),
+                    errors="coerce",
+                ).fillna(0)
+
+                report_view = st.radio(
+                    "Choose Progress Report",
+                    ["Weekly", "Monthly"],
+                    horizontal=True,
+                    key="study_progress_view",
+                )
+
+                if report_view == "Weekly":
+                    progress_df["_Period"] = (
+                        progress_df["_Date"]
+                        .dt.to_period("W")
+                        .dt.start_time
+                    )
+                else:
+                    progress_df["_Period"] = (
+                        progress_df["_Date"]
+                        .dt.to_period("M")
+                        .dt.start_time
+                    )
+
+                progress_summary = (
+                    progress_df.groupby("_Period")
+                    .agg(
+                        Sessions=("Date", "count"),
+                        Average_Visibility=("_Visibility", "mean"),
+                        Average_Focus=("_Focus", "mean"),
+                        Total_Detections=("_Detections", "sum"),
+                    )
+                    .reset_index()
+                    .sort_values("_Period")
+                )
+
+                latest_period = progress_summary.iloc[-1]
+
+                previous_period = (
+                    progress_summary.iloc[-2]
+                    if len(progress_summary) > 1
+                    else None
+                )
+
+                def progress_delta(current, previous, suffix="", decimals=1):
+                    if previous is None:
+                        return None
+
+                    if pd.isna(current) or pd.isna(previous):
+                        return None
+
+                    difference = current - previous
+
+                    return f"{difference:+.{decimals}f}{suffix}"
+
+                st.markdown(
+                    f"#### 📅 Latest {report_view} Summary"
+                )
+
+                st.caption(
+                    "Changes are compared with the previous recorded "
+                    f"{report_view.lower()}."
+                )
+
+                progress_col1, progress_col2, progress_col3, progress_col4 = (
+                    st.columns(4)
+                )
+
+                progress_col1.metric(
+                    "📚 Sessions Completed",
+                    int(latest_period["Sessions"]),
+                    delta=progress_delta(
+                        latest_period["Sessions"],
+                        previous_period["Sessions"]
+                        if previous_period is not None else None,
+                        decimals=0,
+                    ),
+                    delta_color="normal",
+                )
+
+                progress_col2.metric(
+                    "📱 Average Phone Visibility",
+                    (
+                        f'{latest_period["Average_Visibility"]:.1f}%'
+                        if pd.notna(latest_period["Average_Visibility"])
+                        else "N/A"
+                    ),
+                    delta=progress_delta(
+                        latest_period["Average_Visibility"],
+                        previous_period["Average_Visibility"]
+                        if previous_period is not None else None,
+                        suffix="%",
+                    ),
+                    delta_color="inverse",
+                )
+
+                progress_col3.metric(
+                    "🎯 Average Focus Score",
+                    (
+                        f'{latest_period["Average_Focus"]:.1f}%'
+                        if pd.notna(latest_period["Average_Focus"])
+                        else "N/A"
+                    ),
+                    delta=progress_delta(
+                        latest_period["Average_Focus"],
+                        previous_period["Average_Focus"]
+                        if previous_period is not None else None,
+                        suffix="%",
+                    ),
+                    delta_color="normal",
+                )
+
+                progress_col4.metric(
+                    "🔍 Phone Detections",
+                    int(latest_period["Total_Detections"]),
+                    delta=progress_delta(
+                        latest_period["Total_Detections"],
+                        previous_period["Total_Detections"]
+                        if previous_period is not None else None,
+                        decimals=0,
+                    ),
+                    delta_color="inverse",
+                )
+
+                if previous_period is None:
+                    st.info(
+                        "Record another week or month of sessions "
+                        "to unlock period-to-period comparisons."
+                    )
+
+                st.markdown("---")
+
+                progress_summary["Period"] = (
+                    progress_summary["_Period"].dt.strftime(
+                        "%d %b %Y"
+                        if report_view == "Weekly"
+                        else "%b %Y"
+                    )
+                )
+
+                st.markdown("#### 📈 Progress Over Time")
+
+                chart_data = progress_summary.melt(
+                    id_vars=["Period"],
+                    value_vars=[
+                        "Average_Visibility",
+                        "Average_Focus",
+                    ],
+                    var_name="Metric",
+                    value_name="Percentage",
+                )
+
+                chart_data["Metric"] = chart_data["Metric"].map({
+                    "Average_Visibility": "Phone Visibility",
+                    "Average_Focus": "Focus Score",
+                })
+
+                chart_data = chart_data.dropna(
+                    subset=["Percentage"]
+                )
+
+                if not chart_data.empty:
+
+                    progress_fig = px.line(
+                        chart_data,
+                        x="Period",
+                        y="Percentage",
+                        color="Metric",
+                        markers=True,
+                        color_discrete_map={
+                            "Phone Visibility": "#a78bfa",
+                            "Focus Score": "#22c55e",
+                        },
+                        title=f"{report_view} Study Progress",
+                    )
+
+                    progress_fig.update_traces(
+                        line=dict(width=3),
+                        marker=dict(size=9),
+                        hovertemplate=(
+                            "<b>%{fullData.name}</b><br>"
+                            "%{x}<br>"
+                            "%{y:.1f}%<extra></extra>"
+                        ),
+                    )
+
+                    progress_fig.update_layout(
+                        template=(
+                            "plotly_dark"
+                            if is_dark_mode
+                            else "plotly_white"
+                        ),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(size=13),
+                        title=dict(
+                            x=0.5,
+                            xanchor="center",
+                            font=dict(size=19),
+                        ),
+                        yaxis_title="Percentage (%)",
+                        yaxis_range=[0, 100],
+                        xaxis_title=report_view,
+                        legend_title_text="",
+                        hovermode="x unified",
+                        margin=dict(l=15, r=15, t=65, b=20),
+                    )
+
+                    progress_fig.update_xaxes(
+                        showgrid=False,
+                        zeroline=False,
+                    )
+
+                    progress_fig.update_yaxes(
+                        showgrid=True,
+                        gridcolor=(
+                            "rgba(255,255,255,0.10)"
+                            if is_dark_mode
+                            else "rgba(0,0,0,0.08)"
+                        ),
+                        zeroline=False,
+                    )
+
+                    st.plotly_chart(
+                        progress_fig,
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
+
+                else:
+                    st.info(
+                        "Focus and phone visibility data are not "
+                        "available for the selected periods yet."
+                    )
+
+                st.markdown("---")
+                st.markdown("#### 📋 Progress History")
+
+                st.caption(
+                    "A breakdown of your recorded study sessions "
+                    "for each selected period."
+                )
+
+                progress_display = progress_summary[
+                    [
+                        "Period",
+                        "Sessions",
+                        "Average_Visibility",
+                        "Average_Focus",
+                        "Total_Detections",
+                    ]
+                ].rename(columns={
+                    "Average_Visibility": "Average Phone Visibility (%)",
+                    "Average_Focus": "Average Focus Score (%)",
+                    "Total_Detections": "Total Phone Detections",
+                })
+
+                progress_display["Average Phone Visibility (%)"] = (
+                    progress_display["Average Phone Visibility (%)"].round(1)
+                )
+
+                progress_display["Average Focus Score (%)"] = (
+                    progress_display["Average Focus Score (%)"].round(1)
+                )
+
+                st.dataframe(
+                    progress_display,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            else:
+                st.info("No valid session dates are available.")
+
+        else:
+            st.info(
+                "Complete at least one study session to generate "
+                "your progress report."
             )
 
-            progress_display = progress_summary[
+        st.divider()
+
+        # --------------------------------------------------------
+        # SESSION HISTORY AND ADVANCED FILTERS
+        # --------------------------------------------------------
+
+        st.markdown(
+            '<div id="session-history-and-advanced-filters"></div>',
+            unsafe_allow_html=True,
+        )
+        
+        st.markdown("### 📋 Recent Session History")
+        st.caption("Search, filter, sort, and download your study sessions.")
+
+        history_df = report_df.copy()
+
+        # Prepare date and visibility columns
+        if "Date" in history_df.columns:
+            history_df["_Date"] = pd.to_datetime(
+                history_df["Date"],
+                errors="coerce"
+            )
+        else:
+            history_df["_Date"] = pd.NaT
+
+        if "Phone Visible Percentage" in history_df.columns:
+            history_df["_Visibility"] = pd.to_numeric(
+                history_df["Phone Visible Percentage"],
+                errors="coerce"
+            )
+        else:
+            history_df["_Visibility"] = pd.NA
+
+        # Default filter values
+        valid_dates = history_df["_Date"].dropna()
+
+        if not valid_dates.empty:
+            default_date_range = (
+                valid_dates.min().date(),
+                valid_dates.max().date()
+            )
+        else:
+            default_date_range = None
+
+        # Reset filters
+        if st.button("🔄 Reset All Filters", key="reset_history_filters"):
+            st.session_state["history_video_search"] = ""
+            st.session_state["history_visibility_range"] = (0.0, 100.0)
+            st.session_state["history_sort_order"] = "Newest First"
+
+            if default_date_range is not None:
+                st.session_state["history_date_range"] = default_date_range
+
+        # Filter controls
+        st.markdown("#### 🔎 Filter Sessions")
+
+        filter_col1, filter_col2 = st.columns(2)
+
+        with filter_col1:
+            if default_date_range is not None:
+                selected_dates = st.date_input(
+                    "📅 Select Date Range",
+                    value=default_date_range,
+                    key="history_date_range"
+                )
+            else:
+                selected_dates = None
+                st.info("No valid session dates are available.")
+
+            if "Video Name" in history_df.columns:
+                search_term = st.text_input(
+                    "🎬 Search Video Name",
+                    placeholder="Enter a video name...",
+                    key="history_video_search"
+                )
+            else:
+                search_term = ""
+
+        with filter_col2:
+            visibility_range = st.slider(
+                "📱 Phone Visibility Range (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=(0.0, 100.0),
+                step=1.0,
+                key="history_visibility_range"
+            )
+
+            sort_order = st.selectbox(
+                "↕️ Sort Sessions",
                 [
-                    "Period",
-                    "Sessions",
-                    "Average_Visibility",
-                    "Average_Focus",
-                    "Total_Detections",
-                ]
-            ].rename(columns={
-                "Average_Visibility": "Average Phone Visibility (%)",
-                "Average_Focus": "Average Focus Score (%)",
-                "Total_Detections": "Total Phone Detections",
-            })
-
-            progress_display["Average Phone Visibility (%)"] = (
-                progress_display["Average Phone Visibility (%)"].round(1)
+                    "Newest First",
+                    "Oldest First",
+                    "Highest Visibility",
+                    "Lowest Visibility"
+                ],
+                key="history_sort_order"
             )
 
-            progress_display["Average Focus Score (%)"] = (
-                progress_display["Average Focus Score (%)"].round(1)
+        # Apply date filter
+        if (
+            selected_dates is not None
+            and isinstance(selected_dates, (tuple, list))
+            and len(selected_dates) == 2
+        ):
+            start_date, end_date = selected_dates
+
+            history_df = history_df[
+                history_df["_Date"].dt.date.between(
+                    start_date,
+                    end_date
+                )
+            ]
+
+        # Apply video search
+        if search_term and "Video Name" in history_df.columns:
+            history_df = history_df[
+                history_df["Video Name"].fillna("").astype(str).str.contains(
+                    search_term,
+                    case=False,
+                    regex=False
+                )
+            ]
+
+        # Apply visibility filter
+        if "_Visibility" in history_df.columns:
+            history_df = history_df[
+                history_df["_Visibility"].between(
+                    visibility_range[0],
+                    visibility_range[1]
+                )
+            ]
+
+        # Apply sorting
+        if sort_order == "Newest First":
+            history_df = history_df.sort_values(
+                "_Date",
+                ascending=False,
+                na_position="last"
             )
+
+        elif sort_order == "Oldest First":
+            history_df = history_df.sort_values(
+                "_Date",
+                ascending=True,
+                na_position="last"
+            )
+
+        elif sort_order == "Highest Visibility":
+            history_df = history_df.sort_values(
+                "_Visibility",
+                ascending=False,
+                na_position="last"
+            )
+
+        elif sort_order == "Lowest Visibility":
+            history_df = history_df.sort_values(
+                "_Visibility",
+                ascending=True,
+                na_position="last"
+            )
+
+        # --------------------------------------------------------
+        # SIDE-BY-SIDE SESSION COMPARISON
+        # --------------------------------------------------------
+
+        st.markdown(
+            '<div id="session-comparison"></div>',
+            unsafe_allow_html=True,
+        )
+        
+        st.divider()
+        st.markdown("### ⚖️ Side-by-Side Session Comparison")
+        st.caption(
+            "Select two saved sessions to compare their detection statistics."
+        )
+
+        # Session comparison must use every saved session, not the
+        # date/search/visibility-filtered Session History view.
+        comparison_df = report_df.copy()
+
+        if len(comparison_df) >= 2:
+
+            comparison_options = {}
+
+            for session_index, session_row in comparison_df.iterrows():
+                video = str(session_row.get("Video Name", "Study Session"))
+                date = str(session_row.get("Date", "Unknown date"))
+                session_time = str(session_row.get("Session Time", ""))
+                
+                label = (
+                    f"{video} | {date} | {session_time} "
+                    f"| Record {session_index + 1}"
+                )
+
+                comparison_options[label] = session_index
+
+            comparison_labels = list(comparison_options.keys())
+
+            compare_col1, compare_col2 = st.columns(2)
+
+            with compare_col1:
+                first_session_label = st.selectbox(
+                    "🟣 Select First Session",
+                    comparison_labels,
+                    index=0,
+                    key="comparison_session_one",
+                )
+
+            second_options = [
+                label for label in comparison_labels
+                if label != first_session_label
+            ]
+
+            with compare_col2:
+                second_session_label = st.selectbox(
+                    "🔵 Select Second Session",
+                    second_options,
+                    index=0,
+                    key="comparison_session_two",
+                )
+
+            first_session = comparison_df.loc[
+                comparison_options[first_session_label]
+            ]
+
+            second_session = comparison_df.loc[
+                comparison_options[second_session_label]
+            ]
+
+            comparison_data = []
+
+            metrics_to_compare = [
+                ("Phone Visibility (%)", "Phone Visible Percentage"),
+                ("Frames Processed", "Frames Processed"),
+                ("Total Phone Detections", "Total Phone Detections"),
+                ("Focus Score (%)", "Focus Score"),
+            ]
+
+            for display_name, column_name in metrics_to_compare:
+                first_value = pd.to_numeric(
+                    first_session.get(column_name, pd.NA),
+                    errors="coerce",
+                )
+
+                second_value = pd.to_numeric(
+                    second_session.get(column_name, pd.NA),
+                    errors="coerce",
+                )
+
+                comparison_data.append({
+                    "Metric": display_name,
+                    "First Session": (
+                        round(float(first_value), 2)
+                        if pd.notna(first_value) else "Not available"
+                    ),
+                    "Second Session": (
+                        round(float(second_value), 2)
+                        if pd.notna(second_value) else "Not available"
+                    ),
+                })
+
+            comparison_table = pd.DataFrame(comparison_data)
+
+            st.markdown("#### 📊 Comparison Results")
 
             st.dataframe(
-                progress_display,
+                comparison_table,
                 use_container_width=True,
                 hide_index=True,
             )
 
-        else:
-            st.info("No valid session dates are available.")
+            chart_data = []
 
-    else:
-        st.info(
-            "Complete at least one study session to generate "
-            "your progress report."
-        )
-
-    st.divider()
-
-    # --------------------------------------------------------
-    # SESSION HISTORY AND ADVANCED FILTERS
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div id="session-history-and-advanced-filters"></div>',
-        unsafe_allow_html=True,
-    )
-    
-    st.markdown("### 📋 Recent Session History")
-    st.caption("Search, filter, sort, and download your study sessions.")
-
-    history_df = report_df.copy()
-
-    # Prepare date and visibility columns
-    if "Date" in history_df.columns:
-        history_df["_Date"] = pd.to_datetime(
-            history_df["Date"],
-            errors="coerce"
-        )
-    else:
-        history_df["_Date"] = pd.NaT
-
-    if "Phone Visible Percentage" in history_df.columns:
-        history_df["_Visibility"] = pd.to_numeric(
-            history_df["Phone Visible Percentage"],
-            errors="coerce"
-        )
-    else:
-        history_df["_Visibility"] = pd.NA
-
-    # Default filter values
-    valid_dates = history_df["_Date"].dropna()
-
-    if not valid_dates.empty:
-        default_date_range = (
-            valid_dates.min().date(),
-            valid_dates.max().date()
-        )
-    else:
-        default_date_range = None
-
-    # Reset filters
-    if st.button("🔄 Reset All Filters", key="reset_history_filters"):
-        st.session_state["history_video_search"] = ""
-        st.session_state["history_visibility_range"] = (0.0, 100.0)
-        st.session_state["history_sort_order"] = "Newest First"
-
-        if default_date_range is not None:
-            st.session_state["history_date_range"] = default_date_range
-
-    # Filter controls
-    st.markdown("#### 🔎 Filter Sessions")
-
-    filter_col1, filter_col2 = st.columns(2)
-
-    with filter_col1:
-        if default_date_range is not None:
-            selected_dates = st.date_input(
-                "📅 Select Date Range",
-                value=default_date_range,
-                key="history_date_range"
-            )
-        else:
-            selected_dates = None
-            st.info("No valid session dates are available.")
-
-        if "Video Name" in history_df.columns:
-            search_term = st.text_input(
-                "🎬 Search Video Name",
-                placeholder="Enter a video name...",
-                key="history_video_search"
-            )
-        else:
-            search_term = ""
-
-    with filter_col2:
-        visibility_range = st.slider(
-            "📱 Phone Visibility Range (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=(0.0, 100.0),
-            step=1.0,
-            key="history_visibility_range"
-        )
-
-        sort_order = st.selectbox(
-            "↕️ Sort Sessions",
-            [
-                "Newest First",
-                "Oldest First",
-                "Highest Visibility",
-                "Lowest Visibility"
-            ],
-            key="history_sort_order"
-        )
-
-    # Apply date filter
-    if (
-        selected_dates is not None
-        and isinstance(selected_dates, (tuple, list))
-        and len(selected_dates) == 2
-    ):
-        start_date, end_date = selected_dates
-
-        history_df = history_df[
-            history_df["_Date"].dt.date.between(
-                start_date,
-                end_date
-            )
-        ]
-
-    # Apply video search
-    if search_term and "Video Name" in history_df.columns:
-        history_df = history_df[
-            history_df["Video Name"].fillna("").astype(str).str.contains(
-                search_term,
-                case=False,
-                regex=False
-            )
-        ]
-
-    # Apply visibility filter
-    if "_Visibility" in history_df.columns:
-        history_df = history_df[
-            history_df["_Visibility"].between(
-                visibility_range[0],
-                visibility_range[1]
-            )
-        ]
-
-    # Apply sorting
-    if sort_order == "Newest First":
-        history_df = history_df.sort_values(
-            "_Date",
-            ascending=False,
-            na_position="last"
-        )
-
-    elif sort_order == "Oldest First":
-        history_df = history_df.sort_values(
-            "_Date",
-            ascending=True,
-            na_position="last"
-        )
-
-    elif sort_order == "Highest Visibility":
-        history_df = history_df.sort_values(
-            "_Visibility",
-            ascending=False,
-            na_position="last"
-        )
-
-    elif sort_order == "Lowest Visibility":
-        history_df = history_df.sort_values(
-            "_Visibility",
-            ascending=True,
-            na_position="last"
-        )
-
-    # --------------------------------------------------------
-    # SIDE-BY-SIDE SESSION COMPARISON
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div id="session-comparison"></div>',
-        unsafe_allow_html=True,
-    )
-    
-    st.divider()
-    st.markdown("### ⚖️ Side-by-Side Session Comparison")
-    st.caption(
-        "Select two saved sessions to compare their detection statistics."
-    )
-
-    # Session comparison must use every saved session, not the
-    # date/search/visibility-filtered Session History view.
-    comparison_df = report_df.copy()
-
-    if len(comparison_df) >= 2:
-
-        comparison_options = {}
-
-        for session_index, session_row in comparison_df.iterrows():
-            video = str(session_row.get("Video Name", "Study Session"))
-            date = str(session_row.get("Date", "Unknown date"))
-            session_time = str(session_row.get("Session Time", ""))
-            
-            label = (
-                f"{video} | {date} | {session_time} "
-                f"| Record {session_index + 1}"
-            )
-
-            comparison_options[label] = session_index
-
-        comparison_labels = list(comparison_options.keys())
-
-        compare_col1, compare_col2 = st.columns(2)
-
-        with compare_col1:
-            first_session_label = st.selectbox(
-                "🟣 Select First Session",
-                comparison_labels,
-                index=0,
-                key="comparison_session_one",
-            )
-
-        second_options = [
-            label for label in comparison_labels
-            if label != first_session_label
-        ]
-
-        with compare_col2:
-            second_session_label = st.selectbox(
-                "🔵 Select Second Session",
-                second_options,
-                index=0,
-                key="comparison_session_two",
-            )
-
-        first_session = comparison_df.loc[
-            comparison_options[first_session_label]
-        ]
-
-        second_session = comparison_df.loc[
-            comparison_options[second_session_label]
-        ]
-
-        comparison_data = []
-
-        metrics_to_compare = [
-            ("Phone Visibility (%)", "Phone Visible Percentage"),
-            ("Frames Processed", "Frames Processed"),
-            ("Total Phone Detections", "Total Phone Detections"),
-            ("Focus Score (%)", "Focus Score"),
-        ]
-
-        for display_name, column_name in metrics_to_compare:
-            first_value = pd.to_numeric(
-                first_session.get(column_name, pd.NA),
-                errors="coerce",
-            )
-
-            second_value = pd.to_numeric(
-                second_session.get(column_name, pd.NA),
-                errors="coerce",
-            )
-
-            comparison_data.append({
-                "Metric": display_name,
-                "First Session": (
-                    round(float(first_value), 2)
-                    if pd.notna(first_value) else "Not available"
-                ),
-                "Second Session": (
-                    round(float(second_value), 2)
-                    if pd.notna(second_value) else "Not available"
-                ),
-            })
-
-        comparison_table = pd.DataFrame(comparison_data)
-
-        st.markdown("#### 📊 Comparison Results")
-
-        st.dataframe(
-            comparison_table,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        chart_data = []
-
-        for session_label, session_row in [
-            (first_session_label, first_session),
-            (second_session_label, second_session),
-        ]:
-            for metric_name, column_name in [
-                ("Phone Visibility", "Phone Visible Percentage"),
-                ("Focus Score", "Focus Score"),
+            for session_label, session_row in [
+                (first_session_label, first_session),
+                (second_session_label, second_session),
             ]:
-                value = pd.to_numeric(
-                    session_row.get(column_name, pd.NA),
-                    errors="coerce",
+                for metric_name, column_name in [
+                    ("Phone Visibility", "Phone Visible Percentage"),
+                    ("Focus Score", "Focus Score"),
+                ]:
+                    value = pd.to_numeric(
+                        session_row.get(column_name, pd.NA),
+                        errors="coerce",
+                    )
+
+                    if pd.notna(value):
+                        chart_data.append({
+                            "Metric": metric_name,
+                            "Percentage": float(value),
+                            "Session": session_label,
+                        })
+
+            if chart_data:
+                comparison_fig = px.bar(
+                    pd.DataFrame(chart_data),
+                    x="Metric",
+                    y="Percentage",
+                    color="Session",
+                    barmode="group",
+                    title="Session Performance Comparison",
+                    text_auto=".1f",
                 )
 
-                if pd.notna(value):
-                    chart_data.append({
-                        "Metric": metric_name,
-                        "Percentage": float(value),
-                        "Session": session_label,
-                    })
+                comparison_fig.update_layout(
+                    template=(
+                        "plotly_dark"
+                        if is_dark_mode
+                        else "plotly_white"
+                    ),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    yaxis_title="Percentage (%)",
+                    yaxis_range=[0, 100],
+                    margin=dict(l=10, r=10, t=55, b=10),
+                    legend_title="Study Sessions",
+                )
 
-        if chart_data:
-            comparison_fig = px.bar(
-                pd.DataFrame(chart_data),
-                x="Metric",
-                y="Percentage",
-                color="Session",
-                barmode="group",
-                title="Session Performance Comparison",
-                text_auto=".1f",
+                st.plotly_chart(
+                    comparison_fig,
+                    use_container_width=True,
+                )
+
+            st.caption(
+                "Older sessions without a saved focus score will show "
+                "'Not available'. Phone visibility is an indicator only, "
+                "not a validated measurement of attention."
             )
 
-            comparison_fig.update_layout(
-                template=(
-                    "plotly_dark"
-                    if is_dark_mode
-                    else "plotly_white"
-                ),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                yaxis_title="Percentage (%)",
-                yaxis_range=[0, 100],
-                margin=dict(l=10, r=10, t=55, b=10),
-                legend_title="Study Sessions",
+        else:
+            st.info(
+                "At least two saved sessions are required for comparison."
             )
 
-            st.plotly_chart(
-                comparison_fig,
+
+        # Remove temporary columns
+        display_history = history_df.drop(
+            columns=["_Date", "_Visibility"],
+            errors="ignore"
+        )
+
+        # Display filtered results
+        st.markdown("#### 📊 Filtered Results")
+
+        result_col1, result_col2 = st.columns(2)
+
+        result_col1.metric(
+            "Matching Sessions",
+            len(display_history)
+        )
+
+        result_col2.metric(
+            "Total Sessions",
+            len(report_df)
+        )
+
+        if not display_history.empty:
+            st.dataframe(
+                display_history,
                 use_container_width=True,
+                hide_index=True
             )
 
-        st.caption(
-            "Older sessions without a saved focus score will show "
-            "'Not available'. Phone visibility is an indicator only, "
-            "not a validated measurement of attention."
-        )
+            filtered_csv = display_history.to_csv(
+                index=False
+            ).encode("utf-8")
 
-    else:
-        st.info(
-            "At least two saved sessions are required for comparison."
-        )
+            st.download_button(
+                "⬇️ Download Filtered Sessions (CSV)",
+                data=filtered_csv,
+                file_name="filtered_session_report.csv",
+                mime="text/csv",
+                key="download_filtered_sessions"
+            )
 
+        else:
+            st.info("No sessions match your selected filters.")
 
-    # Remove temporary columns
-    display_history = history_df.drop(
-        columns=["_Date", "_Visibility"],
-        errors="ignore"
-    )
-
-    # Display filtered results
-    st.markdown("#### 📊 Filtered Results")
-
-    result_col1, result_col2 = st.columns(2)
-
-    result_col1.metric(
-        "Matching Sessions",
-        len(display_history)
-    )
-
-    result_col2.metric(
-        "Total Sessions",
-        len(report_df)
-    )
-
-    if not display_history.empty:
-        st.dataframe(
-            display_history,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        filtered_csv = display_history.to_csv(
+        # Download complete report
+        csv_data = report_df.to_csv(
             index=False
         ).encode("utf-8")
 
         st.download_button(
-            "⬇️ Download Filtered Sessions (CSV)",
-            data=filtered_csv,
-            file_name="filtered_session_report.csv",
+            "⬇️ Download Complete Session Report (CSV)",
+            data=csv_data,
+            file_name="session_summary.csv",
             mime="text/csv",
-            key="download_filtered_sessions"
+            key="download_csv_summary_main"
         )
 
-    else:
-        st.info("No sessions match your selected filters.")
 
-    # Download complete report
-    csv_data = report_df.to_csv(
-        index=False
-    ).encode("utf-8")
-
-    st.download_button(
-        "⬇️ Download Complete Session Report (CSV)",
-        data=csv_data,
-        file_name="session_summary.csv",
-        mime="text/csv",
-        key="download_csv_summary_main"
+    st.caption(
+        "Class 12 AI Project | Phone visibility is an indicator only, "
+        "not a validated measurement of attention."
     )
 
 
-st.caption(
-    "Class 12 AI Project | Phone visibility is an indicator only, "
-    "not a validated measurement of attention."
-)
+    # ============================================================
+    # Warning summary
+    # ============================================================
 
+    st.subheader("🧾 Recent Warning Summary")
+    warning_summary = st.session_state.warning_summary
+    st.write(f"Total warnings: {warning_summary['warning_count']}")
+    st.write(f"Last warning: {warning_summary['last_warning']}")
 
-# ============================================================
-# Warning summary
-# ============================================================
+    if warning_summary["recent_events"]:
+        warning_df = pd.DataFrame(warning_summary["recent_events"])
+        st.dataframe(warning_df, use_container_width=True)
+    else:
+        st.info("No warnings yet.")
 
-st.subheader("🧾 Recent Warning Summary")
-warning_summary = st.session_state.warning_summary
-st.write(f"Total warnings: {warning_summary['warning_count']}")
-st.write(f"Last warning: {warning_summary['last_warning']}")
-
-if warning_summary["recent_events"]:
-    warning_df = pd.DataFrame(warning_summary["recent_events"])
-    st.dataframe(warning_df, use_container_width=True)
-else:
-    st.info("No warnings yet.")
-
-# ============================================================
-# Detection controls
-# ============================================================
-
-st.divider()
-st.subheader("🔧 Detection Controls")
-
-confidence_threshold = st.slider(
-    "Adjust detection confidence",
-    min_value=0.05,
-    max_value=0.60,
-    value=0.18,
-    step=0.01,
-    key="conf_slider",
-)
-st.session_state.detection_confidence = confidence_threshold
-
-sample_interval = st.slider(
-    "Frame sampling interval",
-    min_value=1,
-    max_value=15,
-    value=5,
-    step=1,
-    help="Analyze every Nth frame to keep performance efficient.",
-    key="sample_slider",
-)
-st.session_state.frame_sample_interval = sample_interval
-
-st.info(
-    "AI false-positive guard: a phone candidate must appear in at least "
-    "2 of the last 3 analyzed samples before it is counted as confirmed "
-    "for the main warning and visibility summary. This reduces isolated "
-    "detections but cannot eliminate model errors."
-)
-
-# ============================================================
-# Detection results
-# ============================================================
-
-if st.session_state.get("last_analysis") is not None:
-    saved_analysis = st.session_state["last_analysis"]
+    # ============================================================
+    # Detection controls
+    # ============================================================
 
     st.divider()
-    st.subheader("📈 Detection Results")
+    st.subheader("🔧 Detection Controls")
 
-    focus_score = saved_analysis["focus_score"]
-    phone_percentage = saved_analysis["percentage"]
+    confidence_threshold = st.slider(
+        "Adjust detection confidence",
+        min_value=0.05,
+        max_value=0.60,
+        value=0.18,
+        step=0.01,
+        key="conf_slider",
+    )
+    st.session_state.detection_confidence = confidence_threshold
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Focus Score", f"{focus_score:.1f}%")
-    col2.metric("Phone Visibility", f"{phone_percentage:.1f}%")
-    col3.metric("Alert Level", saved_analysis["alert_level"])
-    col4.metric("Study Status", saved_analysis["study_status"])
+    sample_interval = st.slider(
+        "Frame sampling interval",
+        min_value=1,
+        max_value=15,
+        value=5,
+        step=1,
+        help="Analyze every Nth frame to keep performance efficient.",
+        key="sample_slider",
+    )
+    st.session_state.frame_sample_interval = sample_interval
 
-    st.subheader("💡 Session Insight")
-    insight = generate_session_insight(saved_analysis)
-    st.info(insight["risk_text"])
-    st.write(insight["summary"])
-    st.write(insight["recommendation"])
+    st.info(
+        "AI false-positive guard: a phone candidate must appear in at least "
+        "2 of the last 3 analyzed samples before it is counted as confirmed "
+        "for the main warning and visibility summary. This reduces isolated "
+        "detections but cannot eliminate model errors."
+    )
 
-    st.subheader("📉 Distraction Timeline")
-    timeline_df = pd.DataFrame(saved_analysis["timeline"])
-    if not timeline_df.empty:
-        fig = px.line(
-            timeline_df,
-            x="frame",
-            y="phone_visible",
-            title="Phone visibility across sampled frames",
-            markers=True,
-            range_y=[0, 1.2],
+    # ============================================================
+    # Detection results
+    # ============================================================
+
+    if st.session_state.get("last_analysis") is not None:
+        saved_analysis = st.session_state["last_analysis"]
+
+        st.divider()
+        st.subheader("📈 Detection Results")
+
+        focus_score = saved_analysis["focus_score"]
+        phone_percentage = saved_analysis["percentage"]
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Focus Score", f"{focus_score:.1f}%")
+        col2.metric("Phone Visibility", f"{phone_percentage:.1f}%")
+        col3.metric("Alert Level", saved_analysis["alert_level"])
+        col4.metric("Study Status", saved_analysis["study_status"])
+
+        st.subheader("💡 Session Insight")
+        insight = generate_session_insight(saved_analysis)
+        st.info(insight["risk_text"])
+        st.write(insight["summary"])
+        st.write(insight["recommendation"])
+
+        st.subheader("📉 Distraction Timeline")
+        timeline_df = pd.DataFrame(saved_analysis["timeline"])
+        if not timeline_df.empty:
+            fig = px.line(
+                timeline_df,
+                x="frame",
+                y="phone_visible",
+                title="Phone visibility across sampled frames",
+                markers=True,
+                range_y=[0, 1.2],
+            )
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No timeline is available yet.")
+
+        st.subheader("🔥 Phone Visibility Heatmap")
+        heatmap_chart = build_phone_heatmap(saved_analysis.get("detection_events", []))
+        if heatmap_chart is not None:
+            st.plotly_chart(heatmap_chart, use_container_width=True)
+        else:
+            st.info("No heatmap data yet.")
+
+        st.subheader("🔒 Warning Log")
+        warnings = saved_analysis.get("warnings", [])
+        if warnings:
+            warning_df = pd.DataFrame(warnings)
+            st.dataframe(warning_df, use_container_width=True)
+        else:
+            st.info("No warnings were recorded.")
+
+        st.subheader("🎯 Confidence and Quality")
+        confidence_col1, confidence_col2, confidence_col3 = st.columns(3)
+        confidence_col1.metric("Average Confidence", f"{saved_analysis.get('average_confidence', 0):.1%}")
+        confidence_col2.metric("Highest Confidence", f"{saved_analysis.get('highest_confidence', 0):.1%}")
+        confidence_col3.metric("Warning Count", saved_analysis.get("warning_count", 0))
+
+        st.subheader("🧮 Object Counter")
+        object_counts = saved_analysis.get("object_counts", {})
+        if object_counts:
+            clutter_df = pd.DataFrame(
+                [
+                    {"Object Class": name.title(), "Detection Count": count}
+                    for name, count in sorted(object_counts.items(), key=lambda item: item[1], reverse=True)
+                ]
+            )
+            st.dataframe(clutter_df, use_container_width=True, hide_index=True)
+            st.bar_chart(clutter_df.set_index("Object Class"))
+        else:
+            st.info("No objects were detected in the sampled frames.")
+
+        st.subheader("🧾 Detection Events")
+        detection_events = pd.DataFrame(saved_analysis.get("detection_events", []))
+        if not detection_events.empty:
+            st.dataframe(detection_events, use_container_width=True)
+            events_csv = detection_events.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download Detection Events (CSV)",
+                data=events_csv,
+                file_name="detection_events.csv",
+                mime="text/csv",
+                key="download_detection_events_main",
+            )
+        else:
+            st.info("No detection events recorded.")
+
+        st.subheader("📸 Detection Snapshots")
+        if st.session_state.detection_snapshots:
+            for idx, image in enumerate(reversed(st.session_state.detection_snapshots), start=1):
+                st.image(image, channels="BGR", use_container_width=True, caption=f"Snapshot {idx}")
+        else:
+            st.info("No detection snapshots saved yet.")
+    saved_analysis = st.session_state.get("last_analysis")
+
+    st.markdown(
+        '<div id="pdf-study-report"></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### 📄 PDF Study Report")
+
+    if saved_analysis is not None:
+        st.download_button(
+            "Download PDF Report",
+            data=create_pdf_report(saved_analysis),
+            file_name="study_session_report.pdf",
+            mime="application/pdf",
+            key="download_pdf_report_main",
         )
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+    else:
+        st.info(
+            "Run a video analysis first to generate your downloadable PDF report."
         )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No timeline is available yet.")
 
-    st.subheader("🔥 Phone Visibility Heatmap")
-    heatmap_chart = build_phone_heatmap(saved_analysis.get("detection_events", []))
-    if heatmap_chart is not None:
-        st.plotly_chart(heatmap_chart, use_container_width=True)
-    else:
-        st.info("No heatmap data yet.")
+    # ============================================================
+    # Warning log
+    # ============================================================
 
-    st.subheader("🔒 Warning Log")
-    warnings = saved_analysis.get("warnings", [])
+    st.divider()
+    st.subheader("Warning Log")
+    warnings = st.session_state.get("warning_log", [])
     if warnings:
         warning_df = pd.DataFrame(warnings)
         st.dataframe(warning_df, use_container_width=True)
     else:
-        st.info("No warnings were recorded.")
+        st.info("No warnings recorded.")
 
-    st.subheader("🎯 Confidence and Quality")
-    confidence_col1, confidence_col2, confidence_col3 = st.columns(3)
-    confidence_col1.metric("Average Confidence", f"{saved_analysis.get('average_confidence', 0):.1%}")
-    confidence_col2.metric("Highest Confidence", f"{saved_analysis.get('highest_confidence', 0):.1%}")
-    confidence_col3.metric("Warning Count", saved_analysis.get("warning_count", 0))
 
-    st.subheader("🧮 Object Counter")
-    object_counts = saved_analysis.get("object_counts", {})
-    if object_counts:
-        clutter_df = pd.DataFrame(
-            [
-                {"Object Class": name.title(), "Detection Count": count}
-                for name, count in sorted(object_counts.items(), key=lambda item: item[1], reverse=True)
-            ]
-        )
-        st.dataframe(clutter_df, use_container_width=True, hide_index=True)
-        st.bar_chart(clutter_df.set_index("Object Class"))
-    else:
-        st.info("No objects were detected in the sampled frames.")
-
-    st.subheader("🧾 Detection Events")
-    detection_events = pd.DataFrame(saved_analysis.get("detection_events", []))
-    if not detection_events.empty:
-        st.dataframe(detection_events, use_container_width=True)
-        events_csv = detection_events.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Download Detection Events (CSV)",
-            data=events_csv,
-            file_name="detection_events.csv",
-            mime="text/csv",
-            key="download_detection_events_main",
-        )
-    else:
-        st.info("No detection events recorded.")
-
-    st.subheader("📸 Detection Snapshots")
-    if st.session_state.detection_snapshots:
-        for idx, image in enumerate(reversed(st.session_state.detection_snapshots), start=1):
-            st.image(image, channels="BGR", use_container_width=True, caption=f"Snapshot {idx}")
-    else:
-        st.info("No detection snapshots saved yet.")
-saved_analysis = st.session_state.get("last_analysis")
-
-st.markdown(
-    '<div id="pdf-study-report"></div>',
-    unsafe_allow_html=True,
-)
-
-st.markdown("### 📄 PDF Study Report")
-
-if saved_analysis is not None:
-    st.download_button(
-        "Download PDF Report",
-        data=create_pdf_report(saved_analysis),
-        file_name="study_session_report.pdf",
-        mime="application/pdf",
-        key="download_pdf_report_main",
-    )
-else:
-    st.info(
-        "Run a video analysis first to generate your downloadable PDF report."
-    )
-
-# ============================================================
-# Warning log
-# ============================================================
-
-st.divider()
-st.subheader("Warning Log")
-warnings = st.session_state.get("warning_log", [])
-if warnings:
-    warning_df = pd.DataFrame(warnings)
-    st.dataframe(warning_df, use_container_width=True)
-else:
-    st.info("No warnings recorded.")
 
 
 # ============================================================
@@ -5043,6 +5161,7 @@ render_study_timer()
 # ============================================================
 
 st.divider()
+st.markdown('<div id="achievement-centre"></div>', unsafe_allow_html=True)
 st.subheader("🏆 Achievement Centre")
 st.caption(
     "Celebrate your study milestones and track your progress."
