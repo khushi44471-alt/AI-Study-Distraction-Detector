@@ -41,6 +41,17 @@ def safe_float(value: Any, default: float = 0.0,
     return number
 
 
+def format_duration(seconds: Any) -> str:
+    """Format a non-negative duration as HH:MM:SS, safely handling missing data."""
+    value = safe_float(seconds, default=-1.0)
+    if value < 0:
+        return "Not available"
+    total_seconds = int(round(value))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds_part = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds_part:02d}"
+
+
 def normalize_warning_entries(warnings: Any) -> list[dict[str, str]]:
     """Normalize warning strings and dictionaries for tables and PDF reports."""
     if warnings is None:
@@ -211,6 +222,16 @@ def append_session_record(report_path: str | Path,
 
     previous = normalize_session_history(previous)
     new_row = normalize_session_history(pd.DataFrame([dict(record)]))
+
+    # Make saving a completed analysis idempotent. A rerun can safely retry
+    # the same write without adding the exact same analysis twice.
+    if "Session ID" in new_row.columns:
+        new_session_id = new_row.iloc[0].get("Session ID")
+        if pd.notna(new_session_id) and str(new_session_id).strip():
+            existing_ids = previous.get("Session ID", pd.Series(dtype="string"))
+            if existing_ids.astype("string").eq(str(new_session_id)).fillna(False).any():
+                return previous
+
     combined = pd.concat([previous, new_row], ignore_index=True, sort=False)
     ordered = SESSION_COLUMNS + [
         column for column in combined.columns if column not in SESSION_COLUMNS
