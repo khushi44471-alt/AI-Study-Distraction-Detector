@@ -4573,7 +4573,7 @@ if app_page == "video":
 
                 chart_data["Metric"] = chart_data["Metric"].map({
                     "Average_Visibility": "Phone Visibility",
-                    "Average_Focus": "Focus Score",
+                    "Average_Focus": "Prototype Focus Indicator",
                 })
 
                 chart_data = chart_data.dropna(
@@ -4672,7 +4672,7 @@ if app_page == "video":
                     ]
                 ].rename(columns={
                     "Average_Visibility": "Average Phone Visibility (%)",
-                    "Average_Focus": "Average Focus Score (%)",
+                    "Average_Focus": "Average Prototype Focus Indicator (%)",
                     "Total_Detections": "Phone Box Detections",
                 })
 
@@ -4680,8 +4680,8 @@ if app_page == "video":
                     progress_display["Average Phone Visibility (%)"].round(1)
                 )
 
-                progress_display["Average Focus Score (%)"] = (
-                    progress_display["Average Focus Score (%)"].round(1)
+                progress_display["Average Prototype Focus Indicator (%)"] = (
+                    progress_display["Average Prototype Focus Indicator (%)"].round(1)
                 )
 
                 st.dataframe(
@@ -4955,9 +4955,10 @@ if app_page == "video":
 
             metrics_to_compare = [
                 ("Phone Visibility (%)", "Phone Visible Percentage"),
-                ("Frames Processed", "Frames Processed"),
-                ("Total Phone Detections", "Total Phone Detections"),
-                ("Focus Score (%)", "Focus Score"),
+                ("Sampled Frames Analysed", "Frames Processed"),
+                ("Confirmed Phone Frames", "Frames With Phone"),
+                ("Phone Box Detections", "Total Phone Detections"),
+                ("Prototype Focus Indicator (%)", "Focus Score"),
             ]
 
             for display_name, column_name in metrics_to_compare:
@@ -5001,7 +5002,7 @@ if app_page == "video":
             ]:
                 for metric_name, column_name in [
                     ("Phone Visibility", "Phone Visible Percentage"),
-                    ("Focus Score", "Focus Score"),
+                    ("Prototype Focus Indicator", "Focus Score"),
                 ]:
                     value = pd.to_numeric(
                         session_row.get(column_name, pd.NA),
@@ -5046,9 +5047,9 @@ if app_page == "video":
                 )
 
             st.caption(
-                "Older sessions without a saved focus score will show "
-                "'Not available'. Phone visibility is an indicator only, "
-                "not a validated measurement of attention."
+                "Older sessions without a saved prototype focus indicator will show "
+                "'Not available'. This indicator is derived from phone visibility "
+                "and is not a validated measurement of attention."
             )
 
         else:
@@ -5071,6 +5072,15 @@ if app_page == "video":
             display_history["Session Time"] = pd.to_datetime(
                 display_history["Session Time"].astype("string"), errors="coerce"
             ).dt.strftime("%I:%M %p").fillna("Not available")
+
+        display_history = display_history.rename(columns={
+            "Resolution": "Video Resolution",
+            "Frames Processed": "Sampled Frames Analysed",
+            "Frames With Phone": "Confirmed Phone Frames",
+            "Phone Visible Percentage": "Phone Visibility (%)",
+            "Total Phone Detections": "Phone Box Detections",
+            "Focus Score": "Prototype Focus Indicator (%)",
+        })
 
         # Display filtered results
         st.markdown("#### 📊 Filtered Results")
