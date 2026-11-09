@@ -2641,6 +2641,181 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
+if app_page == "home":
+    st.markdown('<div id="study-session-dashboard"></div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <style>
+    .home-hero {
+        padding: 38px 34px;
+        border-radius: 25px;
+        background: linear-gradient(120deg, #30205b, #6338a8 62%, #9875ef);
+        border: 1px solid rgba(255,255,255,0.20);
+        box-shadow: 0 18px 42px rgba(85,55,150,0.18);
+        margin: 8px 0 26px 0;
+    }
+    .home-hero h1 {
+        color: #ffffff !important;
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        margin: 0 0 10px 0;
+    }
+    .home-hero p {
+        color: #f1eaff !important;
+        font-size: 1rem;
+        line-height: 1.65;
+        max-width: 850px;
+        margin-bottom: 0;
+    }
+    .workspace-choice {
+        min-height: 245px;
+        padding: 25px;
+        border-radius: 20px;
+        border: 1px solid rgba(167,139,250,0.38);
+        background: linear-gradient(145deg, #211b38, #30234f);
+        box-shadow: 0 9px 25px rgba(0,0,0,0.13);
+        margin-bottom: 12px;
+    }
+    .workspace-choice h2 {
+        color: #ffffff !important;
+        margin: 8px 0 12px 0;
+        font-size: 1.45rem;
+    }
+    .workspace-choice p {
+        color: #d7d0ed !important;
+        line-height: 1.65;
+        min-height: 74px;
+    }
+    .workspace-icon {
+        font-size: 34px;
+    }
+    .home-feature {
+        min-height: 132px;
+        padding: 18px;
+        border-radius: 16px;
+        border: 1px solid rgba(167,139,250,0.25);
+        background: rgba(139,92,246,0.08);
+    }
+    .home-feature h3 {
+        color: #a78bfa !important;
+        margin: 0 0 8px 0;
+        font-size: 1rem;
+    }
+    .home-feature p {
+        color: var(--text) !important;
+        font-size: 0.9rem;
+        line-height: 1.55;
+        margin: 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="home-hero">
+        <div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#ddd6fe;">
+            CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT
+        </div>
+        <h1>AI Study Distraction Detector</h1>
+        <p>
+            Welcome to your study workspace. Choose how you want to analyse
+            phone visibility: review a recorded study video or use your live webcam.
+            Your tools and navigation will adapt to the workspace you choose.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### Choose Your Workspace")
+    st.caption("Open one workspace at a time. You can switch at any moment from the sidebar.")
+
+    home_video_col, home_webcam_col = st.columns(2, gap="large")
+
+    with home_video_col:
+        st.markdown("""
+        <div class="workspace-choice">
+            <div class="workspace-icon">🎬</div>
+            <h2>Video Analysis</h2>
+            <p>
+                Upload a recorded study video, view the processed detection preview,
+                explore phone-visibility charts and heatmaps, compare sessions,
+                track study history, and download reports.
+            </p>
+            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
+                UPLOADED VIDEO · ANALYTICS · HISTORY · REPORTS
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Open Video Analysis →", key="home_open_video", type="primary", use_container_width=True):
+            st.session_state["app_page"] = "video"
+            st.rerun()
+
+    with home_webcam_col:
+        st.markdown("""
+        <div class="workspace-choice">
+            <div class="workspace-icon">📹</div>
+            <h2>Webcam Detection</h2>
+            <p>
+                Start a live camera session, view phone-detection overlays,
+                monitor live camera statistics, and use configurable warning alerts
+                while your webcam is active.
+            </p>
+            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
+                LIVE CAMERA · REAL-TIME STATUS · WARNING ALERTS
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Open Webcam Detection →", key="home_open_webcam", use_container_width=True):
+            st.session_state["app_page"] = "webcam"
+            st.rerun()
+
+    st.markdown("### Shared Study Tools")
+    shared_col1, shared_col2, shared_col3 = st.columns(3)
+
+    with shared_col1:
+        st.markdown("""
+        <div class="home-feature">
+            <h3>⏱️ Pomodoro Timer</h3>
+            <p>Manage focus periods and breaks from either workspace.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with shared_col2:
+        st.markdown("""
+        <div class="home-feature">
+            <h3>🏆 Achievements</h3>
+            <p>Track completed focus sessions, milestones, and study levels.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with shared_col3:
+        st.markdown("""
+        <div class="home-feature">
+            <h3>🎨 Consistent Workspace</h3>
+            <p>Keep the same purple theme and familiar sidebar navigation throughout.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("### About This Project")
+    st.write(
+        "The prototype uses Python, Streamlit, YOLO, OpenCV, Pandas, and Plotly "
+        "to identify visible mobile phones in video frames and summarize detections."
+    )
+    st.info(
+        "Important: phone visibility does not prove that a student is distracted "
+        "or measure attention. Lighting, camera angle, video quality, and object "
+        "visibility can affect detection results."
+    )
+    st.stop()
+
+
+if app_page == "video":
+    st.markdown("## 🎬 Video Analysis Workspace")
+    st.caption("Analyse recorded study videos and explore the saved detection results.")
+elif app_page == "webcam":
+    st.markdown("## 📹 Webcam Detection Workspace")
+    st.caption("Use your camera for live phone-visibility detection, real-time status, and alerts.")
+
+
 if app_page in ("video", "webcam"):
     # ============================================================
     # Alert UI
@@ -2842,177 +3017,8 @@ if app_page in ("video", "webcam"):
 
     render_active_phone_alert()
 
-if app_page == "home":
-    st.markdown('<div id="study-session-dashboard"></div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <style>
-    .home-hero {
-        padding: 38px 34px;
-        border-radius: 25px;
-        background: linear-gradient(120deg, #30205b, #6338a8 62%, #9875ef);
-        border: 1px solid rgba(255,255,255,0.20);
-        box-shadow: 0 18px 42px rgba(85,55,150,0.18);
-        margin: 8px 0 26px 0;
-    }
-    .home-hero h1 {
-        color: #ffffff !important;
-        font-size: clamp(2rem, 4vw, 2.8rem);
-        margin: 0 0 10px 0;
-    }
-    .home-hero p {
-        color: #f1eaff !important;
-        font-size: 1rem;
-        line-height: 1.65;
-        max-width: 850px;
-        margin-bottom: 0;
-    }
-    .workspace-choice {
-        min-height: 245px;
-        padding: 25px;
-        border-radius: 20px;
-        border: 1px solid rgba(167,139,250,0.38);
-        background: linear-gradient(145deg, #211b38, #30234f);
-        box-shadow: 0 9px 25px rgba(0,0,0,0.13);
-        margin-bottom: 12px;
-    }
-    .workspace-choice h2 {
-        color: #ffffff !important;
-        margin: 8px 0 12px 0;
-        font-size: 1.45rem;
-    }
-    .workspace-choice p {
-        color: #d7d0ed !important;
-        line-height: 1.65;
-        min-height: 74px;
-    }
-    .workspace-icon {
-        font-size: 34px;
-    }
-    .home-feature {
-        min-height: 132px;
-        padding: 18px;
-        border-radius: 16px;
-        border: 1px solid rgba(167,139,250,0.25);
-        background: rgba(139,92,246,0.08);
-    }
-    .home-feature h3 {
-        color: #a78bfa !important;
-        margin: 0 0 8px 0;
-        font-size: 1rem;
-    }
-    .home-feature p {
-        color: var(--text) !important;
-        font-size: 0.9rem;
-        line-height: 1.55;
-        margin: 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="home-hero">
-        <div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#ddd6fe;">
-            CLASS 12 ARTIFICIAL INTELLIGENCE PROJECT
-        </div>
-        <h1>AI Study Distraction Detector</h1>
-        <p>
-            Welcome to your study workspace. Choose how you want to analyse
-            phone visibility: review a recorded study video or use your live webcam.
-            Your tools and navigation will adapt to the workspace you choose.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### Choose Your Workspace")
-    st.caption("Open one workspace at a time. You can switch at any moment from the sidebar.")
-
-    home_video_col, home_webcam_col = st.columns(2, gap="large")
-
-    with home_video_col:
-        st.markdown("""
-        <div class="workspace-choice">
-            <div class="workspace-icon">🎬</div>
-            <h2>Video Analysis</h2>
-            <p>
-                Upload a recorded study video, view the processed detection preview,
-                explore phone-visibility charts and heatmaps, compare sessions,
-                track study history, and download reports.
-            </p>
-            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
-                UPLOADED VIDEO · ANALYTICS · HISTORY · REPORTS
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button("Open Video Analysis →", key="home_open_video", type="primary", use_container_width=True):
-            st.session_state["app_page"] = "video"
-            st.rerun()
-
-    with home_webcam_col:
-        st.markdown("""
-        <div class="workspace-choice">
-            <div class="workspace-icon">📹</div>
-            <h2>Webcam Detection</h2>
-            <p>
-                Start a live camera session, view phone-detection overlays,
-                monitor live camera statistics, and use configurable warning alerts
-                while your webcam is active.
-            </p>
-            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
-                LIVE CAMERA · REAL-TIME STATUS · WARNING ALERTS
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button("Open Webcam Detection →", key="home_open_webcam", use_container_width=True):
-            st.session_state["app_page"] = "webcam"
-            st.rerun()
-
-    st.markdown("### Shared Study Tools")
-    shared_col1, shared_col2, shared_col3 = st.columns(3)
-
-    with shared_col1:
-        st.markdown("""
-        <div class="home-feature">
-            <h3>⏱️ Pomodoro Timer</h3>
-            <p>Manage focus periods and breaks from either workspace.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with shared_col2:
-        st.markdown("""
-        <div class="home-feature">
-            <h3>🏆 Achievements</h3>
-            <p>Track completed focus sessions, milestones, and study levels.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with shared_col3:
-        st.markdown("""
-        <div class="home-feature">
-            <h3>🎨 Consistent Workspace</h3>
-            <p>Keep the same purple theme and familiar sidebar navigation throughout.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("### About This Project")
-    st.write(
-        "The prototype uses Python, Streamlit, YOLO, OpenCV, Pandas, and Plotly "
-        "to identify visible mobile phones in video frames and summarize detections."
-    )
-    st.info(
-        "Important: phone visibility does not prove that a student is distracted "
-        "or measure attention. Lighting, camera angle, video quality, and object "
-        "visibility can affect detection results."
-    )
-    st.stop()
-
 
 if app_page == "webcam":
-    st.markdown("## 📹 Webcam Detection Workspace")
-    st.caption("Use your camera for live phone-visibility detection, real-time status, and alerts.")
-
     st.markdown("#### Camera Detection Settings")
     webcam_confidence = st.slider(
         "Webcam detection confidence",
@@ -3093,9 +3099,6 @@ if app_page == "webcam":
 
 
 if app_page == "video":
-    st.markdown("## 🎬 Video Analysis Workspace")
-    st.caption("Analyse recorded study videos and explore the saved detection results.")
-
     # ============================================================
     # AI video analysis section
     # ============================================================
