@@ -24,6 +24,27 @@ NUMERIC_SESSION_COLUMNS = [
 ]
 
 
+def resolve_model_checkpoint(
+    candidate_paths: Any,
+    downloaded_checkpoint: Any = None,
+) -> Path | None:
+    """Return the first existing local or downloaded model checkpoint."""
+    paths = list(candidate_paths or [])
+    if downloaded_checkpoint:
+        paths.append(downloaded_checkpoint)
+
+    for candidate in paths:
+        if candidate is None:
+            continue
+        try:
+            path = Path(candidate).expanduser()
+            if path.is_file():
+                return path.resolve()
+        except (OSError, TypeError, ValueError):
+            continue
+    return None
+
+
 def safe_float(value: Any, default: float = 0.0,
                minimum: float | None = None,
                maximum: float | None = None) -> float:
