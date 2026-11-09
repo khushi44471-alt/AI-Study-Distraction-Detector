@@ -691,10 +691,10 @@ if "analysis_warning_triggered" not in st.session_state:
     st.session_state.analysis_warning_triggered = False
 
 if "detection_confidence" not in st.session_state:
-    st.session_state.detection_confidence = 0.18
+    st.session_state.detection_confidence = 0.12
 
 if "frame_sample_interval" not in st.session_state:
-    st.session_state.frame_sample_interval = 5
+    st.session_state.frame_sample_interval = 2
 
 if "detection_snapshots" not in st.session_state:
     st.session_state.detection_snapshots = []
@@ -1536,7 +1536,8 @@ def process_uploaded_video_for_live_detection(
             st.error("Invalid video dimensions.")
             return None
 
-        inference_size = 480
+        # 640 gives the small COCO phone class more pixels than the previous 480 setting.
+        inference_size = 640
 
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
@@ -1590,6 +1591,7 @@ def process_uploaded_video_for_live_detection(
         last_display_frame = None
         frame_index = 0
         last_frame_detected = False
+        last_phone_boxes = []
         phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
         while True:
@@ -1694,6 +1696,9 @@ def process_uploaded_video_for_live_detection(
                     candidate_frames += 1
                 detected = phone_filter.update(raw_detected)
                 last_frame_detected = detected
+                # Keep the latest phone boxes so the output video can show them
+                # between inference samples instead of flashing boxes briefly.
+                last_phone_boxes = phone_detections.copy()
 
                 if detected:
                     frames_with_phone += 1
@@ -1751,6 +1756,26 @@ def process_uploaded_video_for_live_detection(
                     status_display.success("✅ NO PHONE DETECTED")
 
             else:
+                # Re-draw the most recent phone boxes on skipped source frames.
+                # Sampling still controls inference cost, not whether the output
+                # video visibly carries a detection overlay.
+                for phone_box in last_phone_boxes:
+                    x1, y1, x2, y2 = phone_box["bbox"]
+                    confidence = phone_box["confidence"]
+                    box_color = (0, 0, 255) if last_frame_detected else (0, 165, 255)
+                    label = "PHONE" if last_frame_detected else "PHONE CANDIDATE"
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 3)
+                    cv2.putText(
+                        frame,
+                        f"{label} {confidence:.0%}",
+                        (x1, max(20, y1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        box_color,
+                        2,
+                        cv2.LINE_AA,
+                    )
+
                 if last_frame_detected:
                     cv2.putText(
                         frame,
@@ -5189,9 +5214,9 @@ if app_page == "video":
         "Adjust detection confidence",
         min_value=0.05,
         max_value=0.60,
-        value=0.18,
+        value=0.12,
         step=0.01,
-        key="conf_slider",
+        key="conf_slider", 
     )
     st.session_state.detection_confidence = confidence_threshold
 
@@ -5199,18 +5224,18 @@ if app_page == "video":
         "Frame sampling interval",
         min_value=1,
         max_value=15,
-        value=5,
+        value=2,
         step=1,
-        help="Analyze every Nth frame to keep performance efficient.",
+        help="Analyze every Nth frame. 2 is a balanced default for detecting brief phone appearances.",
         key="sample_slider",
     )
     st.session_state.frame_sample_interval = sample_interval
 
     st.info(
-        "AI false-positive guard: a phone candidate must appear in at least "
-        "2 of the last 3 analyzed samples before it is counted as confirmed "
-        "for the main warning and visibility summary. This reduces isolated "
-        "detections but cannot eliminate model errors."
+        "Detection defaults: 640-pixel inference, 12% confidence, and every "
+        "2nd source frame. A phone candidate must appear in at least 2 of the "
+        "last 3 analysed samples before it is counted as confirmed. Lowering "
+        "confidence may find more small phones but can also increase false positives."
     )
 
     # ============================================================
