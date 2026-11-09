@@ -1316,6 +1316,7 @@ class WebcamPhoneDetector(VideoProcessorBase):
         self.model = load_yolo_model(str(ensure_model_exists()))
         self.last_warn_time = 0.0
         self.phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
+        self.frames_since_last_confirmation = 0
 
     def recv(self, frame):
         image = frame.to_ndarray(format="bgr24")
@@ -1347,6 +1348,10 @@ class WebcamPhoneDetector(VideoProcessorBase):
 
             raw_detected = bool(detections)
             confirmed_phone = self.phone_filter.update(raw_detected)
+            if confirmed_phone:
+                self.frames_since_last_confirmation = 0
+            else:
+                self.frames_since_last_confirmation += 1
 
             for x1, y1, x2, y2, conf in detections:
                 box_color = (0, 0, 255) if confirmed_phone else (0, 165, 255)
@@ -1425,6 +1430,7 @@ class WebcamPhoneDetector(VideoProcessorBase):
                 ),
                 "phone_detected": bool(confirmed_phone),
                 "phone_count": len(detections),
+                "frames_since_last_confirmation": self.frames_since_last_confirmation,
                 "confidence": max(
                     [round(float(item[4]), 4) for item in detections],
                     default=0.0,
@@ -3310,7 +3316,10 @@ if app_page == "webcam":
 
         live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
         live_status_col1.metric("Live Status", st.session_state.live_status)
-        live_status_col2.metric("Focus Streak", st.session_state.live_focus_streak)
+        live_status_col2.metric(
+            "Frames Since Last Phone Confirmation",
+            st.session_state.live_stats.get("frames_since_last_confirmation", 0),
+        )
         live_status_col3.metric("Prototype Indicator", risk_band)
         st.progress(min(1.0, risk_score / 100.0))
         st.caption(
@@ -3318,20 +3327,14 @@ if app_page == "webcam":
             "it is not a measurement of attention or academic focus."
         )
 
-        if live_detected:
-            st.session_state.live_focus_streak = 0
-        else:
-            st.session_state.live_focus_streak = update_focus_streak(
-                st.session_state.live_focus_streak, False
-            )
         st.caption(
-            f"Session indicator message: "
-            f"{calculate_focus_streak_label(st.session_state.live_focus_streak)}"
+            "This counter advances once per processed camera frame and resets "
+            "when a phone is confirmed by the recent-frame filter."
         )
     else:
         live_status_col1, live_status_col2, live_status_col3 = st.columns(3)
         live_status_col1.metric("Live Status", "CAMERA NOT ACTIVE")
-        live_status_col2.metric("Focus Streak", "—")
+        live_status_col2.metric("Frames Since Last Phone Confirmation", "—")
         live_status_col3.metric("Prototype Indicator", "Unavailable")
         st.caption("Live statistics will appear after the camera stream starts.")
 
