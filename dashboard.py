@@ -1369,11 +1369,12 @@ class WebcamPhoneDetector(VideoProcessorBase):
                 )
 
             if confirmed_phone:
+                # Live status must reflect detection even while an alert is cooling down.
+                st.session_state.live_phone_detected = True
                 now = time.monotonic()
                 if now - st.session_state.last_live_warning_time >= ALERT_COOLDOWN:
                     st.session_state.last_live_warning_time = now
                     st.session_state.live_warning_triggered = True
-                    st.session_state.live_phone_detected = True
                     st.session_state.last_warning_reason = "Phone confirmed across recent webcam frames"
                     st.session_state.warning_summary = append_warning_summary(
                         st.session_state.warning_summary,
