@@ -37,7 +37,6 @@ from project_utils import (
     append_session_record,
     build_session_record,
     calculate_study_streaks,
-    format_duration,
     load_integer_setting,
     load_session_history,
     normalize_warning_entries,
@@ -45,6 +44,22 @@ from project_utils import (
     save_integer_setting,
     validate_analysis_result,
 )
+
+def format_duration(seconds):
+    """Format a duration locally so the dashboard is independent of helper-module versions."""
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError, OverflowError):
+        return "Not available"
+
+    if not np.isfinite(value) or value < 0:
+        return "Not available"
+
+    total_seconds = int(round(value))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds_part = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds_part:02d}"
+
 
 from dashboard_enhancements import (
     TemporalPhoneFilter,
