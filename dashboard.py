@@ -3292,6 +3292,10 @@ if app_page == "webcam":
     )
     camera_playing = bool(getattr(webrtc_ctx.state, "playing", False))
     camera_connecting = bool(getattr(webrtc_ctx.state, "signalling", False))
+    if not camera_playing:
+        # Do not carry a stale "phone detected" badge into a stopped/restarting stream.
+        st.session_state.live_phone_detected = False
+        st.session_state.live_warning_triggered = False
 
     if camera_playing:
         st.success("Camera stream is active. Use STOP in the camera panel when you finish.")
