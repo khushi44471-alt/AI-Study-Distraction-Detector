@@ -40,6 +40,7 @@ from project_utils import (
     load_integer_setting,
     load_session_history,
     normalize_warning_entries,
+    resolve_model_checkpoint,
     safe_float,
     save_integer_setting,
     validate_analysis_result,
@@ -625,21 +626,35 @@ def ensure_model_exists() -> Path:
         BASE_DIR.parent / "yolo11n.pt",
     ]
 
-    for candidate in candidate_paths:
-        if candidate.exists():
-            return candidate
+    existing_checkpoint = resolve_model_checkpoint(candidate_paths)
+    if existing_checkpoint is not None:
+        return existing_checkpoint
 
+    download_error = None
     try:
-        YOLO(MODEL_NAME)
-        for candidate in candidate_paths:
-            if candidate.exists():
-                return candidate
-    except Exception:
-        pass
+        downloaded_model = YOLO(MODEL_NAME)
+        downloaded_checkpoint = getattr(
+            downloaded_model, "ckpt_path", None
+        )
+        resolved_checkpoint = resolve_model_checkpoint(
+            candidate_paths,
+            downloaded_checkpoint=downloaded_checkpoint,
+        )
+        if resolved_checkpoint is not None:
+            return resolved_checkpoint
+    except Exception as error:
+        download_error = error
 
+    detail = (
+        f" Model download/load detail: {download_error}"
+        if download_error is not None
+        else ""
+    )
     raise FileNotFoundError(
-        f"Could not find {MODEL_NAME}. Please install ultralytics and run: "
-        "python -c \"from ultralytics import YOLO; YOLO('yolo11n.pt')\""
+        f"Could not find or download {MODEL_NAME}. Check the model file "
+        "and network access, then run: "
+        "python -c \"from ultralytics import YOLO; YOLO('yolo11n.pt')\"."
+        + detail
     )
 
 @st.cache_resource(show_spinner=False)
