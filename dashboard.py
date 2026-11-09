@@ -2859,6 +2859,12 @@ if app_page == "home":
         color: var(--brand);
         font-size: 34px;
     }
+    .workspace-tags {
+        color: var(--brand) !important;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+    }
     .home-feature {
         min-height: 132px;
         padding: 18px;
@@ -2940,7 +2946,7 @@ if app_page == "home":
                 explore phone-visibility charts and heatmaps, compare sessions,
                 track study history, and download reports.
             </p>
-            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
+            <div class="workspace-tags">
                 UPLOADED VIDEO · ANALYTICS · HISTORY · REPORTS
             </div>
         </div>
@@ -2960,7 +2966,7 @@ if app_page == "home":
                 monitor live camera statistics, and use configurable warning alerts
                 while your webcam is active.
             </p>
-            <div style="color:#c4b5fd;font-size:12px;font-weight:700;">
+            <div class="workspace-tags">
                 LIVE CAMERA · REAL-TIME STATUS · WARNING ALERTS
             </div>
         </div>
