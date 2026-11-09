@@ -709,7 +709,7 @@ if "detection_confidence" not in st.session_state:
     st.session_state.detection_confidence = 0.12
 
 if "frame_sample_interval" not in st.session_state:
-    st.session_state.frame_sample_interval = 2
+    st.session_state.frame_sample_interval = 5
 
 if "detection_snapshots" not in st.session_state:
     st.session_state.detection_snapshots = []
@@ -1537,6 +1537,7 @@ def process_uploaded_video_for_live_detection(
         frame_count_value = float(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         width = int(width_value) if np.isfinite(width_value) else 0
         height = int(height_value) if np.isfinite(height_value) else 0
+        source_width, source_height = width, height
         fps = float(capture.get(cv2.CAP_PROP_FPS))
         if not np.isfinite(fps) or fps <= 0:
             fps = 24.0
@@ -1551,8 +1552,15 @@ def process_uploaded_video_for_live_detection(
             st.error("Invalid video dimensions.")
             return None
 
-        # 640 gives the small COCO phone class more pixels than the previous 480 setting.
-        inference_size = 640
+        # Decode at source size, but process and export at no more than 1280px wide/high.
+        resize_scale = min(1.0, 1280.0 / max(width, height))
+        width = max(2, int(round(width * resize_scale)))
+        height = max(2, int(round(height * resize_scale)))
+        width -= width % 2
+        height -= height % 2
+
+        # 480px inference is substantially faster on CPU while retaining phone-class detection.
+        inference_size = 480
 
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
@@ -1580,7 +1588,7 @@ def process_uploaded_video_for_live_detection(
         info_cols[0].metric("Source Duration", format_duration(duration_seconds))
         info_cols[1].metric("Source Frames", f"{total_frames:,}" if total_frames else "N/A")
         info_cols[2].metric("Source FPS", f"{fps:.1f}")
-        info_cols[3].metric("Resolution", f"{width} × {height}")
+        info_cols[3].metric("Output Resolution", f"{width} × {height}")
 
         video_display = st.empty()
         status_display = st.empty()
@@ -1614,6 +1622,9 @@ def process_uploaded_video_for_live_detection(
 
             if not success:
                 break
+
+            if frame.shape[1] != width or frame.shape[0] != height:
+                frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
 
             should_analyze = frame_index % sample_interval == 0
 
@@ -1807,7 +1818,7 @@ def process_uploaded_video_for_live_detection(
 
             writer.write(frame)
 
-            if frame_index % max(1, sample_interval * 3) == 0:
+            if frame_index % max(1, sample_interval * 8) == 0:
                 video_display.image(
                     cv2.cvtColor(
                         last_display_frame,
@@ -1818,7 +1829,7 @@ def process_uploaded_video_for_live_detection(
                 )
 
             if total_frames > 0 and (
-                frame_index % 10 == 0 or frame_index + 1 == total_frames
+                frame_index % max(30, sample_interval * 10) == 0 or frame_index + 1 == total_frames
             ):
                 progress_fraction = min((frame_index + 1) / total_frames, 1.0)
                 progress.progress(progress_fraction)
@@ -5236,21 +5247,22 @@ if app_page == "video":
     st.session_state.detection_confidence = confidence_threshold
 
     sample_interval = st.slider(
-        "Frame sampling interval",
+        "Frame sampling interval (faster processing)",
         min_value=1,
         max_value=15,
-        value=2,
+        value=5,
         step=1,
-        help="Analyze every Nth frame. 2 is a balanced default for detecting brief phone appearances.",
-        key="sample_slider",
+        help="Analyze every 5th frame by default for much faster processing. Lower this to 2 or 1 if you need to catch very brief phone appearances.",
+        key="sample_slider_fast",
     )
     st.session_state.frame_sample_interval = sample_interval
 
     st.info(
-        "Detection defaults: 640-pixel inference, 12% confidence, and every "
-        "2nd source frame. A phone candidate must appear in at least 2 of the "
-        "last 3 analysed samples before it is counted as confirmed. Lowering "
-        "confidence may find more small phones but can also increase false positives."
+        "Speed-optimized defaults: 480-pixel inference, 12% confidence, "
+        "every 5th source frame, and a maximum 1280px output dimension. "
+        "A phone candidate must appear in at least 2 of the last 3 analysed "
+        "samples before it is counted as confirmed. Lower the sampling interval "
+        "to 2 or 1 when brief phone appearances matter more than speed."
     )
 
     # ============================================================
