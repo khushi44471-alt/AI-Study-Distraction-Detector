@@ -1502,12 +1502,19 @@ def process_uploaded_video_for_live_detection(
             st.error("The uploaded video could not be opened.")
             return None
 
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        width_value = float(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height_value = float(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        frame_count_value = float(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(width_value) if np.isfinite(width_value) else 0
+        height = int(height_value) if np.isfinite(height_value) else 0
         fps = float(capture.get(cv2.CAP_PROP_FPS))
         if not np.isfinite(fps) or fps <= 0:
             fps = 24.0
-        total_frames = max(0, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
+        total_frames = (
+            max(0, int(frame_count_value))
+            if np.isfinite(frame_count_value)
+            else 0
+        )
         duration_seconds = total_frames / fps if total_frames > 0 else 0.0
 
         if width <= 0 or height <= 0:
