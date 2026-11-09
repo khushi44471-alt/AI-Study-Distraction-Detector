@@ -3476,8 +3476,13 @@ if app_page == "video":
 
                     show_phone_alert(preview=False)
 
-                # Keep the completed analysis visible even if report saving fails.
-                st.session_state["last_analysis"] = analysis_result
+                # Keep analytics in session state, but do not retain a potentially
+                # large MP4 byte string across unrelated Streamlit reruns.
+                st.session_state["last_analysis"] = {
+                    key: value
+                    for key, value in analysis_result.items()
+                    if key not in {"processed_video_bytes", "processed_video_filename"}
+                }
 
                 try:
                     save_session_record(
