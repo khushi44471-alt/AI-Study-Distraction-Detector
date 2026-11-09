@@ -5148,7 +5148,7 @@ if app_page == "video":
         value=10,
         step=1,
         help="Analyze every 10th frame by default for faster processing. Choose 5 for more frequent checks or 1 for every frame.",
-        key="sample_slider_fast",
+        key="sample_slider_ultrafast",
     )
     st.session_state.frame_sample_interval = sample_interval
 
