@@ -1456,6 +1456,7 @@ def process_uploaded_video_for_live_detection(
     temp_output_path = None
     capture = None
     writer = None
+    keep_output_file = False
 
     try:
         uploaded_file.seek(0)
@@ -1476,8 +1477,11 @@ def process_uploaded_video_for_live_detection(
 
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(capture.get(cv2.CAP_PROP_FPS)) or 24.0
-        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = float(capture.get(cv2.CAP_PROP_FPS))
+        if not np.isfinite(fps) or fps <= 0:
+            fps = 24.0
+        total_frames = max(0, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
+        duration_seconds = total_frames / fps if total_frames > 0 else 0.0
 
         if width <= 0 or height <= 0:
             st.error("Invalid video dimensions.")
@@ -1503,15 +1507,26 @@ def process_uploaded_video_for_live_detection(
             return None
 
         st.subheader("🔴 Live AI Detection")
+        st.caption(
+            "The source video is processed on the server. Progress tracks source "
+            "frames, while YOLO analyses the configured sampled frames."
+        )
+        info_cols = st.columns(4)
+        info_cols[0].metric("Source Duration", format_duration(duration_seconds))
+        info_cols[1].metric("Source Frames", f"{total_frames:,}" if total_frames else "N/A")
+        info_cols[2].metric("Source FPS", f"{fps:.1f}")
+        info_cols[3].metric("Resolution", f"{width} × {height}")
 
         video_display = st.empty()
         status_display = st.empty()
         progress = st.progress(0.0)
+        progress_status = st.empty()
 
         sample_interval = max(1, int(sample_interval))
 
         analyzed_frames = 0
         frames_with_phone = 0
+        candidate_frames = 0
         total_phone_hits = 0
         detection_flags = []
         detection_events = []
@@ -1626,6 +1641,8 @@ def process_uploaded_video_for_live_detection(
 
                 analyzed_frames += 1
                 raw_detected = phone_count > 0
+                if raw_detected:
+                    candidate_frames += 1
                 detected = phone_filter.update(raw_detected)
                 last_frame_detected = detected
 
@@ -1661,6 +1678,7 @@ def process_uploaded_video_for_live_detection(
 
                 detection_events.append({
                     "frame_index": frame_index,
+                    "video_time": format_duration(frame_index / fps),
                     "phone_detected": detected,
                     "phone_candidate": raw_detected,
                     "phone_count": phone_count,
@@ -1710,9 +1728,19 @@ def process_uploaded_video_for_live_detection(
                     use_container_width=True,
                 )
 
-            if total_frames > 0 and frame_index % 10 == 0:
-                progress.progress(
-                    min((frame_index + 1) / total_frames, 1.0)
+            if total_frames > 0 and (
+                frame_index % 10 == 0 or frame_index + 1 == total_frames
+            ):
+                progress_fraction = min((frame_index + 1) / total_frames, 1.0)
+                progress.progress(progress_fraction)
+                progress_status.caption(
+                    f"Processed {frame_index + 1:,} of {total_frames:,} source frames "
+                    f"({progress_fraction:.0%}) · {analyzed_frames:,} sampled frames analysed"
+                )
+            elif total_frames <= 0 and frame_index % 10 == 0:
+                progress_status.caption(
+                    f"Processed {frame_index + 1:,} source frames · "
+                    f"{analyzed_frames:,} sampled frames analysed"
                 )
 
             frame_index += 1
@@ -1736,14 +1764,24 @@ def process_uploaded_video_for_live_detection(
 
         st.session_state.detection_snapshots = snapshots
         progress.progress(1.0)
+        progress_status.success(
+            f"Processing complete · {frame_index:,} source frames read · "
+            f"{analyzed_frames:,} sampled frames analysed"
+        )
 
+        keep_output_file = True
         return {
             "video_name": uploaded_file.name,
             "resolution": f"{width}x{height}",
+            "duration_seconds": round(float(duration_seconds), 3),
+            "source_fps": round(float(fps), 3),
+            "source_total_frames": total_frames,
             "frames_processed": analyzed_frames,
             "frames_with_phone": frames_with_phone,
+            "frames_with_phone_candidate": candidate_frames,
             "percentage": round(float(phone_percentage), 2),
             "detections": total_phone_hits,
+            "session_id": uuid4().hex,
             "focus_score": focus_score,
             "alert_level": get_alert_level(focus_score),
             "study_status": get_study_status(focus_score),
@@ -1775,6 +1813,17 @@ def process_uploaded_video_for_live_detection(
         if temp_video_path is not None and temp_video_path.exists():
             try:
                 temp_video_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        # Keep a successful MP4 only until the UI reads it for download.
+        if (
+            temp_output_path is not None
+            and not keep_output_file
+            and temp_output_path.exists()
+        ):
+            try:
+                temp_output_path.unlink(missing_ok=True)
             except OSError:
                 pass
 
