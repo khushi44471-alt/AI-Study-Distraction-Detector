@@ -13,12 +13,43 @@ from project_utils import (
     append_session_record, build_session_record, calculate_study_streaks,
     format_duration, load_integer_setting, load_session_history,
     normalize_session_history, normalize_warning_entries, safe_float,
+    resolve_model_checkpoint,
     save_integer_setting,
     validate_analysis_result,
 )
 
 
 class ProjectUtilsTests(unittest.TestCase):
+    def test_resolve_model_checkpoint_prefers_existing_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first.pt"
+            second = Path(directory) / "second.pt"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+
+            resolved = resolve_model_checkpoint([first, second])
+
+            self.assertEqual(resolved, first.resolve())
+
+    def test_resolve_model_checkpoint_uses_downloaded_cache_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cached = Path(directory) / "yolo11n.pt"
+            cached.write_bytes(b"model")
+
+            resolved = resolve_model_checkpoint(
+                [Path(directory) / "missing.pt"],
+                downloaded_checkpoint=str(cached),
+            )
+
+            self.assertEqual(resolved, cached.resolve())
+
+    def test_resolve_model_checkpoint_returns_none_when_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            resolved = resolve_model_checkpoint([
+                Path(directory) / "missing.pt",
+            ])
+            self.assertIsNone(resolved)
+
     def test_safe_float_rejects_non_finite_values_and_clamps(self):
         self.assertEqual(safe_float("12.5"), 12.5)
         self.assertEqual(safe_float("bad", default=7), 7)
