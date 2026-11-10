@@ -726,7 +726,7 @@ if "detection_confidence" not in st.session_state:
     st.session_state.detection_confidence = 0.18
 
 if "frame_sample_interval" not in st.session_state:
-    st.session_state.frame_sample_interval = 5
+    st.session_state.frame_sample_interval = 8
 
 if "detection_snapshots" not in st.session_state:
     st.session_state.detection_snapshots = []
@@ -1568,7 +1568,12 @@ def process_uploaded_video_for_live_detection(
             st.error("Invalid video dimensions.")
             return None
 
-        inference_size = 480
+        # Keep YOLO input frames at their original size, but cap the encoded
+        # MP4 dimensions so large (especially 4K) uploads finish much faster.
+        output_scale = min(1.0, 1280.0 / max(width, height))
+        output_width = max(2, int(round(width * output_scale)) // 2 * 2)
+        output_height = max(2, int(round(height * output_scale)) // 2 * 2)
+        inference_size = 416
 
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
@@ -1580,7 +1585,7 @@ def process_uploaded_video_for_live_detection(
             str(temp_output_path),
             cv2.VideoWriter_fourcc(*"mp4v"),
             fps,
-            (width, height),
+            (output_width, output_height),
         )
 
         if not writer.isOpened():
@@ -1589,8 +1594,9 @@ def process_uploaded_video_for_live_detection(
 
         st.subheader("⚙️ Processing Uploaded Video")
         st.caption(
-            "The source video is processed on the server. Progress tracks source "
-            "frames, while YOLO analyses the configured sampled frames."
+            "The source video is processed on the server. YOLO analyses the "
+            "configured sampled frames at 416 px; the downloadable MP4 is "
+            "optimized to a maximum 1280 px side for faster processing."
         )
         info_cols = st.columns(4)
         info_cols[0].metric("Source Duration", format_duration(duration_seconds))
@@ -1604,6 +1610,8 @@ def process_uploaded_video_for_live_detection(
         progress_status = st.empty()
 
         sample_interval = max(1, int(sample_interval))
+        preview_update_interval = max(1, int(round(fps)), sample_interval * 4)
+        progress_update_interval = max(1, int(round(fps)))
 
         analyzed_frames = 0
         frames_with_phone = 0
@@ -1746,7 +1754,12 @@ def process_uploaded_video_for_live_detection(
                         show_phone_alert()
                         last_alert_time = current_time
 
-                    snapshots.append(frame.copy())
+                    snapshot = cv2.resize(
+                        frame,
+                        (output_width, output_height),
+                        interpolation=cv2.INTER_AREA,
+                    ) if (width, height) != (output_width, output_height) else frame.copy()
+                    snapshots.append(snapshot)
                     snapshots = snapshots[-5:]
                 else:
                     consecutive_phone_frames = 0
@@ -1773,7 +1786,7 @@ def process_uploaded_video_for_live_detection(
                 })
 
                 last_annotated_frame = frame.copy()
-                last_display_frame = frame.copy()
+                last_display_frame = frame
 
                 if detected:
                     status_display.error("📱 PHONE CONFIRMED · 2 OF LAST 3 SAMPLES")
@@ -1795,22 +1808,38 @@ def process_uploaded_video_for_live_detection(
                         cv2.LINE_AA,
                     )
 
-                last_display_frame = frame.copy()
+                last_display_frame = frame
 
-            writer.write(frame)
+            # Resize only the encoded copy; the original frame remains the
+            # input to YOLO and retains full source resolution for detection.
+            output_frame = (
+                cv2.resize(
+                    frame,
+                    (output_width, output_height),
+                    interpolation=cv2.INTER_AREA,
+                )
+                if (width, height) != (output_width, output_height)
+                else frame
+            )
+            writer.write(output_frame)
 
-            if frame_index % max(1, sample_interval * 3) == 0:
+            if frame_index % preview_update_interval == 0:
+                preview_frame = last_display_frame
+                if (width, height) != (output_width, output_height):
+                    preview_frame = cv2.resize(
+                        preview_frame,
+                        (output_width, output_height),
+                        interpolation=cv2.INTER_AREA,
+                    )
                 video_display.image(
-                    cv2.cvtColor(
-                        last_display_frame,
-                        cv2.COLOR_BGR2RGB,
-                    ),
+                    cv2.cvtColor(preview_frame, cv2.COLOR_BGR2RGB),
                     channels="RGB",
                     use_container_width=True,
                 )
 
             if total_frames > 0 and (
-                frame_index % 10 == 0 or frame_index + 1 == total_frames
+                frame_index % progress_update_interval == 0
+                or frame_index + 1 == total_frames
             ):
                 progress_fraction = min((frame_index + 1) / total_frames, 1.0)
                 progress.progress(progress_fraction)
@@ -5231,10 +5260,10 @@ if app_page == "video":
         "Frame sampling interval",
         min_value=1,
         max_value=15,
-        value=5,
+        value=8,
         step=1,
-        help="Analyze every Nth frame to keep performance efficient.",
-        key="sample_slider",
+        help="Analyze every Nth frame. Higher values process faster but sample fewer frames.",
+        key="sample_slider_fast",
     )
     st.session_state.frame_sample_interval = sample_interval
 
