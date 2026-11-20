@@ -1574,6 +1574,18 @@ def process_uploaded_video_for_live_detection(
         output_width = max(2, int(round(width * output_scale)) // 2 * 2)
         output_height = max(2, int(round(height * output_scale)) // 2 * 2)
         inference_size = 416
+        sample_interval = max(1, int(sample_interval))
+
+        sampled_output_frames = (
+            (total_frames + sample_interval - 1) // sample_interval
+            if total_frames > 0
+            else 0
+        )
+        output_fps = (
+            sampled_output_frames / duration_seconds
+            if sampled_output_frames > 0 and duration_seconds > 0
+            else fps / sample_interval
+        )
 
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
@@ -1584,7 +1596,7 @@ def process_uploaded_video_for_live_detection(
         writer = cv2.VideoWriter(
             str(temp_output_path),
             cv2.VideoWriter_fourcc(*"mp4v"),
-            fps,
+            output_fps,
             (output_width, output_height),
         )
 
@@ -1594,9 +1606,10 @@ def process_uploaded_video_for_live_detection(
 
         st.subheader("⚙️ Processing Uploaded Video")
         st.caption(
-            "The source video is processed on the server. YOLO analyses the "
-            "configured sampled frames at 416 px; the downloadable MP4 is "
-            "optimized to a maximum 1280 px side for faster processing."
+            "The source video is processed on the server. YOLO analyses "
+            "sampled frames at 416 px, and the downloadable annotated MP4 "
+            "contains those sampled frames at a reduced frame rate while "
+            "preserving the source video's approximate duration."
         )
         info_cols = st.columns(4)
         info_cols[0].metric("Source Duration", format_duration(duration_seconds))
@@ -1609,8 +1622,9 @@ def process_uploaded_video_for_live_detection(
         progress = st.progress(0.0)
         progress_status = st.empty()
 
-        sample_interval = max(1, int(sample_interval))
-        preview_update_interval = max(1, int(round(fps)), sample_interval * 4)
+        preview_update_interval = max(
+            1, int(round(fps / sample_interval))
+        )
         progress_update_interval = max(1, int(round(fps)))
 
         analyzed_frames = 0
@@ -1629,18 +1643,21 @@ def process_uploaded_video_for_live_detection(
         last_annotated_frame = None
         last_display_frame = None
         frame_index = 0
-        last_frame_detected = False
         phone_filter = TemporalPhoneFilter(window_size=3, min_hits=2)
 
         while True:
-            success, frame = capture.read()
-
-            if not success:
+            # Grab every source frame to advance the video, but retrieve and
+            # convert only sampled frames into full BGR images.
+            if not capture.grab():
                 break
 
             should_analyze = frame_index % sample_interval == 0
 
             if should_analyze:
+                success, frame = capture.retrieve()
+                if not success:
+                    break
+
                 prediction = model.predict(
                     source=frame,
                     imgsz=inference_size,
@@ -1733,7 +1750,6 @@ def process_uploaded_video_for_live_detection(
                 if raw_detected:
                     candidate_frames += 1
                 detected = phone_filter.update(raw_detected)
-                last_frame_detected = detected
 
                 if detected:
                     frames_with_phone += 1
@@ -1795,47 +1811,35 @@ def process_uploaded_video_for_live_detection(
                 else:
                     status_display.success("✅ NO PHONE DETECTED")
 
-            else:
-                if last_frame_detected:
-                    cv2.putText(
+                # Encode only sampled, annotated frames. The output FPS is
+                # adjusted above so the exported MP4 retains the source duration.
+                output_frame = (
+                    cv2.resize(
                         frame,
-                        "PHONE DETECTED - LAST SAMPLE",
-                        (20, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (0, 0, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
-
-                last_display_frame = frame
-
-            # Resize only the encoded copy; the original frame remains the
-            # input to YOLO and retains full source resolution for detection.
-            output_frame = (
-                cv2.resize(
-                    frame,
-                    (output_width, output_height),
-                    interpolation=cv2.INTER_AREA,
-                )
-                if (width, height) != (output_width, output_height)
-                else frame
-            )
-            writer.write(output_frame)
-
-            if frame_index % preview_update_interval == 0:
-                preview_frame = last_display_frame
-                if (width, height) != (output_width, output_height):
-                    preview_frame = cv2.resize(
-                        preview_frame,
                         (output_width, output_height),
                         interpolation=cv2.INTER_AREA,
                     )
-                video_display.image(
-                    cv2.cvtColor(preview_frame, cv2.COLOR_BGR2RGB),
-                    channels="RGB",
-                    use_container_width=True,
+                    if (width, height) != (output_width, output_height)
+                    else frame
                 )
+                writer.write(output_frame)
+
+                if (
+                    analyzed_frames == 1
+                    or analyzed_frames % preview_update_interval == 0
+                ):
+                    preview_frame = last_display_frame
+                    if (width, height) != (output_width, output_height):
+                        preview_frame = cv2.resize(
+                            preview_frame,
+                            (output_width, output_height),
+                            interpolation=cv2.INTER_AREA,
+                        )
+                    video_display.image(
+                        cv2.cvtColor(preview_frame, cv2.COLOR_BGR2RGB),
+                        channels="RGB",
+                        use_container_width=True,
+                    )
 
             if total_frames > 0 and (
                 frame_index % progress_update_interval == 0
